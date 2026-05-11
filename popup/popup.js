@@ -1,0 +1,691 @@
+import {
+  getSettings,
+  updateSettings,
+  getStats,
+  exportSettings,
+  importSettings,
+  getSiteOverrides,
+  setSiteOverride,
+  getUnsupportedSites,
+} from '../utils/storage.js';
+import { getBuildMeta, getDisplayVersion, getIssueVersionLabel, getReleaseVersion } from '../utils/build-info.js';
+import { MILESTONES, formatActivityPreference } from '../utils/stats.js';
+import { applyI18nAttributes, getTranslator } from '../utils/i18n.js';
+
+const KO_FI_URL = 'https://ko-fi.com/eatmycookies';
+const POPUP_VIEW_STATE_KEY = 'emc-popup-view';
+let storageListenerAttached = false;
+let i18n = {
+  locale: 'en',
+  t: (key, substitutions = []) => {
+    const fallback = {
+      popupAcrossSitesSingular: 'across $1 site',
+      popupAcrossSitesPlural: 'across $1 sites',
+      popupNoActivity: 'No activity yet',
+      popupNoBadges: 'No badges yet. Your first one unlocks on the first handled banner.',
+      popupMilestoneCoffeeNudge: "Eat My Cookies is free forever. If it's saved you a minute, consider buying me a coffee.",
+      popupMilestoneBeerNudge: "You've made it absurdly far. If you skipped the coffee, maybe buy me a beer so I can sober up.",
+      popupMilestoneBuyCoffee: '♥ Buy Me a Coffee',
+      popupMilestoneBuyBeer: '♥ Buy Me a Beer',
+      siteOverrideRemove: 'Remove',
+      activityAccepted: 'Accepted',
+      activityRejected: 'Rejected',
+      activityCcpaHandled: 'CCPA handled',
+      activityCustom: 'Custom',
+      activityHandled: 'Handled',
+      timeJustNow: 'just now',
+      popupReenable: 'Re-enable',
+      popupRemovePermission: 'Remove permission',
+      popupDisableSite: 'Disable on this site',
+      popupEnableSite: 'Re-enable on this site',
+      siteWarningDisabledFallback: 'Eat My Cookies will stay off on this site until you turn it back on.',
+      siteWarningAlwaysAcceptFallback: 'This site is set to allow cookies automatically so its wall can clear.',
+      siteWarningNeedsChoiceFallback: 'This site currently does not expose a reject path that matches your settings.',
+      siteWarningAutoDisabledTitle: 'Auto-disabled for $1',
+      siteWarningDisabledTitle: 'Disabled for $1',
+      siteWarningAlwaysAcceptTitle: 'Always accept enabled for $1',
+      siteWarningNeedsChoiceTitle: '$1 needs a site-specific choice',
+      siteOverrideDisabledLabel: 'Disabled on this site',
+      siteOverrideAlwaysAcceptLabel: 'Always accept on this site',
+      siteOverrideGenericLabel: 'Site-specific override',
+      badgeThresholdSingular: '$1 banner handled',
+      badgeThresholdPlural: '$1 banners handled',
+      milestoneUnlocked: '$1 — Unlocked!',
+      milestoneDescSingular: "You've handled $1 cookie banner.",
+      milestoneDescPlural: "You've handled $1 cookie banners.",
+      settingsCcpaDoNotSell: 'CCPA: Do not sell/share',
+      settingsLanguageAuto: 'Auto',
+    };
+    const values = Array.isArray(substitutions) ? substitutions : [substitutions];
+    return values.reduce((result, value, index) => (
+      result.replaceAll(`$${index + 1}`, String(value))
+    ), fallback[key] ?? key);
+  },
+  formatNumber: (value, options) => new Intl.NumberFormat('en', options).format(value),
+};
+
+// ── Theme ──────────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.body.classList.toggle('dark', theme === 'dark');
+  const moon = document.getElementById('theme-icon-moon');
+  const sun  = document.getElementById('theme-icon-sun');
+  moon.classList.toggle('hidden', theme === 'dark');
+  sun.classList.toggle('hidden', theme !== 'dark');
+  document.getElementById('theme-btn').setAttribute(
+    'aria-label',
+    theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+  );
+  try { localStorage.setItem('emc-theme', theme); } catch (_) {}
+}
+
+function initTheme() {
+  let saved;
+  try { saved = localStorage.getItem('emc-theme'); } catch (_) {}
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(saved ?? (prefersDark ? 'dark' : 'light'));
+  document.getElementById('theme-btn').addEventListener('click', () => {
+    applyTheme(document.body.classList.contains('dark') ? 'light' : 'dark');
+  });
+}
+
+async function init() {
+  initTheme();
+  const [settings, stats, pending, currentDomain, unsupportedSites, siteOverrides] = await Promise.all([
+    getSettings(),
+    getStats(),
+    chrome.storage.local.get({ pendingMilestones: [] }),
+    getCurrentDomain(),
+    getUnsupportedSites(),
+    getSiteOverrides(),
+  ]);
+
+  i18n = await getTranslator(settings.uiLanguage);
+  document.documentElement.lang = i18n.locale;
+  applyI18nAttributes(document, i18n.t);
+  syncLanguageOptions();
+
+  renderStats(stats);
+  renderPreference(settings);
+  renderActivity(stats.recentActivity);
+  renderBadges(settings.milestonesShown);
+  renderSiteOverrides(siteOverrides);
+  renderSiteWarning(currentDomain, unsupportedSites[currentDomain], siteOverrides[currentDomain]);
+  renderSiteToggle(currentDomain, siteOverrides[currentDomain]);
+  renderLanguageShortcut(settings);
+  await renderVersionMeta(currentDomain);
+
+  const milestones = pending.pendingMilestones;
+  if (milestones.length > 0) {
+    showMilestoneCard(milestones[0]);
+    await chrome.storage.local.set({ pendingMilestones: milestones.slice(1) });
+  }
+
+  bindSettingsPanel(settings, currentDomain);
+  restorePopupView();
+
+  if (!storageListenerAttached) {
+    storageListenerAttached = true;
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (!['sync', 'local'].includes(areaName)) return;
+      if (
+        changes.stats ||
+        changes.pendingMilestones ||
+        changes.siteOverrides ||
+        changes.unsupportedSites ||
+        changes.milestonesShown ||
+        changes.uiLanguage
+      ) {
+        window.location.reload();
+      }
+    });
+  }
+}
+
+async function renderVersionMeta(currentDomain) {
+  const releaseVersion = getReleaseVersion();
+  const buildMeta = await getBuildMeta();
+  const displayVersion = getDisplayVersion(releaseVersion, buildMeta);
+  const issueVersion = getIssueVersionLabel(releaseVersion, buildMeta);
+
+  document.getElementById('version-label').textContent = `v${displayVersion}`;
+  document.getElementById('report-bug-link').href = buildIssueUrl({
+    releaseVersion,
+    issueVersion,
+    currentDomain,
+    buildMeta,
+  });
+}
+
+function renderStats(stats) {
+  document.getElementById('total-count').textContent = i18n.formatNumber(stats.totalActionsCount);
+  const sc = stats.sitesHandled;
+  document.getElementById('sites-count').textContent = i18n.t(
+    sc === 1 ? 'popupAcrossSitesSingular' : 'popupAcrossSitesPlural',
+    [i18n.formatNumber(sc)],
+  );
+}
+
+function renderPreference(settings) {
+  const select = document.getElementById('pref-select');
+  const editBtn = document.getElementById('pref-edit-btn');
+  select.value = settings.globalPreference;
+
+  const syncEditBtn = (pref) => {
+    editBtn.classList.toggle('hidden', pref !== 'custom');
+  };
+  syncEditBtn(settings.globalPreference);
+
+  editBtn.addEventListener('click', () => openSettings());
+
+  select.addEventListener('change', async () => {
+    const pref = select.value;
+    const currentSettings = await getSettings();
+    await updateSettings({ globalPreference: pref });
+    syncPreferenceControls({
+      ...currentSettings,
+      globalPreference: pref,
+      categoryPreferences: currentSettings.categoryPreferences,
+    });
+    syncEditBtn(pref);
+    await reloadActiveTab();
+  });
+}
+
+function renderActivity(activity) {
+  const list = document.getElementById('activity-list');
+  if (!activity.length) {
+    list.innerHTML = `<li class="activity-empty">${escapeHTML(i18n.t('popupNoActivity'))}</li>`;
+    return;
+  }
+  list.innerHTML = activity.slice(0, 4).map((a) => `
+    <li class="activity-item">
+      <span class="activity-check">✓</span>
+      <span class="activity-site">${escapeHTML(a.site)}</span>
+      <span class="activity-pref">${escapeHTML(localizeActivityPreference(a))}</span>
+      <span class="activity-time">${timeAgo(a.timestamp)}</span>
+    </li>
+  `).join('');
+}
+
+function renderBadges(milestonesShown) {
+  const badges = MILESTONES.filter((badge) => milestonesShown.includes(badge.id));
+  document.getElementById('badges-count').textContent = String(badges.length);
+
+  const list = document.getElementById('badges-list');
+  if (!badges.length) {
+    list.innerHTML = `<div class="badge-empty">${escapeHTML(i18n.t('popupNoBadges'))}</div>`;
+    return;
+  }
+
+  list.innerHTML = badges.map((badge) => `
+    <div class="badge-chip" title="${escapeHTML(`${badge.name} — ${formatBadgeThreshold(badge.threshold)}`)}">
+      <img src="${badge.icon ?? '../icons/icon-16.png'}" alt="" class="badge-icon" width="22" height="22">
+      <span>${escapeHTML(badge.name)}</span>
+    </div>
+  `).join('');
+}
+
+function formatBadgeThreshold(threshold) {
+  return i18n.t(
+    threshold === 1 ? 'badgeThresholdSingular' : 'badgeThresholdPlural',
+    [i18n.formatNumber(threshold)],
+  );
+}
+
+function renderSiteOverrides(siteOverrides) {
+  const entries = Object.entries(siteOverrides)
+    .filter(([, override]) => override?.alwaysAccept || override?.disabled)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  const list = document.getElementById('site-overrides-list');
+  if (!entries.length) {
+    list.innerHTML = `<div class="site-overrides-empty">${escapeHTML(i18n.t('settingsNoSitePermissions'))}</div>`;
+    return;
+  }
+
+  list.innerHTML = entries.map(([domain]) => `
+    <div class="site-override-item">
+      <div class="site-override-meta">
+        <div class="site-override-domain">${escapeHTML(domain)}</div>
+        <div class="site-override-label">${escapeHTML(formatSiteOverrideLabel(siteOverrides[domain]))}</div>
+      </div>
+      <button class="btn btn-ghost remove-override-btn" data-domain="${escapeHTML(domain)}">${escapeHTML(i18n.t('siteOverrideRemove'))}</button>
+    </div>
+  `).join('');
+}
+
+function renderSiteWarning(currentDomain, warning, siteOverride) {
+  const card = document.getElementById('site-warning');
+  if (!currentDomain || (!warning && !siteOverride?.alwaysAccept && !siteOverride?.disabled)) {
+    card.classList.add('hidden');
+    return;
+  }
+
+  card.classList.remove('hidden');
+  document.getElementById('site-warning-title').textContent = siteOverride?.disabled
+    ? (warning?.autoDisabled
+      ? i18n.t('siteWarningAutoDisabledTitle', [currentDomain])
+      : i18n.t('siteWarningDisabledTitle', [currentDomain]))
+    : siteOverride?.alwaysAccept
+      ? i18n.t('siteWarningAlwaysAcceptTitle', [currentDomain])
+      : i18n.t('siteWarningNeedsChoiceTitle', [currentDomain]);
+  document.getElementById('site-warning-text').textContent = siteOverride?.disabled
+    ? (warning?.reason ?? i18n.t('siteWarningDisabledFallback'))
+    : siteOverride?.alwaysAccept
+      ? i18n.t('siteWarningAlwaysAcceptFallback')
+      : (warning?.reason ?? i18n.t('siteWarningNeedsChoiceFallback'));
+
+  const acceptBtn = document.getElementById('site-accept-btn');
+  acceptBtn.classList.toggle('hidden', Boolean(siteOverride?.alwaysAccept) || Boolean(siteOverride?.disabled) || !warning?.allowAcceptOverride);
+  document.getElementById('site-warning-dismiss').textContent = siteOverride?.disabled
+    ? i18n.t('popupReenable')
+    : siteOverride?.alwaysAccept
+      ? i18n.t('popupRemovePermission')
+      : i18n.t('popupDismiss');
+}
+
+function renderSiteToggle(currentDomain, siteOverride) {
+  const row = document.getElementById('site-toggle-row');
+  if (!currentDomain || siteOverride?.disabled) {
+    row.classList.add('hidden');
+    return;
+  }
+
+  row.classList.remove('hidden');
+  document.getElementById('site-toggle-label').textContent = currentDomain;
+  document.getElementById('site-toggle-btn').textContent = siteOverride?.disabled
+    ? i18n.t('popupEnableSite')
+    : i18n.t('popupDisableSite');
+}
+
+function renderLanguageShortcut(settings) {
+  const row = document.getElementById('language-shortcut-row');
+  if (!row) return;
+  row.classList.toggle('hidden', settings.uiLanguage !== 'auto');
+}
+
+function showMilestoneCard(milestone) {
+  const card = document.getElementById('milestone-card');
+  const donateLink = document.getElementById('milestone-donate');
+  const nudge = document.getElementById('milestone-nudge');
+  const isBeerTier = milestone.threshold >= 5000;
+
+  const iconEl = card.querySelector('.milestone-icon');
+  if (iconEl) {
+    iconEl.innerHTML = milestone.icon
+      ? `<img src="${milestone.icon}" width="36" height="36" alt="">`
+      : '🍪';
+  }
+
+  document.getElementById('milestone-name').textContent = i18n.t('milestoneUnlocked', [milestone.name]);
+  const n = milestone.threshold;
+  document.getElementById('milestone-desc').textContent = i18n.t(
+    n === 1 ? 'milestoneDescSingular' : 'milestoneDescPlural',
+    [i18n.formatNumber(n)],
+  );
+  nudge.textContent = isBeerTier ? i18n.t('popupMilestoneBeerNudge') : i18n.t('popupMilestoneCoffeeNudge');
+  donateLink.href = KO_FI_URL;
+  donateLink.textContent = isBeerTier ? i18n.t('popupMilestoneBuyBeer') : i18n.t('popupMilestoneBuyCoffee');
+
+  card.classList.remove('hidden');
+  document.getElementById('milestone-dismiss').addEventListener('click', () => {
+    card.classList.add('hidden');
+  }, { once: true });
+}
+
+function bindSettingsPanel(settings, currentDomain) {
+  let categoryPreferences = { ...settings.categoryPreferences };
+  const currentPreference = () => document.getElementById('pref-select').value || settings.globalPreference;
+  const syncLiveControls = (overrides = {}) => {
+    syncPreferenceControls({
+      ...settings,
+      globalPreference: currentPreference(),
+      categoryPreferences,
+      ...overrides,
+    });
+  };
+
+  document.getElementById('settings-btn').addEventListener('click', openSettings);
+  document.getElementById('popup-close').addEventListener('click', () => window.close());
+  document.getElementById('settings-back').addEventListener('click', closeSettings);
+  document.getElementById('settings-close').addEventListener('click', () => window.close());
+  document.getElementById('clear-activity-btn').addEventListener('click', async () => {
+    await chrome.runtime.sendMessage({ type: 'CLEAR_RECENT_ACTIVITY' });
+    renderActivity([]);
+  });
+  document.getElementById('site-warning-dismiss').addEventListener('click', async () => {
+    if (!currentDomain) return;
+    const currentOverride = (await getSiteOverrides())[currentDomain];
+    if (currentOverride?.disabled) {
+      await chrome.runtime.sendMessage({ type: 'SET_SITE_DISABLED', domain: currentDomain, disabled: false });
+      const [updatedOverrides, unsupportedSites] = await Promise.all([
+        getSiteOverrides(),
+        getUnsupportedSites(),
+      ]);
+      renderSiteOverrides(updatedOverrides);
+      renderSiteWarning(currentDomain, unsupportedSites[currentDomain], updatedOverrides[currentDomain]);
+      renderSiteToggle(currentDomain, updatedOverrides[currentDomain]);
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) await chrome.tabs.reload(tab.id);
+      window.close();
+      return;
+    }
+    if (currentOverride?.alwaysAccept) {
+      await chrome.runtime.sendMessage({ type: 'REMOVE_SITE_OVERRIDE', domain: currentDomain });
+      const [updatedOverrides, unsupportedSites] = await Promise.all([
+        getSiteOverrides(),
+        getUnsupportedSites(),
+      ]);
+      renderSiteOverrides(updatedOverrides);
+      renderSiteWarning(currentDomain, unsupportedSites[currentDomain], updatedOverrides[currentDomain]);
+      renderSiteToggle(currentDomain, updatedOverrides[currentDomain]);
+      return;
+    }
+
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: currentDomain });
+    document.getElementById('site-warning').classList.add('hidden');
+  });
+  document.getElementById('site-accept-btn').addEventListener('click', async () => {
+    if (!currentDomain) return;
+    await setSiteOverride(currentDomain, { alwaysAccept: true, disabled: false });
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: currentDomain });
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) await chrome.tabs.reload(tab.id);
+    window.close();
+  });
+  document.getElementById('site-toggle-btn').addEventListener('click', async () => {
+    if (!currentDomain) return;
+    const disabled = !(await getSiteOverrides())[currentDomain]?.disabled;
+    await chrome.runtime.sendMessage({ type: 'SET_SITE_DISABLED', domain: currentDomain, disabled });
+    const [updatedOverrides, unsupportedSites, [tab]] = await Promise.all([
+      getSiteOverrides(),
+      getUnsupportedSites(),
+      chrome.tabs.query({ active: true, currentWindow: true }),
+    ]);
+    renderSiteOverrides(updatedOverrides);
+    renderSiteWarning(currentDomain, unsupportedSites[currentDomain], updatedOverrides[currentDomain]);
+    renderSiteToggle(currentDomain, updatedOverrides[currentDomain]);
+    if (tab?.id) await chrome.tabs.reload(tab.id);
+    window.close();
+  });
+
+  document.querySelectorAll('input[name="pref"]').forEach((radio) => {
+    if (radio.value === settings.globalPreference) radio.checked = true;
+    radio.addEventListener('change', async () => {
+      const pref = radio.value;
+      await updateSettings({ globalPreference: pref });
+      document.getElementById('pref-select').value = pref;
+      document.getElementById('custom-toggles').classList.toggle('hidden', pref !== 'custom');
+      if (pref === 'custom') openSettings();
+      syncLiveControls({ globalPreference: pref });
+      await reloadActiveTab();
+    });
+  });
+
+  const cp = settings.categoryPreferences;
+  document.getElementById('pref-ccpa-do-not-sell').checked = cp.ccpaDoNotSell ?? true;
+  document.getElementById('toggle-functional').checked = cp.functional;
+  document.getElementById('toggle-analytics').checked = cp.analytics;
+  document.getElementById('toggle-advertising').checked = cp.advertising;
+  document.getElementById('toggle-ccpa-do-not-sell').checked = cp.ccpaDoNotSell ?? true;
+  document.getElementById('toggle-uncategorized').value = cp.uncategorized;
+
+  ['functional', 'analytics', 'advertising'].forEach((key) => {
+    document.getElementById(`toggle-${key}`).addEventListener('change', async (e) => {
+      const updated = { ...categoryPreferences, [key]: e.target.checked };
+      categoryPreferences = updated;
+      await updateSettings({ globalPreference: 'custom', categoryPreferences: updated });
+      document.getElementById('pref-select').value = 'custom';
+      syncLiveControls({ globalPreference: 'custom' });
+      await reloadActiveTab();
+    });
+  });
+  document.getElementById('toggle-uncategorized').addEventListener('change', async (e) => {
+    const updated = { ...categoryPreferences, uncategorized: e.target.value };
+    categoryPreferences = updated;
+    await updateSettings({ globalPreference: 'custom', categoryPreferences: updated });
+    document.getElementById('pref-select').value = 'custom';
+    syncLiveControls({ globalPreference: 'custom' });
+    await reloadActiveTab();
+  });
+  const handleCcpaToggleChange = async (checked) => {
+    categoryPreferences = { ...categoryPreferences, ccpaDoNotSell: checked };
+    await updateSettings({ categoryPreferences });
+    syncLiveControls();
+    await reloadActiveTab();
+  };
+  document.getElementById('toggle-ccpa-do-not-sell').addEventListener('change', async (e) => {
+    await handleCcpaToggleChange(e.target.checked);
+  });
+  document.getElementById('pref-ccpa-do-not-sell').addEventListener('change', async (e) => {
+    await handleCcpaToggleChange(e.target.checked);
+  });
+
+  document.getElementById('toggle-badge').checked = settings.showBadgeCount;
+  document.getElementById('toggle-badge').addEventListener('change', async (e) => {
+    await updateSettings({ showBadgeCount: e.target.checked });
+  });
+
+  bindLanguageSelectors(settings.uiLanguage ?? 'auto');
+
+  syncLiveControls();
+
+  document.getElementById('export-btn').addEventListener('click', async () => {
+    const json = await exportSettings();
+    downloadJSON(json, 'eat-my-cookies-settings.json');
+  });
+
+  document.getElementById('import-btn').addEventListener('click', () => {
+    document.getElementById('import-file').click();
+  });
+  document.getElementById('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    await importSettings(text);
+    window.location.reload();
+  });
+
+  document.getElementById('clear-overrides-btn').addEventListener('click', async () => {
+    await chrome.runtime.sendMessage({ type: 'CLEAR_ALL_SITE_OVERRIDES' });
+    renderSiteOverrides({});
+    const unsupportedSites = await getUnsupportedSites();
+    renderSiteWarning(currentDomain, unsupportedSites[currentDomain], null);
+    renderSiteToggle(currentDomain, null);
+  });
+  document.getElementById('site-overrides-list').addEventListener('click', async (e) => {
+    const button = e.target.closest('.remove-override-btn');
+    if (!button) return;
+    const domain = button.dataset.domain;
+    if (!domain) return;
+    await chrome.runtime.sendMessage({ type: 'REMOVE_SITE_OVERRIDE', domain });
+    const updated = await getSiteOverrides();
+    renderSiteOverrides(updated);
+    if (domain === currentDomain) {
+      const unsupportedSites = await getUnsupportedSites();
+      renderSiteWarning(currentDomain, unsupportedSites[currentDomain], updated[currentDomain]);
+      renderSiteToggle(currentDomain, updated[currentDomain]);
+    }
+  });
+
+  document.getElementById('restart-onboarding-btn').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('onboarding/onboarding.html') });
+  });
+}
+
+function syncPreferenceControls(settings) {
+  document.getElementById('pref-select').value = settings.globalPreference;
+  document.getElementById('custom-toggles').classList.toggle('hidden', settings.globalPreference !== 'custom');
+
+  document.querySelectorAll('input[name="pref"]').forEach((radio) => {
+    radio.checked = radio.value === settings.globalPreference;
+  });
+
+  const cp = settings.categoryPreferences;
+  document.getElementById('pref-ccpa-do-not-sell').checked = cp.ccpaDoNotSell ?? true;
+  document.getElementById('toggle-functional').checked = cp.functional;
+  document.getElementById('toggle-analytics').checked = cp.analytics;
+  document.getElementById('toggle-advertising').checked = cp.advertising;
+  document.getElementById('toggle-ccpa-do-not-sell').checked = cp.ccpaDoNotSell ?? true;
+  document.getElementById('toggle-uncategorized').value = cp.uncategorized;
+}
+
+function syncLanguageOptions() {
+  const labels = {
+    auto: i18n.t('settingsLanguageAuto'),
+    en: 'EN',
+    fr: 'FR',
+    de: 'DE',
+    es: 'ES',
+    it: 'IT',
+    'pt-br': 'PT-BR',
+    'pt-pt': 'PT-PT',
+  };
+  for (const select of document.querySelectorAll('[data-language-select]')) {
+    for (const option of select.options) {
+      option.textContent = labels[option.value] ?? option.value.toUpperCase();
+    }
+  }
+}
+
+function bindLanguageSelectors(currentValue) {
+  const selects = [...document.querySelectorAll('[data-language-select]')];
+  for (const select of selects) {
+    select.value = currentValue;
+    select.addEventListener('change', async (e) => {
+      const nextValue = e.target.value;
+      const isSettingsSelect = e.target.id === 'language-select';
+      for (const other of selects) other.value = nextValue;
+      if (isSettingsSelect) {
+        sessionStorage.setItem(POPUP_VIEW_STATE_KEY, 'settings');
+      } else {
+        sessionStorage.removeItem(POPUP_VIEW_STATE_KEY);
+      }
+      await updateSettings({ uiLanguage: nextValue });
+      window.location.reload();
+    });
+  }
+}
+
+function openSettings() {
+  sessionStorage.setItem(POPUP_VIEW_STATE_KEY, 'settings');
+  document.getElementById('settings-view').classList.remove('hidden');
+}
+
+function closeSettings() {
+  sessionStorage.removeItem(POPUP_VIEW_STATE_KEY);
+  document.getElementById('settings-view').classList.add('hidden');
+}
+
+function restorePopupView() {
+  if (sessionStorage.getItem(POPUP_VIEW_STATE_KEY) === 'settings') {
+    document.getElementById('settings-view').classList.remove('hidden');
+  }
+}
+
+function downloadJSON(json, filename) {
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return i18n.t('timeJustNow');
+  if (m < 60) return i18n.t('timeMinutesShort', [m]);
+  const h = Math.floor(m / 60);
+  if (h < 24) return i18n.t('timeHoursShort', [h]);
+  return i18n.t('timeDaysShort', [Math.floor(h / 24)]);
+}
+
+function escapeHTML(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function formatSiteOverrideLabel(override) {
+  if (override?.disabled) return i18n.t('siteOverrideDisabledLabel');
+  if (override?.alwaysAccept) return i18n.t('siteOverrideAlwaysAcceptLabel');
+  return i18n.t('siteOverrideGenericLabel');
+}
+
+function localizeActivityPreference(activity) {
+  switch (formatActivityPreference(activity)) {
+    case 'Accepted':
+      return i18n.t('activityAccepted');
+    case 'Rejected':
+      return i18n.t('activityRejected');
+    case 'CCPA handled':
+      return i18n.t('activityCcpaHandled');
+    case 'Custom':
+      return i18n.t('activityCustom');
+    default:
+      return i18n.t('activityHandled');
+  }
+}
+
+function buildIssueUrl({ releaseVersion, issueVersion, currentDomain, buildMeta }) {
+  const body = [
+    '## Report details',
+    '',
+    `- Release version: \`${releaseVersion}\``,
+    ...(buildMeta?.displayVersion ? [`- Unpacked build: \`${buildMeta.displayVersion}\``] : []),
+    `- Current domain: ${currentDomain ?? 'unknown'}`,
+    `- Browser: ${navigator.userAgent}`,
+    '',
+    '## What happened',
+    '',
+    '<!-- Describe the banner behavior, your selected preference, and any console errors you saw. -->',
+  ].join('\n');
+
+  const params = new URLSearchParams({
+    title: `[Banner not handled][v${issueVersion}] ${currentDomain ?? 'unknown domain'}`,
+    labels: 'cmp-coverage',
+    body,
+  });
+
+  return `https://github.com/eatmycookies-dot-net/eat-my-cookies/issues/new?${params.toString()}`;
+}
+
+async function reloadActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !tab.url) return;
+
+  try {
+    const protocol = new URL(tab.url).protocol;
+    if (!['http:', 'https:'].includes(protocol)) return;
+  } catch (_) {
+    return;
+  }
+
+  try {
+    await chrome.tabs.reload(tab.id);
+  } catch (_) {}
+}
+
+async function getCurrentDomain() {
+  const params = new URLSearchParams(window.location.search);
+  const explicitDomain = params.get('domain');
+  if (explicitDomain) return explicitDomain;
+
+  const explicitUrl = params.get('siteUrl');
+  if (explicitUrl) {
+    try {
+      return new URL(explicitUrl).hostname;
+    } catch (_) {}
+  }
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.url) return null;
+  try {
+    return new URL(tab.url).hostname;
+  } catch (_) {
+    return null;
+  }
+}
+
+init();

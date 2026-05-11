@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eat My Cookies</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Milestone card (hidden until a milestone triggers) -->
+  <div id="milestone-card" class="milestone-card hidden">
+      <div class="milestone-icon">🍪</div>
+      <div class="milestone-body">
+        <h3 id="milestone-name"></h3>
+        <p id="milestone-desc"></p>
+        <p id="milestone-nudge" class="milestone-nudge" data-i18n="popupMilestoneCoffeeNudge">Eat My Cookies is free forever. If it's saved you a minute, consider buying me a coffee.</p>
+      </div>
+      <div class="milestone-actions">
+        <a id="milestone-donate" href="#" target="_blank" class="btn btn-primary" data-i18n="popupMilestoneBuyCoffee">♥ Buy Me a Coffee</a>
+        <button id="milestone-dismiss" class="btn btn-ghost" data-i18n="popupMilestoneDismiss">Keep Going →</button>
+      </div>
+    </div>
+
+  <!-- Main popup -->
+  <div id="main-view">
+    <header class="popup-header">
+      <div class="header-left">
+        <img src="../icons/icon-32.png" alt="" class="header-icon" width="20" height="20">
+        <span class="header-title" data-i18n="extensionName">Eat My Cookies</span>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn theme-btn" id="theme-btn" aria-label="Toggle theme">
+          <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="hidden">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        </button>
+        <button id="settings-btn" class="icon-btn" data-i18n-aria-label="popupSettingsAria" aria-label="Settings">⚙</button>
+        <button id="popup-close" class="icon-btn" data-i18n-aria-label="popupCloseAria" aria-label="Close">×</button>
+      </div>
+    </header>
+
+    <div class="stats-block">
+      <div id="language-shortcut-row" class="stats-language-shortcut hidden">
+        <span class="language-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" class="language-icon-svg" focusable="false" aria-hidden="true">
+            <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm6.93 9h-3.16a15.94 15.94 0 0 0-1.11-5A8.03 8.03 0 0 1 18.93 11ZM12 4.07c.98 1.19 1.8 3.22 2.17 5.93H9.83C10.2 7.29 11.02 5.26 12 4.07ZM4.07 13h3.16a15.94 15.94 0 0 0 1.11 5A8.03 8.03 0 0 1 4.07 13Zm3.16-2H4.07a8.03 8.03 0 0 1 4.27-5 15.94 15.94 0 0 0-1.11 5Zm1.59 0a14.4 14.4 0 0 1 1.32-6h3.72a14.4 14.4 0 0 1 1.32 6Zm5.04 2a14.4 14.4 0 0 1-1.32 6h-3.72a14.4 14.4 0 0 1-1.32-6Zm.8 5a15.94 15.94 0 0 0 1.11-5h3.16a8.03 8.03 0 0 1-4.27 5ZM12 19.93c-.98-1.19-1.8-3.22-2.17-5.93h4.34c-.37 2.71-1.19 4.74-2.17 5.93Z"/>
+          </svg>
+        </span>
+        <select id="language-shortcut-select" class="mini-select ui-language-select" data-language-select aria-label="Language">
+          <option value="auto" data-i18n="settingsLanguageAuto">Auto</option>
+          <option value="en">EN</option>
+          <option value="fr">FR</option>
+          <option value="de">DE</option>
+          <option value="es">ES</option>
+          <option value="it">IT</option>
+          <option value="pt-br">PT-BR</option>
+          <option value="pt-pt">PT-PT</option>
+        </select>
+      </div>
+      <div id="total-count" class="stat-number">—</div>
+      <div class="stat-label" data-i18n="popupStatCookiesEaten">cookies eaten</div>
+      <div id="sites-count" class="stat-sublabel">across — sites</div>
+    </div>
+
+    <section id="site-warning" class="site-warning hidden">
+      <div class="site-warning__icon">!</div>
+      <div class="site-warning__body">
+        <div id="site-warning-title" class="site-warning__title"></div>
+        <div id="site-warning-text" class="site-warning__text"></div>
+      </div>
+      <div class="site-warning__actions">
+        <button id="site-accept-btn" class="btn btn-primary hidden" data-i18n="popupWarningAlwaysAcceptHere">Always accept here</button>
+        <button id="site-warning-dismiss" class="btn btn-ghost" data-i18n="popupDismiss">Dismiss</button>
+      </div>
+    </section>
+
+    <div id="site-toggle-row" class="pref-row site-toggle-row hidden">
+      <span id="site-toggle-label" class="pref-label">This site</span>
+      <button id="site-toggle-btn" class="btn btn-ghost" data-i18n="popupDisableSite">Disable on this site</button>
+    </div>
+
+    <div class="pref-row">
+      <span class="pref-label" data-i18n="popupPreferenceLabel">Preference:</span>
+      <select id="pref-select" class="pref-select">
+        <option id="pref-option-reject" value="reject_all" data-i18n="popupPreferenceRejectAll">Reject All</option>
+        <option id="pref-option-accept" value="accept_all" data-i18n="popupPreferenceAcceptAll">Accept All</option>
+        <option id="pref-option-custom" value="custom" data-i18n="popupPreferenceCustom">Custom</option>
+      </select>
+      <button id="pref-edit-btn" class="btn btn-ghost hidden" data-i18n="popupEdit">Edit →</button>
+    </div>
+
+    <label class="pref-row pref-row-toggle">
+      <span class="pref-label" data-i18n="settingsCcpaDoNotSell">CCPA: Do not sell/share</span>
+      <input type="checkbox" id="pref-ccpa-do-not-sell" class="toggle">
+    </label>
+
+    <div class="divider"></div>
+
+    <section class="activity-section">
+      <div class="section-head">
+        <h2 class="section-label" data-i18n="popupRecent">Recent</h2>
+        <button id="clear-activity-btn" class="text-btn" data-i18n="popupClear">Clear</button>
+      </div>
+      <ul id="activity-list" class="activity-list">
+        <li class="activity-empty" data-i18n="popupNoActivity">No activity yet</li>
+      </ul>
+    </section>
+
+    <div class="divider"></div>
+
+    <section class="badges-section">
+      <div class="section-head">
+        <h2 class="section-label" data-i18n="popupCollectedBadges">Collected Badges</h2>
+        <span id="badges-count" class="section-meta">0</span>
+      </div>
+      <div id="badges-list" class="badges-list">
+        <div class="badge-empty" data-i18n="popupNoBadges">No badges yet. Your first one unlocks on the first handled banner.</div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <footer class="popup-footer">
+      <a id="donate-link" href="https://ko-fi.com/eatmycookies" target="_blank" class="footer-link" data-i18n="popupDonateFooter">♥ Buy me a coffee</a>
+      <span class="footer-sep">·</span>
+      <a href="https://github.com/sponsors/eatmycookies-dot-net" target="_blank" class="footer-link" data-i18n="popupSponsorFooter">Sponsor on GitHub</a>
+    </footer>
+  </div>
+
+  <!-- Settings panel (slides in) -->
+  <div id="settings-view" class="settings-view hidden">
+    <header class="settings-header">
+      <div class="header-left">
+        <button id="settings-back" class="icon-btn" data-i18n-aria-label="settingsBackAria" aria-label="Back">←</button>
+        <span class="header-title" data-i18n="settingsTitle">Settings</span>
+      </div>
+      <button id="settings-close" class="icon-btn" data-i18n-aria-label="popupCloseAria" aria-label="Close">×</button>
+    </header>
+
+    <div class="settings-body">
+      <label class="toggle-row setting-row">
+        <span class="toggle-label toggle-label--with-icon">
+          <span class="language-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" class="language-icon-svg" focusable="false" aria-hidden="true">
+              <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm6.93 9h-3.16a15.94 15.94 0 0 0-1.11-5A8.03 8.03 0 0 1 18.93 11ZM12 4.07c.98 1.19 1.8 3.22 2.17 5.93H9.83C10.2 7.29 11.02 5.26 12 4.07ZM4.07 13h3.16a15.94 15.94 0 0 0 1.11 5A8.03 8.03 0 0 1 4.07 13Zm3.16-2H4.07a8.03 8.03 0 0 1 4.27-5 15.94 15.94 0 0 0-1.11 5Zm1.59 0a14.4 14.4 0 0 1 1.32-6h3.72a14.4 14.4 0 0 1 1.32 6Zm5.04 2a14.4 14.4 0 0 1-1.32 6h-3.72a14.4 14.4 0 0 1-1.32-6Zm.8 5a15.94 15.94 0 0 0 1.11-5h3.16a8.03 8.03 0 0 1-4.27 5ZM12 19.93c-.98-1.19-1.8-3.22-2.17-5.93h4.34c-.37 2.71-1.19 4.74-2.17 5.93Z"/>
+            </svg>
+          </span>
+          <span data-i18n="settingsLanguage">Language</span>
+        </span>
+        <select id="language-select" class="mini-select ui-language-select" data-language-select aria-label="Language">
+          <option value="auto" data-i18n="settingsLanguageAuto">Auto</option>
+          <option value="en">EN</option>
+          <option value="fr">FR</option>
+          <option value="de">DE</option>
+          <option value="es">ES</option>
+          <option value="it">IT</option>
+          <option value="pt-br">PT-BR</option>
+          <option value="pt-pt">PT-PT</option>
+        </select>
+      </label>
+
+      <fieldset class="setting-group">
+        <legend class="setting-group-label" data-i18n="settingsCookiePreference">Cookie preference</legend>
+        <label class="radio-label"><input type="radio" name="pref" value="reject_all"> <span data-i18n="settingsPreferenceRejectAll">Reject All</span> <span class="radio-hint" data-i18n="settingsRecommended">(recommended)</span></label>
+        <label class="radio-label"><input type="radio" name="pref" value="accept_all"> <span data-i18n="settingsPreferenceAcceptAll">Accept All</span></label>
+        <label class="radio-label"><input type="radio" name="pref" value="custom"> <span data-i18n="settingsPreferenceCustomize">Customize</span></label>
+
+        <div id="custom-toggles" class="custom-toggles hidden">
+          <label class="toggle-row">
+            <span class="toggle-label" data-i18n="settingsFunctional">Functional</span>
+            <input type="checkbox" id="toggle-functional" class="toggle">
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-label" data-i18n="settingsAnalytics">Analytics</span>
+            <input type="checkbox" id="toggle-analytics" class="toggle">
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-label" data-i18n="settingsAdvertising">Advertising</span>
+            <input type="checkbox" id="toggle-advertising" class="toggle">
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-label" data-i18n="settingsUncategorized">Uncategorized/Custom Purposes</span>
+            <select id="toggle-uncategorized" class="mini-select">
+              <option id="uncategorized-reject-option" value="reject" data-i18n="settingsReject">Reject</option>
+              <option id="uncategorized-accept-option" value="accept" data-i18n="settingsAccept">Accept</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
+      <label class="toggle-row setting-row">
+        <span class="toggle-label" data-i18n="settingsCcpaDoNotSell">CCPA: Do not sell/share</span>
+        <input type="checkbox" id="toggle-ccpa-do-not-sell" class="toggle">
+      </label>
+
+      <div class="divider"></div>
+
+      <label class="toggle-row setting-row">
+        <span class="toggle-label" data-i18n="settingsShowBadgeCounter">Show badge counter</span>
+        <input type="checkbox" id="toggle-badge" class="toggle">
+      </label>
+
+      <div class="divider"></div>
+
+      <div class="setting-group">
+        <div class="setting-group-label" data-i18n="settingsSiteExceptions">Site exceptions</div>
+        <div id="site-overrides-list" class="site-overrides-list">
+          <div class="site-overrides-empty" data-i18n="settingsNoSitePermissions">No site-specific permissions yet.</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="setting-group">
+        <div class="setting-group-label" data-i18n="settingsData">Data</div>
+        <div class="data-actions">
+          <button id="export-btn" class="btn btn-ghost" data-i18n="settingsExport">Export settings</button>
+          <button id="import-btn" class="btn btn-ghost" data-i18n="settingsImport">Import settings</button>
+          <input type="file" id="import-file" accept=".json" style="display:none">
+        </div>
+        <button id="clear-overrides-btn" class="btn btn-ghost btn-danger" data-i18n="settingsClearOverrides">Clear site overrides</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="settings-meta">
+        <span id="version-label">v—</span>
+        <a id="report-bug-link" href="#" target="_blank" class="footer-link" data-i18n="settingsReportBug">Report a bug ↗</a>
+        <a href="mailto:support@eatmycookies.net" class="footer-link" data-i18n="settingsContactSupport">Contact support ↗</a>
+        <a href="https://github.com/eatmycookies-dot-net/eat-my-cookies" target="_blank" class="footer-link" data-i18n="settingsOpenSource">Open source on GitHub →</a>
+      </div>
+      <button id="restart-onboarding-btn" class="btn btn-ghost" data-i18n="settingsRestartOnboarding">Restart onboarding</button>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

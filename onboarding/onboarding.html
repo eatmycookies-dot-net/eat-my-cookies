@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="onboardingPageTitle">Welcome to Eat My Cookies</title>
+  <link rel="stylesheet" href="onboarding.css">
+</head>
+<body>
+  <!-- Toolbar arrow (pin step only) -->
+  <div class="pin-arrow" id="pin-arrow" aria-hidden="true">
+    <svg width="32" height="44" viewBox="0 0 32 44" fill="none">
+      <path d="M16 40 L16 6" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <path d="M6 16 L16 4 L26 16" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+
+  <div class="shell">
+    <div class="card">
+
+      <!-- Header -->
+      <header class="card-header">
+        <div class="logo-row">
+          <img src="../icons/icon-48.png" alt="" class="logo" width="30" height="30" aria-hidden="true">
+          <span class="brand">Eat My Cookies</span>
+        </div>
+        <button class="theme-btn" id="theme-btn" aria-label="Toggle light/dark theme">
+          <svg id="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg id="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="hidden">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        </button>
+      </header>
+
+      <!-- Carousel -->
+      <div class="carousel" aria-live="polite">
+        <div class="slides" id="slides">
+
+          <!-- Slide 1: All settings (popup-style) -->
+          <div class="slide" id="slide-1" role="group" data-i18n-aria-label="onboardingStep1Aria" aria-label="Step 1: Set your preferences">
+
+            <!-- Language -->
+            <div class="pref-radio-list">
+              <label class="pref-radio-row" style="border-top: none; border-bottom: 1px solid var(--border);">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text2);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span class="pref-radio-label" style="font-weight:500;" data-i18n="settingsLanguage">Language</span>
+                <select id="t-language" class="mini-select" style="margin-left:auto;">
+                  <option value="auto" data-i18n="settingsLanguageAuto">Auto</option>
+                  <option value="en">EN</option>
+                  <option value="fr">FR</option>
+                  <option value="de">DE</option>
+                  <option value="es">ES</option>
+                  <option value="it">IT</option>
+                  <option value="pt-br">PT-BR</option>
+                  <option value="pt-pt">PT-PT</option>
+                </select>
+              </label>
+            </div>
+
+            <!-- Cookie preference -->
+            <div class="pref-section-label" style="margin-top: -6px;" data-i18n="settingsCookiePreference">Cookie preference</div>
+
+            <div class="pref-radio-list" style="margin-top: -10px;">
+
+              <label class="pref-radio-row">
+                <input type="radio" name="pref" class="pref-radio" value="reject_all">
+                <span class="pref-radio-label"><span data-i18n="settingsPreferenceRejectAll">Reject All</span> <span class="pref-recommended" data-i18n="settingsRecommended">(recommended)</span></span>
+              </label>
+
+              <label class="pref-radio-row">
+                <input type="radio" name="pref" class="pref-radio" value="accept_all">
+                <span class="pref-radio-label" data-i18n="settingsPreferenceAcceptAll">Accept All</span>
+              </label>
+
+              <label class="pref-radio-row">
+                <input type="radio" name="pref" class="pref-radio" value="custom">
+                <span class="pref-radio-label" data-i18n="settingsPreferenceCustomize">Customize</span>
+              </label>
+
+              <!-- Custom subcategories (inline expand) -->
+              <div class="custom-sub" id="custom-sub">
+                <label class="custom-sub-row">
+                  <span class="toggle-name" data-i18n="settingsFunctional">Functional</span>
+                  <input type="checkbox" id="t-functional" class="toggle" checked>
+                </label>
+                <label class="custom-sub-row">
+                  <span class="toggle-name" data-i18n="settingsAnalytics">Analytics</span>
+                  <input type="checkbox" id="t-analytics" class="toggle">
+                </label>
+                <label class="custom-sub-row">
+                  <span class="toggle-name" data-i18n="settingsAdvertising">Advertising</span>
+                  <input type="checkbox" id="t-advertising" class="toggle">
+                </label>
+                <div class="custom-sub-row">
+                  <span class="toggle-name" data-i18n="settingsUncategorized">Uncategorized/Custom Purposes</span>
+                  <select id="t-uncategorized" class="mini-select">
+                    <option value="reject" data-i18n="settingsReject">Reject</option>
+                    <option value="accept" data-i18n="settingsAccept">Accept</option>
+                  </select>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- CCPA + Badge -->
+            <div class="toggle-list" style="margin-top: -10px;">
+              <label class="toggle-row">
+                <div class="toggle-info">
+                  <div class="toggle-name" data-i18n="settingsCcpaDoNotSell">CCPA: Do not sell/share</div>
+                </div>
+                <input type="checkbox" id="t-ccpa" class="toggle" checked>
+              </label>
+            </div>
+
+            <div class="toggle-list" style="margin-top: -10px;">
+              <label class="toggle-row">
+                <div class="toggle-info">
+                  <div class="toggle-name" data-i18n="settingsShowBadgeCounter">Show toolbar count</div>
+                </div>
+                <input type="checkbox" id="t-badge" class="toggle" checked>
+              </label>
+            </div>
+
+          </div><!-- /slide-1 -->
+
+          <!-- Slide 2: Pin to toolbar -->
+          <div class="slide pin-slide" id="slide-2" role="group" data-i18n-aria-label="onboardingStep2Aria" aria-label="Step 2: Pin to toolbar">
+            <div class="pin-title" data-i18n="onboardingPinTitle">Pin it to your toolbar</div>
+            <p class="pin-desc" data-i18n-html="onboardingPinDesc">Click the <strong>puzzle piece</strong> in your Chrome toolbar, then click the <strong>pin</strong> icon next to Eat My Cookies so it's always one click away.</p>
+
+            <!-- Chrome Extensions panel mock -->
+            <div class="chrome-panel" aria-hidden="true">
+
+              <div class="chrome-toolbar">
+                <div class="chrome-omnibox">
+                  <svg class="chrome-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+                <div class="chrome-toolbar-actions">
+                  <div class="chrome-action-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  </div>
+                  <div class="chrome-action-btn chrome-action-puzzle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v4h1.5a2.5 2.5 0 0 1 0 5H2v4a2 2 0 0 0 2 2h4v-1.5a2.5 2.5 0 0 1 5 0V21h4a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5Z"/></svg>
+                  </div>
+                  <div class="chrome-action-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="chrome-dropdown">
+                <div class="chrome-dropdown-header">
+                  <span class="chrome-dropdown-title" data-i18n="onboardingExtensionsTitle">Extensions</span>
+                  <div class="chrome-close-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </div>
+                </div>
+                <div class="chrome-section-label" data-i18n="onboardingNoAccessNeeded">No access needed</div>
+                <div class="chrome-section-desc" data-i18n="onboardingNoAccessNeededDesc">These extensions don't need to see and change information on this site.</div>
+                <div class="chrome-ext-row">
+                  <img src="../icons/icon-32.png" alt="" class="chrome-ext-icon">
+                  <span class="chrome-ext-name">Eat My Cookies</span>
+                  <div class="chrome-pin-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
+                  </div>
+                  <div class="chrome-more-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                  </div>
+                </div>
+                <div class="chrome-dropdown-footer">
+                  <svg class="chrome-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  <span data-i18n="onboardingManageExtensions">Manage Extensions</span>
+                </div>
+              </div>
+
+            </div>
+
+          </div><!-- /slide-2 -->
+
+        </div><!-- /slides -->
+      </div><!-- /carousel -->
+
+      <!-- Footer -->
+      <footer class="card-footer">
+        <div class="dots" id="dots" aria-hidden="true"></div>
+        <div class="nav-btns">
+          <button class="btn btn-ghost hidden" id="btn-back" data-i18n="onboardingBack">← Back</button>
+          <button class="btn btn-primary" id="btn-next" disabled data-i18n="onboardingNext">Next →</button>
+        </div>
+      </footer>
+
+    </div><!-- /card -->
+  </div><!-- /shell -->
+
+  <script type="module" src="onboarding.js"></script>
+</body>
+</html>

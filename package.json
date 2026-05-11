@@ -1,0 +1,34 @@
+{
+  "name": "eat-my-cookies",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dev tooling for the Eat My Cookies Chrome extension",
+  "author": "Eat My Cookies",
+  "homepage": "https://eatmycookies.net",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:zip": "node scripts/build.mjs --zip",
+    "build:clean": "node scripts/build.mjs --clean",
+    "icons": "python3 scripts/gen_icons.py",
+    "listing:assets": "node scripts/generate-chromeweblisting-assets.mjs",
+    "verify": "npm run build && npm run test:static",
+    "test": "npm run test:unit && npm run test:static",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:unit:coverage": "vitest run --coverage",
+    "test:static": "node tests/static-checks.js",
+    "test:e2e": "node tests/validate.js",
+    "test:e2e:disney": "node tests/disney-ccpa.js",
+    "test:e2e:disney-homepage": "node tests/disney-family-homepage-ccpa.js",
+    "test:e2e:headed": "node tests/validate.js --headed",
+    "test:e2e:eu": "node tests/validate.js --region=EU",
+    "test:e2e:us": "node tests/validate.js --region=US",
+    "test:e2e:install": "npx playwright install chromium",
+    "test:all": "npm run test:unit && npm run test:static && npm run test:e2e"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.0",
+    "playwright": "^1.44.0",
+    "vitest": "^4.1.5"
+  }
+}

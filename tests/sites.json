@@ -1,0 +1,444 @@
+{
+  "version": "1.0.0",
+  "sites": [
+    {
+      "name": "The Guardian (EU/GDPR)",
+      "url": "https://www.theguardian.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11", ".sp_choice_type_13"]
+    },
+    {
+      "name": "The Guardian (US/CCPA)",
+      "url": "https://www.theguardian.com/",
+      "region": "US",
+      "cmp": "Sourcepoint (USNat)",
+      "tier": "sp-frame",
+      "preference": "reject_all",
+      "followUpNavigation": {
+        "enabled": true,
+        "hrefPattern": "theguardian\\\\.com/.+/\\\\d{4}/",
+        "excludePatterns": ["/help/accessibility-help"],
+        "waitMs": 12000
+      },
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": ["text:do not sell or share", "text:do not sell my personal", ".sp_choice_type_REJECT_ALL"]
+    },
+    {
+      "name": "The Guardian (US/CCPA Accept)",
+      "url": "https://www.theguardian.com/",
+      "region": "US",
+      "cmp": "Sourcepoint (USNat)",
+      "tier": "sp-frame",
+      "preference": "accept_all",
+      "requireBannerDismissal": true,
+      "followUpNavigation": {
+        "enabled": true,
+        "hrefPattern": "theguardian\\\\.com/.+/\\\\d{4}/",
+        "excludePatterns": ["/help/accessibility-help"],
+        "waitMs": 12000
+      },
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": [".sp_choice_type_11", "text:closer", ".sp_choice_type_ACCEPT_ALL"]
+    },
+    {
+      "name": "The Guardian Support (US/CCPA)",
+      "url": "https://support.theguardian.com/us/subscribe/weekly?REFPVID=mojhxxq0lo9i3whbxc1u&INTCMP=undefined&acquisitionData=%7B%22source%22%3A%22GUARDIAN_WEB%22%2C%22componentId%22%3A%22PrintSubscriptionsHeaderLink%22%2C%22componentType%22%3A%22ACQUISITIONS_HEADER%22%2C%22referrerPageviewId%22%3A%22mojhxxq0lo9i3whbxc1u%22%2C%22referrerUrl%22%3A%22https%3A%2F%2Fwww.theguardian.com%2Fus%2Flifeandstyle%22%7D",
+      "region": "US",
+      "cmp": "Sourcepoint (USNat)",
+      "tier": "sp-frame",
+      "preference": "reject_all",
+      "requireBannerDismissal": true,
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": ["text:do not sell or share", ".sp_choice_type_REJECT_ALL", ".sp_choice_type_13"]
+    },
+    {
+      "name": "The Guardian Support (US/CCPA Accept)",
+      "url": "https://support.theguardian.com/us/subscribe/weekly?REFPVID=mojhxxq0lo9i3whbxc1u&INTCMP=undefined&acquisitionData=%7B%22source%22%3A%22GUARDIAN_WEB%22%2C%22componentId%22%3A%22PrintSubscriptionsHeaderLink%22%2C%22componentType%22%3A%22ACQUISITIONS_HEADER%22%2C%22referrerPageviewId%22%3A%22mojhxxq0lo9i3whbxc1u%22%2C%22referrerUrl%22%3A%22https%3A%2F%2Fwww.theguardian.com%2Fus%2Flifeandstyle%22%7D",
+      "region": "US",
+      "cmp": "Sourcepoint (USNat)",
+      "tier": "sp-frame",
+      "preference": "accept_all",
+      "requireBannerDismissal": true,
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": [".sp_choice_type_11", "text:closer", ".sp_choice_type_ACCEPT_ALL"]
+    },
+    {
+      "name": "New York Times",
+      "url": "https://www.nytimes.com/",
+      "region": "US",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11"]
+    },
+    {
+      "name": "Washington Post",
+      "url": "https://www.washingtonpost.com/",
+      "region": "US",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL"]
+    },
+    {
+      "name": "BBC",
+      "url": "https://www.bbc.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk"],
+      "consentSelectors": ["#onetrust-reject-all-handler", ".ot-pc-refuse-all-handler"]
+    },
+    {
+      "name": "Reuters",
+      "url": "https://www.reuters.com/",
+      "region": "US",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "bannerSelectors": ["#onetrust-banner-sdk"],
+      "consentSelectors": ["#onetrust-reject-all-handler"]
+    },
+    {
+      "name": "Forbes",
+      "url": "https://www.forbes.com/",
+      "region": "US",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "bannerSelectors": ["#onetrust-banner-sdk"],
+      "consentSelectors": ["#onetrust-reject-all-handler"]
+    },
+    {
+      "name": "Bloomberg",
+      "url": "https://www.bloomberg.com/",
+      "region": "US",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "bannerSelectors": ["#onetrust-banner-sdk"],
+      "consentSelectors": ["#onetrust-reject-all-handler"]
+    },
+    {
+      "name": "Le Monde",
+      "url": "https://www.lemonde.fr/",
+      "region": "EU",
+      "locale": "fr-FR",
+      "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
+      "cmp": "Le Monde (consent-or-pay)",
+      "tier": "n/a",
+      "note": "Current wall offers accept or subscribe only; no visible free reject path was available in validation.",
+      "bannerSelectors": [],
+      "consentSelectors": []
+    },
+    {
+      "name": "Le Figaro",
+      "url": "https://www.lefigaro.fr/",
+      "region": "EU",
+      "locale": "fr-FR",
+      "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
+      "cmp": "AppConsent / figconsent",
+      "tier": "frame",
+      "bannerSelectors": ["#appconsent", "iframe[title='Consent window']"],
+      "consentSelectors": []
+    },
+    {
+      "name": "Der Spiegel",
+      "url": "https://www.spiegel.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": []
+    },
+    {
+      "name": "ZEIT",
+      "url": "https://www.zeit.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11", ".sp_choice_type_13"]
+    },
+    {
+      "name": "Frankfurter Allgemeine",
+      "url": "https://www.faz.net/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11", ".sp_choice_type_13"]
+    },
+    {
+      "name": "Sueddeutsche Zeitung",
+      "url": "https://www.sueddeutsche.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11", ".sp_choice_type_13"]
+    },
+    {
+      "name": "DW",
+      "url": "https://www.dw.com/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "ConsentManager",
+      "tier": "cm-frame",
+      "note": "DW sometimes redirects into a full-page privacy manager; validate both the entry banner and settings page paths.",
+      "bannerSelectors": ["#cmpwrapper", "#cmpbox", "#cmpinlinepreferencesbox", ".cmpboxbtnrejectcustomchoices", ".cmpboxbtnyescustomchoices"],
+      "consentSelectors": [".cmpboxbtnno", ".cmpboxbtnrejectcustomchoices", ".cmpboxbtnyescustomchoices", "text:save selection"]
+    },
+    {
+      "name": "The Telegraph",
+      "url": "https://www.telegraph.co.uk/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "bannerSelectors": ["#onetrust-banner-sdk"],
+      "consentSelectors": ["#onetrust-reject-all-handler"]
+    },
+    {
+      "name": "The Verge",
+      "url": "https://www.theverge.com/",
+      "region": "US",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL"]
+    },
+    {
+      "name": "Wired",
+      "url": "https://www.wired.com/",
+      "region": "US",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL"]
+    },
+    {
+      "name": "Euronews",
+      "url": "https://www.euronews.com/my-europe/2026/03/24/eu-australia-trade-deal-draws-ire-of-farmers-and-lawmakers",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
+      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+    },
+    {
+      "name": "20 Minutes France",
+      "url": "https://www.20minutes.fr/",
+      "region": "EU",
+      "locale": "fr-FR",
+      "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
+      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+    },
+    {
+      "name": "Le Parisien",
+      "url": "https://www.leparisien.fr/",
+      "region": "EU",
+      "locale": "fr-FR",
+      "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
+      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+    },
+    {
+      "name": "Financial Times",
+      "url": "https://www.ft.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Sourcepoint / custom manager",
+      "tier": "dom",
+      "bannerSelectors": [".message-component", "a[aria-label*='manage cookies' i]", "button[title='Save and Close']", ".pm-switch"],
+      "consentSelectors": ["button[title='Accept']", "button[title='Reject']", "button[title='Save and Close']", "text:manage cookies"]
+    },
+    {
+      "name": "CNN",
+      "url": "https://www.cnn.com/",
+      "region": "US",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "bannerSelectors": ["#onetrust-banner-sdk"],
+      "consentSelectors": ["#onetrust-reject-all-handler"]
+    },
+    {
+      "name": "CNBC",
+      "url": "https://www.cnbc.com/",
+      "region": "US",
+      "cmp": "OneTrust (CCPA settings flow)",
+      "tier": "dom",
+      "handleWaitMs": 12000,
+      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk"],
+      "consentSelectors": ["#onetrust-pc-btn-handler", ".save-preference-btn-handler", ".category-switch-handler"]
+    },
+    {
+      "name": "La Repubblica",
+      "url": "https://www.repubblica.it/",
+      "region": "EU",
+      "locale": "it-IT",
+      "acceptLanguage": "it-IT,it;q=0.9,en;q=0.8",
+      "cmp": "Iubenda (consent-or-pay)",
+      "tier": "n/a",
+      "note": "Current wall exposes accept or subscribe paths; the non-accept continuation control is rendered hidden in validation.",
+      "bannerSelectors": [],
+      "consentSelectors": []
+    },
+    {
+      "name": "El País",
+      "url": "https://elpais.com/",
+      "region": "EU",
+      "locale": "es-ES",
+      "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
+      "cmp": "TrustArc",
+      "tier": "dom",
+      "bannerSelectors": ["#truste-consent-track", ".truste_overlay"],
+      "consentSelectors": ["#truste-consent-required"]
+    },
+    {
+      "name": "El Mundo",
+      "url": "https://www.elmundo.es/",
+      "region": "EU",
+      "locale": "es-ES",
+      "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
+      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+    },
+    {
+      "name": "ABC España",
+      "url": "https://www.abc.es/",
+      "region": "EU",
+      "locale": "es-ES",
+      "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
+      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+    },
+    {
+      "name": "La Vanguardia",
+      "url": "https://www.lavanguardia.com/",
+      "region": "EU",
+      "locale": "es-ES",
+      "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
+      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+    },
+    {
+      "name": "El Confidencial",
+      "url": "https://www.elconfidencial.com/",
+      "region": "EU",
+      "locale": "es-ES",
+      "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
+      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+    },
+    {
+      "name": "Corriere della Sera",
+      "url": "https://www.corriere.it/",
+      "region": "EU",
+      "locale": "it-IT",
+      "acceptLanguage": "it-IT,it;q=0.9,en;q=0.8",
+      "cmp": "Iubenda (consent-or-pay)",
+      "tier": "n/a",
+      "note": "Current wall exposes accept or subscribe paths; no free reject path was confirmed during validation.",
+      "bannerSelectors": [],
+      "consentSelectors": []
+    },
+    {
+      "name": "Il Sole 24 Ore",
+      "url": "https://www.ilsole24ore.com/",
+      "region": "EU",
+      "locale": "it-IT",
+      "acceptLanguage": "it-IT,it;q=0.9,en;q=0.8",
+      "cmp": "OneTrust / consent-or-pay",
+      "tier": "n/a",
+      "note": "Current wall presents subscription-oriented alternatives; a reliable free reject flow was not confirmed in validation.",
+      "bannerSelectors": [],
+      "consentSelectors": []
+    },
+    {
+      "name": "La Stampa",
+      "url": "https://www.lastampa.it/",
+      "region": "EU",
+      "locale": "it-IT",
+      "acceptLanguage": "it-IT,it;q=0.9,en;q=0.8",
+      "cmp": "Iubenda (consent-or-pay)",
+      "tier": "n/a",
+      "note": "Current wall exposes accept or subscribe-oriented paths; no reliable free reject action was confirmed in validation.",
+      "bannerSelectors": [],
+      "consentSelectors": []
+    },
+    {
+      "name": "Il Messaggero",
+      "url": "https://www.ilmessaggero.it/",
+      "region": "EU",
+      "locale": "it-IT",
+      "acceptLanguage": "it-IT,it;q=0.9,en;q=0.8",
+      "cmp": "Iubenda (consent-or-pay)",
+      "tier": "n/a",
+      "note": "Current wall exposes accept or subscribe-oriented paths; no reliable free reject action was confirmed in validation.",
+      "bannerSelectors": [],
+      "consentSelectors": []
+    },
+    {
+      "name": "Público",
+      "url": "https://www.publico.pt/",
+      "region": "EU",
+      "locale": "pt-PT",
+      "acceptLanguage": "pt-PT,pt;q=0.9,en;q=0.8",
+      "cmp": "Needs validation",
+      "tier": "n/a",
+      "note": "Portuguese locale coverage target. Human validation is still needed to confirm the active CMP and whether a reliable free reject path exists.",
+      "bannerSelectors": [],
+      "consentSelectors": []
+    },
+    {
+      "name": "Ars Technica",
+      "url": "https://arstechnica.com/",
+      "region": "US",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": ["[id^='sp_message_container']"],
+      "consentSelectors": [".sp_choice_type_REJECT_ALL"]
+    },
+    {
+      "name": "MLB",
+      "url": "https://www.mlb.com/",
+      "region": "US",
+      "cmp": "OneTrust (CCPA settings flow)",
+      "tier": "dom",
+      "handleWaitMs": 12000,
+      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk"],
+      "consentSelectors": ["#onetrust-pc-btn-handler", ".save-preference-btn-handler", ".category-switch-handler"]
+    }
+  ]
+}

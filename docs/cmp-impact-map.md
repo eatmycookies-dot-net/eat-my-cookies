@@ -1,0 +1,335 @@
+# CMP Impact Map
+
+Use this document before making changes to understand which sites a code path touches,
+and which sites to re-test after a change lands.
+
+---
+
+## File → CMP family → Sites affected
+
+### Universal files (touch every site)
+
+| File | When it runs | What it does |
+|------|-------------|--------------|
+| `content/tcf-interceptor.js` | `document_start` MAIN | Intercepts `window.__tcfapi` for GDPR TCF v2.2 |
+| `content/gcm-injector.js` | `document_start` MAIN | Sets Google Consent Mode v2 defaults |
+| `content/cmp-api-handler.js` | `document_idle` MAIN | Calls CMP JS APIs (OneTrust, Cookiebot, Didomi, etc.) |
+| `content/dom-handler.js` | `document_idle` ISOLATED | CSS-selector fallback using `rules/cmps.json` |
+| `content/heuristic.js` | `document_idle` ISOLATED | Text-pattern fallback for unrecognized banners |
+| `content/main.js` | `document_idle` ISOLATED | Coordinator: loads prefs, routes to tiers, reports stats |
+
+**Any change to these files can affect every site. Minimum retest set: one site per CMP family (see table below).**
+
+### CMP-scoped files (touch one CMP family)
+
+| File | CMP / Sites affected |
+|------|---------------------|
+| `content/sp-frame-handler.js` | Sourcepoint: NYT, The Verge, Wired, Spiegel, Guardian, FT |
+| `content/cm-frame-handler.js` | ConsentManager: DW |
+| `content/appconsent-frame-handler.js` | AppConsent |
+| `rules/cmps.json` | All DOM-handler CMPs (see CMP family table) |
+
+### Site-specific files (touch exactly one site)
+
+| File | Site |
+|------|------|
+| `content/bbc-sourcepoint-hook.js` | bbc.com |
+| `content/bbc-preferences.js` | bbc.com |
+| `content/latimes-privacy.js` | latimes.com |
+| `content/latimes-interstitial.js` | latimes.com |
+| `main.js` → `handleGuardian*` | theguardian.com, support.theguardian.com |
+| `main.js` → `handleFT` | ft.com |
+| `main.js` → `handleDW` | dw.com |
+| `main.js` → `handleEuronews` | euronews.com |
+| `main.js` → `handleLeMonde` | lemonde.fr |
+| `main.js` → `ACCEPT_OR_WARN_SITES` | repubblica.it, lefigaro.fr, abc.es, lavanguardia.com, corriere.it, ilsole24ore.com, lastampa.it, ilmessaggero.it |
+
+---
+
+## CMP family → Sites
+
+Use this to understand which sites share the same code path and will behave similarly
+(or break together) when a CMP handler changes.
+
+### OneTrust
+**Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Mode | Special notes |
+|------|--------|------|--------------|
+| `reuters.com` | US/global | GDPR + USNat | Automation-covered |
+| `forbes.com` | US/global | GDPR + USNat | Automation-covered |
+| `bloomberg.com` | US/global | GDPR + USNat | Automation-covered |
+| `disney.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. USNat handler: `RejectAll()`/`Accept()` commits consent to cookie, then tries Submit click, falls back to DOM removal if modal persists (isTrusted check confirmed as root cause). Human-validated May 2026. |
+| `espn.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. Same Disney-family modal and handler path. Human-validated May 2026. |
+| `nike.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. Dedicated MAIN-world handler in `cmp-api-handler.js` handles `/guest/settings/do-not-share-my-data`: waits for `#a11y-do-not-share`, clicks the checkbox (triggers React `onChange` → sets `ni_c=1PA=0` client-side). E2E-validated May 2026 for `reject_all`. Opt-in reversal not automatable (Nike's React component does not propagate the cookie update for programmatic unchecks). |
+| `ft.com` | EU/UK | GDPR | Blocked in `HOST_RESTRICTIONS` for reject — iframe handler takes over |
+| `lemonde.fr` | EU | GDPR | Blocked in `HOST_RESTRICTIONS` for reject — site-specific handler takes over |
+| `bbc.com` | Global | GDPR + USNat | In `EXPLICIT_ONETRUST_CONTROL_HOSTS`; document-start cookie path preferred |
+
+**Trigger for USNat direct path (new `executeOneTrustUSNatDirect`):**
+OneTrust is detected + no privacy-center opener button exists + visible toggles are present directly on the modal.
+This path is active for US CCPA opt-out notices where the banner shows a toggle + Submit directly (not behind a settings panel).
+
+**Sites also likely using OneTrust (from Priority 1 CCPA targets, not yet validated):**
+`walmart.com`, `target.com`, `foxnews.com`, `homedepot.com`
+
+### Sourcepoint
+**Handler files:** `sp-frame-handler.js` (primary, in-iframe) + `cmp-api-handler.js` (secondary, page-level hook)
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `nytimes.com` | US/global | GDPR + USNat; automation-covered |
+| `theverge.com` | US/global | Sourcepoint; automation-covered |
+| `wired.com` | US/global | Sourcepoint; automation-covered |
+| `spiegel.de` | EU | Sourcepoint GDPR; automation-covered |
+| `theguardian.com` | Global | USNat via `_sp_.usnat.postRejectAll`; dedicated handler |
+| `ft.com` | EU/UK | Cross-origin iframe; dedicated page-level opener + frame handler |
+
+### Didomi
+**Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json` + `main.js → handleEuronews`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `euronews.com` | EU/global | Dedicated handler in `main.js`; automation-covered |
+
+### ConsentManager
+**Handler files:** `cm-frame-handler.js` + `main.js → handleDW`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `dw.com` | EU | Dedicated handler; automation-covered |
+
+### Cookiebot
+**Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
+
+No sites currently in the validated inventory — coverage is generic.
+
+### Iubenda
+**Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `repubblica.it` | EU | Blocked for reject; honest paywall warning shown |
+| `lastampa.it` | EU | Accept works; reject is paywall path |
+| `ilmessaggero.it` | EU | Accept works; reject is paywall path |
+| `ilsole24ore.com` | EU | Accept works; reject is paywall path |
+
+### Le Monde (custom CMP)
+**Handler files:** `main.js → handleLeMonde` + `dom-handler.js → "lemonde"` entry in cmps.json
+
+| Site | Special notes |
+|------|--------------|
+| `lemonde.fr` | Human-validated: all flows work |
+
+### BBC (custom, document-start)
+**Handler files:** `bbc-sourcepoint-hook.js`, `bbc-preferences.js`
+
+| Site | Special notes |
+|------|--------------|
+| `bbc.com` | Cookie injection at document_start; avoids DOM click path entirely |
+
+### LA Times (custom, document-start)
+**Handler files:** `latimes-privacy.js`, `latimes-interstitial.js`
+
+| Site | Special notes |
+|------|--------------|
+| `latimes.com`, `membership.latimes.com` | CCPA via rdp API + c_rdp cookie at document_start |
+
+---
+
+## Change → Minimum retest matrix
+
+When you change a file, test at least the sites marked ✅ below.
+Sites marked 🔵 are lower risk but worth a spot-check if time allows.
+
+| Changed file | Must test | Spot-check |
+|-------------|-----------|------------|
+| `cmp-api-handler.js` | reuters.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
+| `dom-handler.js` | reuters.com, bloomberg.com, forbes.com | euronews.com, dw.com |
+| `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, forbes.com, disney.com | ft.com |
+| `rules/cmps.json` (Sourcepoint entry) | nytimes.com, theverge.com | spiegel.de |
+| `rules/cmps.json` (Didomi entry) | euronews.com | — |
+| `rules/cmps.json` (ConsentManager entry) | dw.com | — |
+| `sp-frame-handler.js` | nytimes.com, theverge.com, theguardian.com, ft.com | wired.com, spiegel.de |
+| `main.js` (coordinator logic) | reuters.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, euronews.com |
+| `main.js` (site-specific handler) | Only the one site that handler covers | — |
+| `heuristic.js` | Any site where other tiers fail | — |
+| `tcf-interceptor.js` | nytimes.com (GDPR), spiegel.de | reuters.com |
+| `bbc-*.js` | bbc.com only | — |
+| `latimes-*.js` | latimes.com only | — |
+
+---
+
+## The OneTrust USNat modal pattern (learned from Disney/ESPN, May 2026)
+
+**Pattern:** Some US sites (CCPA/California) show a "Notice of Right to Opt Out of Sale/Sharing"
+using OneTrust in USNat mode. This modal differs from the standard GDPR banner:
+
+- **No** "Privacy Settings" / "Cookie Settings" opener button
+- Toggles (e.g. "Selling, Sharing, Targeted Advertising") appear **directly** on the modal
+- The confirm button is `#onetrust-accept-btn-handler` labeled **"Submit"** (not "Accept All")
+
+**How to detect:** `isUSNat = submitBtn && /\bsubmit\b/i.test(submitBtn.textContent)` — no `isVisible` check (button is temporarily invisible during React reconciliation, causing false negatives if gated on visibility).
+
+**Current approach (as of May 2026):**
+1. Call `OneTrust.RejectAll()` (reject) or `OneTrust.Accept()` (accept) — commits consent to the `OptanonConsent` cookie immediately.
+2. For reject: wait up to 600 ms for DOM toggles to flip OFF. If they stay ON, force them OFF via `setOneTrustTogglesOffNow()` (native setter + events, no label click) before the Submit attempt.
+3. Try `dispatchSyntheticClick` on Submit — succeeds on some OneTrust builds.
+4. After 400 ms, if modal still visible: call `closeOneTrustUSNatModal()` — tries `OneTrust.Close()`, then removes `#onetrust-banner-sdk`, `#onetrust-pc-sdk`, `.onetrust-pc-dark-filter` from DOM and clears overflow locks. Safe because consent is already committed by step 1.
+
+**Confirmed root cause (May 2026):** Disney's OneTrust build checks `event.isTrusted` on the Submit click handler. Synthetic events (`isTrusted = false`) are silently ignored. Confirmed by: `OptanonConsent` cookie shows `groups=C0004:0,C0002:0` (opt-out saved by `RejectAll()`) but modal remains visible. DOM removal is the correct and safe fallback.
+
+**What we tried and abandoned:**
+- Fixed 400 ms delay → Submit click only: isTrusted check blocks synthetic click; modal remained.
+- DOM toggle manipulation via `forceOneTrustToggleState()` (native setter + label click): label click triggered React's onClick synchronously → re-render reverted the toggle before Submit read it. Fixed by `setOneTrustTogglesOffNow()` (no label click), kept as pre-click insurance for OneTrust builds that do read DOM toggle state on Submit.
+- `isVisible(submitBtn)` in USNat detection: React reconciliation makes button temporarily invisible → false negatives → fell through to GDPR accept path. Fixed by removing the visibility gate.
+- Guard returning `false` when toggles visible but Submit absent: caused all SPA polls to defer indefinitely in some timing windows.
+
+**MAIN_WORLD_ONLY_SITES requirement:** All OneTrust USNat sites must be in `MAIN_WORLD_ONLY_SITES`.
+Tier 4 (dom-handler.js) for `accept_all` clicks `#onetrust-accept-btn-handler` directly from
+cmps.json with no API call, bypassing `ccpaDoNotSell` entirely. For `reject_all`, Tier 4's
+`executeOneTrustUSNatDirect` calls `disableVisibleOneTrustToggles()` + Submit, also ignoring
+`ccpaDoNotSell`. Without this guard, whichever tier fires first wins and may produce wrong results.
+
+**Sites confirmed using this pattern:** `disney.com`, `espn.com`. Likely also: `disneyplus.com`,
+`hulu.com`, `abc.com` (all Disney properties), `nike.com`, and potentially other large US companies
+using OneTrust for USNat.
+
+---
+
+## The MutationObserver concurrency anti-pattern (learned May 2026)
+
+**Problem:** Attaching async functions directly as MutationObserver callbacks on React/SPA sites
+causes browser freezes. React SPAs produce hundreds of DOM mutations/second. Without a concurrency
+guard, each mutation triggers a new concurrent async execution (each holding a 4-second polling
+loop), saturating the JS event queue.
+
+**Symptoms:** Browser becomes completely unresponsive on affected sites. Extension popup may
+falsely show "Rejected" (false-positive `waitForDismissal` before the real modal disappears).
+
+**Fix pattern:**
+```js
+// cmp-api-handler.js style: debounce + _trying flag
+let _trying = false;
+const observer = new MutationObserver(() => {
+  if (_handled || _trying) return;
+  clearTimeout(_debounceTimer);
+  _debounceTimer = setTimeout(() => tryHandlers(), 100);
+});
+
+// dom-handler.js style: running flag in the closure
+let running = false;
+const observer = new MutationObserver(async () => {
+  if (running) return;
+  running = true;
+  try { /* work */ } finally { running = false; }
+});
+```
+
+**Rule:** Any new MutationObserver that wraps async work MUST include a concurrency guard.
+Any new async function called from a MutationObserver MUST be idempotent or guarded.
+
+---
+
+## SPA polling strategy (adopted May 2026)
+
+**Problem:** On React/Next.js SPAs (Disney, Bloomberg, etc.), a MutationObserver fires
+continuously even after `_handled = true`, because React re-renders DOM on every state change.
+This caused a dismiss/re-show loop: the handler re-entered after the banner was dismissed,
+clicked Submit again, and kept cycling.
+
+**Root cause:** `_handled = true` stops `tryHandlers()` from running, but only if the
+MutationObserver fires AFTER `_handled` is set. On SPAs, the race window between the
+handler returning and `_handled` being set (which can span an `await`) creates re-entry.
+
+**Fix:** Detect SPA frameworks at startup and replace the MutationObserver with a fixed
+polling schedule. Once `_handled = true`, all scheduled checks are no-ops.
+
+**SPA detection (MAIN world — cmp-api-handler.js):**
+```js
+function isSPA() {
+  return !!(window.__NEXT_DATA__ || window.___gatsby || window.__nuxt__ || window.__vue_app__);
+}
+```
+
+**SPA detection (ISOLATED world — dom-handler.js, DOM attributes only):**
+```js
+function isSPA() {
+  if (document.getElementById('__next')) return true;
+  if (document.querySelector('script#__NEXT_DATA__')) return true;
+  if (document.getElementById('__nuxt')) return true;
+  if (document.querySelector('[data-v-app]')) return true;
+  if (document.documentElement.hasAttribute('ng-version')) return true;
+  return false;
+}
+```
+
+**Polling schedule:** `[300, 800, 1800, 3500, 6000, 10000]` ms for Tier 2;
+`[500, 1200, 2500, 4500, 8000]` ms for Tier 4.
+
+**Trade-off:** If a site re-shows a banner AFTER the last polling window (> 10s),
+the extension won't catch the re-show. This is intentional — a single banner dismissal
+is better than an infinite dismiss/re-show loop.
+
+**Sites classified as SPA by this detection:**
+- `disney.com` — Next.js (`__NEXT_DATA__`) ✓
+- `espn.com` — Next.js (`__NEXT_DATA__`) ✓ (same Disney infrastructure)
+
+---
+
+## Observer / listener audit (May 2026)
+
+All async event sources audited for loop risk:
+
+| Source | File | Guard | Risk | Notes |
+|--------|------|-------|------|-------|
+| MutationObserver (Tier 2) | `cmp-api-handler.js` | `_handled` check + SPA polling | Low | Observer disabled for SPAs |
+| MutationObserver (Tier 4) | `dom-handler.js` | `running` flag + SPA polling | Low | Observer disabled for SPAs |
+| Guardian retry loop | `cmp-api-handler.js` | `_handled` stops interval | Low | 10s lifetime, 400ms cadence |
+| FT outcome tracker | `main.js` | `stop()` on match or 20s timeout | Medium | `tick()` async fn called from both setInterval and MutationObserver with no concurrency guard — benign for now (reporting only), but worth adding a guard if FT behavior changes |
+| `_sp_queue` hook | `cmp-api-handler.js` | Fires once on SP init | None | One-shot callback |
+| Site-specific handlers | `main.js` | `isFlowCoolingDown()` | Low | DW, FT, Euronews all gated |
+
+**One known medium-risk pattern:** `trackFTOutcome()` in `main.js` attaches an async `tick()`
+to both a `setInterval` and a `MutationObserver` without a concurrency guard. Concurrent
+`tick()` calls are safe today (they only read cookies and call `reportAction`), but if `tick()`
+ever does DOM writes, add a `let ticking = false` guard matching the dom-handler.js pattern.
+
+---
+
+## zoom.com loop-detection trigger (observed May 2026)
+
+**Updated finding (May 9, 2026):** Reproduced in a live headed Chromium session with the extension
+loaded. The repeated Accept All reports on `zoom.com` were coming from
+`content/cm-frame-handler.js`, not from OneTrust. The handler recorded
+`consentmanager:frame` three times on the same page and the browser landed on
+`https://www.zoom.com/en/trust/acceptable-use-guidelines/`, which then triggered the loop
+circuit breaker. Fix: add `www.zoom.com` to the ConsentManager frame-handler skip list.
+
+**Loop-detection thresholds:** 3 identical reports within 12 s (FAST) or 5 within 45 s (SLOW)
+trigger auto-disable. "Identical" = same site + preference + method + page URL.
+
+**OneTrust homepage nuance:** Zoom's homepage can expose `OptanonConsent` /
+`OnetrustActiveGroups` with all-accepted values even while a visible collapsed OneTrust shell is
+still on screen. That means cookie state is not enough to determine user-visible success here.
+The visible Accept control on the homepage shell is the close icon
+`.onetrust-close-btn-handler.ot-close-icon.banner-close-button`; a plain DOM `.click()` on that
+control successfully dismisses the shell in live testing. The extension now uses that for Zoom's
+`accept_all` path.
+
+**Reject All status:** fixed. The Zoom OneTrust privacy-center flow now dismisses correctly for
+reject after targeting the real preference-center confirm path and using stricter dismissal checks.
+
+**Custom mapping status:** fixed. Zoom's visible OneTrust categories map cleanly to the extension's
+custom settings:
+- `C0004` Targeting = `Advertising`, but forced OFF whenever `ccpaDoNotSell` is ON
+- `C0003` Functional = `Functional`
+- `C0002` Performance = `Analytics`
+
+Verified in a live headed browser session with a mixed custom profile
+(`functional=true`, `analytics=false`, `advertising=false`, `ccpaDoNotSell=true`):
+`OptanonConsent` was written with `groups=C0004:0,C0003:1,C0002:0,C0001:1`.
+
+**Remaining caveat:** the footer `Your Privacy Choices` / `Cookies Settings` reopen path has been
+inconsistent during manual testing, so CCPA verification is still provisional even though the
+reject and custom flows now close reliably.

@@ -1,0 +1,290 @@
+{
+  "version": "1.1.0",
+  "cmps": [
+    {
+      "id": "sourcepoint",
+      "name": "Sourcepoint",
+      "note": "Sourcepoint renders its UI inside a cross-origin iframe. Detection here is for reporting only — the actual click happens in sp-frame-handler.js which runs with all_frames:true.",
+      "detectors": [
+        { "type": "css_selector", "value": "[id^='sp_message_container']" },
+        { "type": "css_selector", "value": "[id^='sp_message_iframe']" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".sp_choice_type_REJECT_ALL" },
+          { "type": "click", "selector": ".sp_choice_type_11" },
+          { "type": "click", "selector": ".sp_choice_type_13" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".sp_choice_type_ACCEPT_ALL" },
+          { "type": "click", "selector": ".sp_choice_type_13" },
+          { "type": "click", "selector": ".sp_choice_type_11" }
+        ]
+      }
+    },
+    {
+      "id": "onetrust",
+      "name": "OneTrust",
+      "detectors": [
+        { "type": "js_global",    "value": "window.OneTrust" },
+        { "type": "css_selector", "value": "#onetrust-banner-sdk" },
+        { "type": "css_selector", "value": "#onetrust-consent-sdk" },
+        { "type": "css_selector", "value": "#onetrust-pc-sdk" },
+        { "type": "css_selector", "value": ".onetrust-pc-dark-filter" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#onetrust-reject-all-handler" },
+          { "type": "click", "selector": ".ot-pc-refuse-all-handler" },
+          { "type": "click", "selector": "button[aria-label*='Reject']" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#onetrust-accept-btn-handler" }
+        ],
+        "customize": {
+          "open": { "type": "click", "selector": "#onetrust-pc-btn-handler" },
+          "save":  { "type": "click", "selector": "#onetrust-accept-btn-handler" }
+        }
+      }
+    },
+    {
+      "id": "cookiebot",
+      "name": "Cookiebot",
+      "detectors": [
+        { "type": "js_global",    "value": "window.Cookiebot" },
+        { "type": "css_selector", "value": "#CybotCookiebotDialog" },
+        { "type": "css_selector", "value": "#cookiebanner" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#CybotCookiebotDialogBodyButtonDecline" },
+          { "type": "click", "selector": "#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll" },
+          { "type": "click", "selector": "#CybotCookiebotDialogBodyButtonAccept" }
+        ]
+      }
+    },
+    {
+      "id": "didomi",
+      "name": "Didomi",
+      "detectors": [
+        { "type": "js_global",    "value": "window.Didomi" },
+        { "type": "css_selector", "value": "#didomi-popup" },
+        { "type": "css_selector", "value": "#didomi-notice" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#didomi-notice-disagree-button" },
+          { "type": "click", "selector": ".didomi-notice-disagree-button" },
+          { "type": "click", "selector": "[data-didomi-action='disagree']" },
+          { "type": "click", "selector": "[didomi-notice-action='disagree']" },
+          { "type": "click", "selector": ".didomi-components-button--ghost:not([aria-label*='all' i])" },
+          { "type": "click", "selector": "button[aria-label*='Reject' i]" },
+          { "type": "click", "selector": "button[aria-label*='Refuser' i]" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#didomi-notice-agree-button" },
+          { "type": "click", "selector": ".didomi-notice-agree-button" },
+          { "type": "click", "selector": "[data-didomi-action='agree']" }
+        ]
+      }
+    },
+    {
+      "id": "usercentrics",
+      "name": "Usercentrics",
+      "detectors": [
+        { "type": "js_global",    "value": "window.UC_UI" },
+        { "type": "css_selector", "value": "#usercentrics-root" },
+        { "type": "css_selector", "value": "[data-testid='uc-banner']" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "[data-testid='uc-deny-all-button']" },
+          { "type": "click", "selector": "button[aria-label*='Deny']" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "[data-testid='uc-accept-all-button']" }
+        ]
+      }
+    },
+    {
+      "id": "quantcast",
+      "name": "Quantcast Choice",
+      "detectors": [
+        { "type": "js_global",    "value": "window.__cmp" },
+        { "type": "css_selector", "value": ".qc-cmp2-container" },
+        { "type": "css_selector", "value": "#qc-cmp2-ui" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".qc-cmp2-summary-buttons button:first-child" },
+          { "type": "click", "selector": "button[mode='secondary']" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".qc-cmp2-summary-buttons button:last-child" }
+        ]
+      }
+    },
+    {
+      "id": "trustarc",
+      "name": "TrustArc",
+      "detectors": [
+        { "type": "js_global",    "value": "window.truste" },
+        { "type": "css_selector", "value": "#truste-consent-track" },
+        { "type": "css_selector", "value": ".truste_overlay" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#truste-consent-required" },
+          { "type": "click", "selector": ".truste-option-button:first-child" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#truste-consent-button" }
+        ]
+      }
+    },
+    {
+      "id": "axeptio",
+      "name": "Axeptio",
+      "detectors": [
+        { "type": "js_global",    "value": "window._axcb" },
+        { "type": "css_selector", "value": "#axeptio_overlay" },
+        { "type": "css_selector", "value": ".axeptio_widget" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".axeptio-btn--close" },
+          { "type": "click", "selector": "[data-test='dismiss']" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "[data-test='accept-all-cookies']" }
+        ]
+      }
+    },
+    {
+      "id": "cookieyes",
+      "name": "CookieYes",
+      "detectors": [
+        { "type": "css_selector", "value": "#cookie-law-info-bar" },
+        { "type": "css_selector", "value": ".cky-banner-element" },
+        { "type": "css_selector", "value": "#cky-consent-handler" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".cky-btn-reject" },
+          { "type": "click", "selector": "#cookie_action_close_header_reject" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".cky-btn-accept" },
+          { "type": "click", "selector": "#cookie_action_close_header" }
+        ]
+      }
+    },
+    {
+      "id": "termly",
+      "name": "Termly",
+      "detectors": [
+        { "type": "css_selector", "value": "[id^='termly-code']" },
+        { "type": "css_selector", "value": ".termly-styles-module" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "[data-tid='banner-decline']" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "[data-tid='banner-accept']" }
+        ]
+      }
+    },
+    {
+      "id": "iubenda",
+      "name": "Iubenda",
+      "detectors": [
+        { "type": "js_global",    "value": "window._iub" },
+        { "type": "css_selector", "value": "#iubenda-cs-banner" },
+        { "type": "css_selector", "value": ".iubenda-cs-content" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".iubenda-cs-reject-btn" },
+          { "type": "click", "selector": "[class*='iubenda-cs-reject']" },
+          { "type": "click", "selector": "#iubenda-cs-decline" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".iubenda-cs-accept-btn" },
+          { "type": "click", "selector": "#iubenda-cs-accept" }
+        ]
+      }
+    },
+    {
+      "id": "consentmanager",
+      "name": "ConsentManager",
+      "note": "Used by DW. Banner injects into #cmpwrapper in the main frame.",
+      "detectors": [
+        { "type": "css_selector", "value": "#cmpbox" },
+        { "type": "css_selector", "value": "#cmpwrapper" },
+        { "type": "css_selector", "value": ".cmpboxbtns" },
+        { "type": "css_selector", "value": ".cmpboxbtnno" },
+        { "type": "css_selector", "value": "#cmpbntnotxt" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".cmpboxbtnno" },
+          { "type": "click", "selector": "#cmpbntnotxt" },
+          { "type": "click", "selector": "a[data-cmp-action='rejectall']" },
+          { "type": "click", "selector": "a[onclick*='setNecessary']" },
+          { "type": "click", "selector": "button[title*='Reject' i]" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".cmpboxbtnyes" },
+          { "type": "click", "selector": "#cmpbntyestxt" },
+          { "type": "click", "selector": "a[data-cmp-action='acceptall']" }
+        ]
+      }
+    },
+    {
+      "id": "lemonde",
+      "name": "Le Monde (custom)",
+      "note": "Le Monde uses a custom GDPR consent wall with proprietary CSS classes.",
+      "detectors": [
+        { "type": "css_selector", "value": ".gdpr-lmd-wall" },
+        { "type": "css_selector", "value": "[data-gdpr-expression='acceptAll']" },
+        { "type": "css_selector", "value": "[data-gdpr-expression='denyAll']" },
+        { "type": "css_selector", "value": "[data-gdpr-action='settings']" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "[data-gdpr-expression='denyAll']" },
+          { "type": "click", "selector": ".gdpr-lmd-wall__refuse-link" },
+          { "type": "click", "selector": "button[data-gdpr-expression='denyAll']" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "[data-gdpr-expression='acceptAll']" },
+          { "type": "click", "selector": ".gdpr-lmd-button--main" },
+          { "type": "click", "selector": ".gdpr-lmd-button" }
+        ]
+      }
+    },
+    {
+      "id": "klaro",
+      "name": "Klaro",
+      "detectors": [
+        { "type": "js_global",    "value": "window.klaro" },
+        { "type": "css_selector", "value": ".klaro .cookie-modal" },
+        { "type": "css_selector", "value": ".klaro .cookie-notice" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".klaro .cn-decline" },
+          { "type": "click", "selector": "button[data-testid='klaro-decline']" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".klaro .cm-btn-success" },
+          { "type": "click", "selector": ".klaro .cn-ok" }
+        ]
+      }
+    }
+  ]
+}

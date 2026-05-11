@@ -1,0 +1,402 @@
+{
+  "extensionName": {
+    "message": "Eat My Cookies",
+    "description": "Extension name"
+  },
+  "extensionDescription": {
+    "message": "Automatically handles cookie consent banners based on your preferences. Free, local, no tracking.",
+    "description": "Extension description shown in Chrome Web Store"
+  },
+  "contextMenuParent": {
+    "message": "Eat My Cookies",
+    "description": "Right-click parent menu label"
+  },
+  "contextMenuOpenPopup": {
+    "message": "Open Eat My Cookies",
+    "description": "Open the extension popup from the context menu"
+  },
+  "contextMenuDisableSite": {
+    "message": "Disable on this site",
+    "description": "Disable the extension on the current site"
+  },
+  "contextMenuEnableSite": {
+    "message": "Re-enable on this site",
+    "description": "Re-enable the extension on the current site"
+  },
+  "contextMenuReportProblem": {
+    "message": "Report a problem",
+    "description": "Open the issue reporter from the context menu"
+  },
+  "popupSettingsAria": {
+    "message": "Settings",
+    "description": "Settings button aria-label"
+  },
+  "popupCloseAria": {
+    "message": "Close",
+    "description": "Close button aria-label"
+  },
+  "popupMilestoneCoffeeNudge": {
+    "message": "Eat My Cookies is free. If it's saved you a minute, consider buying me a coffee.",
+    "description": "Milestone support nudge for early thresholds"
+  },
+  "popupMilestoneBeerNudge": {
+    "message": "You've made it absurdly far. If you skipped the coffee, maybe buy me a beer so I can sober up.",
+    "description": "Milestone support nudge for higher thresholds"
+  },
+  "popupMilestoneBuyCoffee": {
+    "message": "♥ Buy Me a Coffee",
+    "description": "Milestone donate CTA"
+  },
+  "popupMilestoneBuyBeer": {
+    "message": "♥ Buy Me a Beer",
+    "description": "Milestone donate CTA for higher thresholds"
+  },
+  "popupMilestoneDismiss": {
+    "message": "Keep Going →",
+    "description": "Milestone dismiss CTA"
+  },
+  "popupStatCookiesEaten": {
+    "message": "cookies eaten",
+    "description": "Main stat label"
+  },
+  "popupAcrossSitesSingular": {
+    "message": "across $1 site",
+    "description": "Site count label for a single site"
+  },
+  "popupAcrossSitesPlural": {
+    "message": "across $1 sites",
+    "description": "Site count label for multiple sites"
+  },
+  "popupWarningAlwaysAcceptHere": {
+    "message": "Always accept here",
+    "description": "Site warning accept override button"
+  },
+  "popupDismiss": {
+    "message": "Dismiss",
+    "description": "Generic dismiss button"
+  },
+  "popupReenable": {
+    "message": "Re-enable",
+    "description": "Re-enable action"
+  },
+  "popupRemovePermission": {
+    "message": "Remove permission",
+    "description": "Remove a site-specific permission"
+  },
+  "popupSiteToggleLabel": {
+    "message": "This site",
+    "description": "Label for current-site controls"
+  },
+  "popupDisableSite": {
+    "message": "Disable on this site",
+    "description": "Disable current site button"
+  },
+  "popupEnableSite": {
+    "message": "Re-enable on this site",
+    "description": "Re-enable current site button"
+  },
+  "popupPreferenceLabel": {
+    "message": "Preference:",
+    "description": "Main preference label"
+  },
+  "popupPreferenceRejectAll": {
+    "message": "Reject All",
+    "description": "Preference option"
+  },
+  "popupPreferenceAcceptAll": {
+    "message": "Accept All",
+    "description": "Preference option"
+  },
+  "popupPreferenceCustom": {
+    "message": "Custom",
+    "description": "Preference option"
+  },
+  "popupEdit": {
+    "message": "Edit →",
+    "description": "Edit button"
+  },
+  "popupRecent": {
+    "message": "Recent",
+    "description": "Recent activity section title"
+  },
+  "popupClear": {
+    "message": "Clear",
+    "description": "Clear action"
+  },
+  "popupNoActivity": {
+    "message": "No activity yet",
+    "description": "Empty recent activity state"
+  },
+  "popupCollectedBadges": {
+    "message": "Collected Badges",
+    "description": "Badge section title"
+  },
+  "popupNoBadges": {
+    "message": "No badges yet. Your first one unlocks on the first handled banner.",
+    "description": "Empty badge state"
+  },
+  "popupDonateFooter": {
+    "message": "♥ Buy me a coffee",
+    "description": "Footer donate link"
+  },
+  "popupSponsorFooter": {
+    "message": "Sponsor on GitHub",
+    "description": "Footer sponsor link"
+  },
+  "settingsTitle": {
+    "message": "Settings",
+    "description": "Settings panel title"
+  },
+  "settingsBackAria": {
+    "message": "Back",
+    "description": "Back button aria-label"
+  },
+  "settingsCookiePreference": {
+    "message": "Cookie preference",
+    "description": "Settings group label"
+  },
+  "settingsPreferenceRejectAll": {
+    "message": "Reject All",
+    "description": "Settings preference option"
+  },
+  "settingsRecommended": {
+    "message": "(recommended)",
+    "description": "Recommended hint"
+  },
+  "settingsPreferenceAcceptAll": {
+    "message": "Accept All",
+    "description": "Settings preference option"
+  },
+  "settingsPreferenceCustomize": {
+    "message": "Customize",
+    "description": "Settings preference option"
+  },
+  "settingsFunctional": {
+    "message": "Functional",
+    "description": "Custom category label"
+  },
+  "settingsAnalytics": {
+    "message": "Analytics",
+    "description": "Custom category label"
+  },
+  "settingsAdvertising": {
+    "message": "Advertising",
+    "description": "Custom category label"
+  },
+  "settingsCcpaDoNotSell": {
+    "message": "CCPA: Do not sell/share",
+    "description": "Custom category label for US privacy choice"
+  },
+  "settingsUncategorized": {
+    "message": "Uncategorized/Custom Purposes",
+    "description": "Custom category label"
+  },
+  "settingsReject": {
+    "message": "Reject",
+    "description": "Reject option"
+  },
+  "settingsAccept": {
+    "message": "Accept",
+    "description": "Accept option"
+  },
+  "settingsShowBadgeCounter": {
+    "message": "Show toolbar count",
+    "description": "Toolbar badge counter setting"
+  },
+  "settingsLanguage": {
+    "message": "Language",
+    "description": "UI language setting label"
+  },
+  "settingsLanguageAuto": {
+    "message": "Auto",
+    "description": "Automatic language option"
+  },
+  "settingsSiteExceptions": {
+    "message": "Site exceptions",
+    "description": "Site exceptions section title"
+  },
+  "settingsNoSitePermissions": {
+    "message": "No site-specific permissions yet.",
+    "description": "Empty site overrides state"
+  },
+  "settingsData": {
+    "message": "Data",
+    "description": "Data section title"
+  },
+  "settingsExport": {
+    "message": "Export settings",
+    "description": "Export button"
+  },
+  "settingsImport": {
+    "message": "Import settings",
+    "description": "Import button"
+  },
+  "settingsClearOverrides": {
+    "message": "Clear site overrides",
+    "description": "Clear overrides button"
+  },
+  "settingsReportBug": {
+    "message": "Report a bug ↗",
+    "description": "Bug report link"
+  },
+  "settingsContactSupport": {
+    "message": "Contact support ↗",
+    "description": "Support email link"
+  },
+  "settingsOpenSource": {
+    "message": "Open source on GitHub →",
+    "description": "Open source link"
+  },
+  "settingsRestartOnboarding": {
+    "message": "Restart onboarding",
+    "description": "Restart onboarding button"
+  },
+  "siteWarningAutoDisabledTitle": {
+    "message": "Auto-disabled for $1",
+    "description": "Warning title when a site auto-disables itself"
+  },
+  "siteWarningDisabledTitle": {
+    "message": "Disabled for $1",
+    "description": "Warning title when a site is disabled"
+  },
+  "siteWarningAlwaysAcceptTitle": {
+    "message": "Always accept enabled for $1",
+    "description": "Warning title when a site override is enabled"
+  },
+  "siteWarningNeedsChoiceTitle": {
+    "message": "$1 needs a site-specific choice",
+    "description": "Warning title when a site needs manual handling"
+  },
+  "siteWarningDisabledFallback": {
+    "message": "Eat My Cookies will stay off on this site until you turn it back on.",
+    "description": "Default disabled-site warning"
+  },
+  "siteWarningAlwaysAcceptFallback": {
+    "message": "This site is set to allow cookies automatically so its wall can clear.",
+    "description": "Always-accept warning body"
+  },
+  "siteWarningNeedsChoiceFallback": {
+    "message": "This site currently does not expose a reject path that matches your settings.",
+    "description": "Unsupported site warning body"
+  },
+  "siteOverrideDisabledLabel": {
+    "message": "Disabled on this site",
+    "description": "Site override label"
+  },
+  "siteOverrideAlwaysAcceptLabel": {
+    "message": "Always accept on this site",
+    "description": "Site override label"
+  },
+  "siteOverrideGenericLabel": {
+    "message": "Site-specific override",
+    "description": "Site override label"
+  },
+  "siteOverrideRemove": {
+    "message": "Remove",
+    "description": "Remove site override button"
+  },
+  "activityAccepted": {
+    "message": "Accepted",
+    "description": "Activity preference label"
+  },
+  "activityRejected": {
+    "message": "Rejected",
+    "description": "Activity preference label"
+  },
+  "activityCcpaHandled": {
+    "message": "CCPA handled",
+    "description": "Activity preference label"
+  },
+  "activityCustom": {
+    "message": "Custom",
+    "description": "Activity preference label"
+  },
+  "activityHandled": {
+    "message": "Handled",
+    "description": "Activity preference label"
+  },
+  "timeJustNow": {
+    "message": "just now",
+    "description": "Recent activity timestamp"
+  },
+  "timeMinutesShort": {
+    "message": "$1m",
+    "description": "Recent activity minutes"
+  },
+  "timeHoursShort": {
+    "message": "$1h",
+    "description": "Recent activity hours"
+  },
+  "timeDaysShort": {
+    "message": "$1d",
+    "description": "Recent activity days"
+  },
+  "badgeThresholdSingular": {
+    "message": "$1 banner handled",
+    "description": "Badge threshold description for one banner"
+  },
+  "badgeThresholdPlural": {
+    "message": "$1 banners handled",
+    "description": "Badge threshold description for many banners"
+  },
+  "milestoneUnlocked": {
+    "message": "$1 — Unlocked!",
+    "description": "Milestone title"
+  },
+  "milestoneDescSingular": {
+    "message": "You've handled $1 cookie banner.",
+    "description": "Milestone description for one banner"
+  },
+  "milestoneDescPlural": {
+    "message": "You've handled $1 cookie banners.",
+    "description": "Milestone description for many banners"
+  },
+  "onboardingPageTitle": {
+    "message": "Welcome to Eat My Cookies",
+    "description": "Onboarding page title"
+  },
+  "onboardingStep1Aria": {
+    "message": "Step 1: Set your preferences",
+    "description": "Onboarding first step aria label"
+  },
+  "onboardingStep2Aria": {
+    "message": "Step 2: Pin to toolbar",
+    "description": "Onboarding second step aria label"
+  },
+  "onboardingPinTitle": {
+    "message": "Pin it to your toolbar",
+    "description": "Onboarding pin step title"
+  },
+  "onboardingPinDesc": {
+    "message": "Click the <strong>puzzle piece</strong> in your Chrome toolbar, then click the <strong>pin</strong> icon next to Eat My Cookies so it's always one click away.",
+    "description": "Onboarding pin step description"
+  },
+  "onboardingExtensionsTitle": {
+    "message": "Extensions",
+    "description": "Onboarding mock Chrome extensions panel title"
+  },
+  "onboardingNoAccessNeeded": {
+    "message": "No access needed",
+    "description": "Onboarding mock Chrome extensions section label"
+  },
+  "onboardingNoAccessNeededDesc": {
+    "message": "These extensions don't need to see and change information on this site.",
+    "description": "Onboarding mock Chrome extensions section description"
+  },
+  "onboardingManageExtensions": {
+    "message": "Manage Extensions",
+    "description": "Onboarding mock Chrome extensions footer label"
+  },
+  "onboardingBack": {
+    "message": "← Back",
+    "description": "Onboarding back button label"
+  },
+  "onboardingNext": {
+    "message": "Next →",
+    "description": "Onboarding next button label"
+  },
+  "onboardingDone": {
+    "message": "✓ Done",
+    "description": "Onboarding done button label"
+  }
+}
