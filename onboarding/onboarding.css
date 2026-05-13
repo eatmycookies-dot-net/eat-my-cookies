@@ -632,7 +632,7 @@ label.custom-sub-row { cursor: pointer; }
   display: none;
   position: fixed;
   top: 18px;
-  right: 236px;
+  right: clamp(120px, 11vw, 210px);
   pointer-events: none;
   z-index: 999;
   color: var(--accent);
