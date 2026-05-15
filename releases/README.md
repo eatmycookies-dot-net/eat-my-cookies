@@ -6,6 +6,30 @@ Project message for release context:
 
 Cookie banners are annoying. Eat My Cookies is a free Chrome extension that handles them based on user preferences, so people don't have to fix them site by site. No backend, no tracking, no ads.
 
+## v1.0.1
+
+### OneTrust / Versant
+
+- Fixed CNBC's CCPA privacy-center flow so both `Reject All + CCPA do not sell/share` and `Accept All + CCPA do not sell/share` apply the real OneTrust toggle and record activity correctly.
+- Added headed-browser validation coverage for CNBC and NBC News, with explicit toggle-state checks so counting-only regressions do not pass silently.
+- Fixed NBC News reject-all + CCPA routing to use the visible `Your Privacy Choices` path instead of redirect-prone fallback behavior.
+
+### ConsentManager / DW
+
+- Tightened DW's dedicated ConsentManager flow so homepage handling does not jump users onto the wrong content page.
+- Auto-return from DW's `data-privacy-settings` page now applies only to extension-triggered detours; users who intentionally open the footer privacy page can stay there.
+- Strengthened regression coverage to validate final landing URL, not just whether a banner disappeared.
+
+### Thomson Reuters
+
+- Improved host-specific OneTrust cleanup on `thomsonreuters.com` so leftover shell markup is removed more aggressively after consent handling.
+
+### Regressions and Validation
+
+- Skipped false-positive ConsentManager frame handling on Forbes, Bloomberg, NBC News, and Zoom where that path could redirect or over-count.
+- Expanded CMP impact notes and support docs for CNBC / NBC News / DW behavior.
+- Added stronger validation around homepage stability and site-specific post-consent expectations.
+
 ## v1.0.0
 
 ### CMP Coverage
@@ -40,7 +64,7 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Packaging
 
-- Upload artifact: `eat-my-cookies-v1.0.0.zip`
+- Upload artifact: `eat-my-cookies-v1.0.1.zip`
 - Run `npm run build` to generate a fresh `dist/`.
 - Run `npm run build:zip` to generate a clean Chrome Web Store package in this folder.
 - `npm run verify` should pass before submission.

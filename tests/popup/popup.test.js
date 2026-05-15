@@ -343,26 +343,26 @@ describe('showMilestoneCard()', () => {
 
 describe('renderVersionMeta()', () => {
   it('shows the runtime version', () => {
-    renderVersionMeta('1.0.0', 'www.theguardian.com');
-    expect(document.getElementById('version-label').textContent).toBe('v1.0.0');
+    renderVersionMeta('1.0.1', 'www.theguardian.com');
+    expect(document.getElementById('version-label').textContent).toBe('v1.0.1');
   });
 
   it('includes release version and domain in the bug report url', () => {
-    renderVersionMeta('1.0.0', 'support.theguardian.com');
+    renderVersionMeta('1.0.1', 'support.theguardian.com');
     const href = document.getElementById('report-bug-link').href;
     const parsed = new URL(href);
     expect(href).toContain('issues/new?');
-    expect(parsed.searchParams.get('title')).toBe('[Banner not handled][v1.0.0] support.theguardian.com');
-    expect(parsed.searchParams.get('body')).toContain('Release version: `1.0.0`');
+    expect(parsed.searchParams.get('title')).toBe('[Banner not handled][v1.0.1] support.theguardian.com');
+    expect(parsed.searchParams.get('body')).toContain('Release version: `1.0.1`');
     expect(parsed.searchParams.get('body')).toContain('Current domain: support.theguardian.com');
   });
 
   it('prefers the unpacked build label when present', () => {
-    renderVersionMeta('1.0.0', 'www.theguardian.com', { displayVersion: '1.0.0-dev.20260429T040500Z' });
+    renderVersionMeta('1.0.1', 'www.theguardian.com', { displayVersion: '1.0.1-dev.20260429T040500Z' });
     const href = document.getElementById('report-bug-link').href;
     const parsed = new URL(href);
-    expect(document.getElementById('version-label').textContent).toBe('v1.0.0-dev.20260429T040500Z');
-    expect(parsed.searchParams.get('title')).toBe('[Banner not handled][v1.0.0-dev.20260429T040500Z] www.theguardian.com');
-    expect(parsed.searchParams.get('body')).toContain('Unpacked build: `1.0.0-dev.20260429T040500Z`');
+    expect(document.getElementById('version-label').textContent).toBe('v1.0.1-dev.20260429T040500Z');
+    expect(parsed.searchParams.get('title')).toBe('[Banner not handled][v1.0.1-dev.20260429T040500Z] www.theguardian.com');
+    expect(parsed.searchParams.get('body')).toContain('Unpacked build: `1.0.1-dev.20260429T040500Z`');
   });
 });

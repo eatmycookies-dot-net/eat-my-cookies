@@ -560,7 +560,7 @@ async function newPopupPage(browser, server, state) {
           const root = window.location.href.replace(/popup\/popup\.html.*$/, "");
           return `${root}${assetPath}`;
         },
-        getManifest: () => ({ version: "1.0.0" }),
+        getManifest: () => ({ version: "1.0.1" }),
         sendMessage: async (message) => {
           if (message.type === "CLEAR_RECENT_ACTIVITY") {
             localState.stats.recentActivity = [];
