@@ -100,6 +100,15 @@ async function testSite(page, site) {
   const beforeStats = await readStatsSnapshot(page.context());
   await applySiteLocale(page, site);
   const handleWaitMs = site.handleWaitMs ?? HANDLE_WAIT;
+  const visitedTopLevelUrls = [];
+  const recordTopLevelUrl = (frame) => {
+    if (frame !== page.mainFrame()) return;
+    const url = frame.url();
+    if (!url) return;
+    if (visitedTopLevelUrls[visitedTopLevelUrls.length - 1] === url) return;
+    visitedTopLevelUrls.push(url);
+  };
+  page.on('framenavigated', recordTopLevelUrl);
 
   try {
     await page.goto(site.url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
@@ -152,7 +161,7 @@ async function testSite(page, site) {
   }
 
   if (bannerStillVisible && site.requireBannerDismissal) {
-    return { status: 'FAIL', detail: 'Banner still visible after timeout' };
+    return { status: 'FAIL', detail: await buildFailureDetail(page, site, beforeStats, 'Banner still visible after timeout') };
   }
 
   // Banner still visible — check if the consent button itself is gone
@@ -164,7 +173,32 @@ async function testSite(page, site) {
   }
 
   if (!consentHandled) {
-    return { status: 'FAIL', detail: 'Banner still visible after timeout' };
+    const afterStats = await readStatsSnapshot(page.context());
+    const recorded = extractNewActivityForSite(beforeStats, afterStats, site);
+    if (site.allowRecordedActionPass && recorded) {
+      const navigationIssue = validateNavigationExpectations(page.url(), visitedTopLevelUrls, site.navigationExpectations);
+      if (!navigationIssue) {
+        return { status: 'PASS', detail: `Handled via recorded action (${recorded.method ?? 'recorded action'})` };
+      }
+    }
+    return { status: 'FAIL', detail: await buildFailureDetail(page, site, beforeStats, 'Banner still visible after timeout') };
+  }
+
+  const afterStats = await readStatsSnapshot(page.context());
+  const recorded = extractNewActivityForSite(beforeStats, afterStats, site);
+  if (site.expectActivityRecorded && !recorded) {
+    return { status: 'FAIL', detail: 'Banner dismissed but no activity was recorded' };
+  }
+  if (recorded) {
+    detail += `; activity recorded (${recorded.method ?? 'recorded action'})`;
+  }
+
+  if (site.expectedOneTrustToggleStates) {
+    const mismatch = await readOneTrustToggleStateMismatch(page, site.expectedOneTrustToggleStates);
+    if (mismatch) {
+      return { status: 'FAIL', detail: `Banner dismissed but toggle ${mismatch.id} expected=${mismatch.expected} actual=${mismatch.actual}` };
+    }
+    detail += '; toggle state verified';
   }
 
   if (site.followUpNavigation?.enabled) {
@@ -175,7 +209,88 @@ async function testSite(page, site) {
     detail += `; follow-up ok (${followUp.finalUrl})`;
   }
 
+  const navigationIssue = validateNavigationExpectations(page.url(), visitedTopLevelUrls, site.navigationExpectations);
+  if (navigationIssue) {
+    return { status: 'FAIL', detail: navigationIssue };
+  }
+
   return { status: 'PASS', detail };
+}
+
+async function buildFailureDetail(page, site, beforeStats, prefix) {
+  const afterStats = await readStatsSnapshot(page.context());
+  const recorded = extractNewActivityForSite(beforeStats, afterStats, site);
+  const diag = await page.evaluate(() => {
+    const isVisible = (el) => {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+
+    const confirm = document.querySelector('#onetrust-accept-btn-handler, .save-preference-btn-handler');
+    const privacyChoices = document.querySelector('#onetrust-pc-btn-handler, .ot-sdk-show-settings');
+    const toggles = Array.from(document.querySelectorAll(".category-switch-handler, input[id^='ot-group-id-']")).map((el) => ({
+      id: el.id || null,
+      visible: isVisible(el),
+      checked: !!el.checked,
+      text: el.id ? document.querySelector(`label[for="${el.id}"]`)?.textContent?.trim()?.slice(0, 80) ?? null : null,
+    }));
+
+    return {
+      url: location.href,
+      emcPref: document.documentElement.dataset.emcPref ?? null,
+      emcRunSignature: document.documentElement.dataset.emcRunSignature ?? null,
+      confirmText: confirm ? (confirm.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80) : null,
+      confirmVisible: isVisible(confirm),
+      privacyChoicesVisible: isVisible(privacyChoices),
+      bannerVisible: ['#onetrust-banner-sdk', '#onetrust-consent-sdk', '#onetrust-pc-sdk']
+        .filter((sel) => isVisible(document.querySelector(sel))),
+      toggles,
+    };
+  }).catch(() => null);
+
+  return `${prefix}; recorded=${recorded ? (recorded.method ?? 'yes') : 'none'}; emcPref=${diag?.emcPref ?? 'n/a'}; privacyChoicesVisible=${diag?.privacyChoicesVisible ?? 'n/a'}; confirm=${diag?.confirmText ?? 'n/a'}; confirmVisible=${diag?.confirmVisible ?? 'n/a'}; visible=${(diag?.bannerVisible ?? []).join('|') || 'none'}; toggles=${JSON.stringify(diag?.toggles ?? [])}`;
+}
+
+async function readOneTrustToggleStateMismatch(page, expectedStates) {
+  const actualStates = await page.evaluate(() => {
+    return Object.fromEntries(
+      Array.from(document.querySelectorAll(".category-switch-handler, input[id^='ot-group-id-']"))
+        .filter((el) => el.id)
+        .map((el) => [el.id, Boolean(el.checked)])
+    );
+  }).catch(() => ({}));
+
+  for (const [id, expected] of Object.entries(expectedStates)) {
+    if (actualStates[id] !== Boolean(expected)) {
+      return { id, expected: Boolean(expected), actual: actualStates[id] };
+    }
+  }
+  return null;
+}
+
+function validateNavigationExpectations(finalUrl, visitedTopLevelUrls, expectations = null) {
+  if (!expectations) return null;
+
+  if (expectations.expectedFinalUrlPattern) {
+    const pattern = new RegExp(expectations.expectedFinalUrlPattern);
+    if (!pattern.test(finalUrl)) {
+      return `Unexpected final URL: ${finalUrl}`;
+    }
+  }
+
+  if (expectations.forbidVisitedUrlPatterns?.length) {
+    for (const patternSource of expectations.forbidVisitedUrlPatterns) {
+      const pattern = new RegExp(patternSource);
+      const offending = visitedTopLevelUrls.find((url) => pattern.test(url));
+      if (offending) {
+        return `Visited forbidden URL during flow: ${offending}`;
+      }
+    }
+  }
+
+  return null;
 }
 
 function siteDomain(site) {
@@ -336,13 +451,13 @@ function isAccessibilityHelpUrl(url) {
   }
 }
 
-function buildCategoryPreferences(globalPreference) {
+function buildCategoryPreferences(globalPreference, overrides = {}) {
   const accept = globalPreference === 'accept_all';
   return {
     functional: true,
     analytics: accept,
     advertising: accept,
-    ccpaDoNotSell: !accept,
+    ccpaDoNotSell: overrides.ccpaDoNotSell ?? !accept,
     uncategorized: accept ? 'accept' : 'reject',
   };
 }
@@ -390,12 +505,14 @@ async function applySiteLocale(page, site) {
   }
 }
 
-async function writePreferences(browser, preference) {
+async function writePreferences(browser, preference, site = null) {
   const payload = {
     globalPreference: preference,
     onboardingComplete: true,
     showBadgeCount: true,
-    categoryPreferences: buildCategoryPreferences(preference),
+    categoryPreferences: buildCategoryPreferences(preference, {
+      ccpaDoNotSell: site?.ccpaDoNotSell,
+    }),
     milestonesShown: [],
   };
 
@@ -465,7 +582,7 @@ async function readStatsSnapshot(browser) {
   let swPage = null;
   try {
     const defaultPreference = sites[0]?.preference ?? 'reject_all';
-    swPage = await writePreferences(browser, defaultPreference);
+    swPage = await writePreferences(browser, defaultPreference, sites[0] ?? null);
   } catch (_) {}
   if (swPage) await swPage.close();
 
@@ -475,7 +592,7 @@ async function readStatsSnapshot(browser) {
     const page = await browser.newPage();
     try {
       const preference = site.preference ?? 'reject_all';
-      const tmpPage = await writePreferences(browser, preference).catch(() => null);
+      const tmpPage = await writePreferences(browser, preference, site).catch(() => null);
       if (tmpPage) await tmpPage.close();
       const { status, detail } = await testSite(page, site);
       printRow(site, status, detail);

@@ -29,7 +29,7 @@ These sites are in the active automated coverage inventory and should remain in 
 
 | Site | Status | Notes |
 | --- | --- | --- |
-| `dw.com` | Automation-covered | Human-validated as working. The automated suite can miss the delayed multi-step ConsentManager workflow, so e2e output here is not the final source of truth. |
+| `dw.com` | Automation-covered | Human-validated as working. The automated suite can miss the delayed multi-step ConsentManager workflow, so e2e output here is not the final source of truth. Important nuance: extension-initiated trips through DW's privacy-settings page should return to the original content page, but a user who opens the footer privacy page intentionally should stay there. |
 | `spiegel.de` | Automation-covered | Active e2e coverage for the current Sourcepoint/iframe flow. |
 | `nytimes.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `reuters.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
@@ -38,6 +38,7 @@ These sites are in the active automated coverage inventory and should remain in 
 | `theverge.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `wired.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `euronews.com` | Automation-covered | Active e2e coverage; human confirmation is still useful because the banner can be session-sensitive. |
+| `cnbc.com` | Automation-covered | Validated May 12, 2026 in live headed Chromium e2e for both `reject_all` and `accept_all` + `ccpaDoNotSell=true`. CNBC's OneTrust CCPA flow starts from a top-level banner where `Continue` only dismisses the shell; the real opt-out entry is `Your Privacy Choices`, and successful runs now record activity. **Validation caveat:** headless Playwright shell was misleading here because the extension coordinator did not reliably bootstrap on the page, so headed runs are the source of truth. |
 
 ## Supported With Caveats
 
@@ -56,6 +57,7 @@ These sites are usable, but the current behavior has caveats worth documenting.
 | `ilmessaggero.it` | Supported with caveats | Accept works. Reject/custom should continue to be treated as a paywall-style limitation. |
 | `zoom.com` | Supported with caveats | Verified May 9, 2026 from live headed browser sessions with the extension loaded. Root cause of the old Accept All loop was not OneTrust itself: `content/cm-frame-handler.js` was misfiring on unrelated ConsentManager-like frames and recording repeated `consentmanager:frame` accepts, which redirected the page to `/en/trust/acceptable-use-guidelines/` and tripped the circuit breaker. Fixed by skipping ConsentManager frame handling on `www.zoom.com`. Zoom's homepage OneTrust UI is also unusual: `OptanonConsent` / `OnetrustActiveGroups` can already show all-accepted values while a visible collapsed OneTrust shell is still on screen, so cookie state alone is not proof that the banner is dismissed. The working Accept All path closes the visible homepage shell via `.onetrust-close-btn-handler.ot-close-icon.banner-close-button`, then records `cmp_api:OneTrust`. Reject All now dismisses the banner properly. Custom is now mapped to Zoom's real OneTrust categories: `C0004` Targeting = Advertising (forced OFF when `ccpaDoNotSell` is ON), `C0003` Functional = Functional, `C0002` Performance = Analytics. Verified cookie result for a mixed custom profile: `groups=C0004:0,C0003:1,C0002:0,C0001:1`. **Remaining caveat:** the footer `Your Privacy Choices` / settings reopen path has been inconsistent during manual testing, so CCPA verification should still be treated as provisional until that reopen flow is validated more directly. |
 | `nike.com` | Supported with caveats | Dedicated MAIN-world handler (`cmp-api-handler.js`) detects `/guest/settings/do-not-share-my-data`, waits for `#a11y-do-not-share`, and clicks the checkbox to trigger Nike's React `onChange`, which sets `ni_c=1PA=0` client-side. E2E-validated May 2026 (`reject_all` direction). **Caveat:** opt-in reversal (`accept_all` → uncheck box) cannot be reliably automated — Nike's React component does not propagate the `ni_c` cookie update for programmatic unchecks. Users who previously opted out via the extension and switch to `accept_all` will need to visit the Nike settings page and uncheck manually. |
+| `nbcnews.com` | Supported with caveats | Validated May 13, 2026 in headed Chromium e2e for both `reject_all + ccpaDoNotSell=true` and `accept_all + ccpaDoNotSell=true`, with the real OneTrust `ot-group-id-SPD_BG` toggle verified OFF after handling. Important caveat: NBC News is a CNBC sibling in the Versant / OneTrust family, but it should not use CNBC's reload-on-save special case; the working path is the visible `Your Privacy Choices` opener into the privacy center. |
 
 ## Site-Specific Choice / Paywall-Or-Accept
 
@@ -130,8 +132,6 @@ Priority 2:
 - `doordash.com`
 - `apnews.com`
 - `adobe.com`
-- `cnbc.com`
-- `nbcnews.com`
 - `indeed.com`
 - `fedex.com`
 - `ups.com`

@@ -59,6 +59,8 @@ Use this to understand which sites share the same code path and will behave simi
 | `reuters.com` | US/global | GDPR + USNat | Automation-covered |
 | `forbes.com` | US/global | GDPR + USNat | Automation-covered |
 | `bloomberg.com` | US/global | GDPR + USNat | Automation-covered |
+| `cnbc.com` | US | CCPA settings flow | Validated May 12, 2026 in headed Chromium e2e for `reject_all` and `accept_all + ccpaDoNotSell=true`. Important behavioral note: the top-level banner often shows `Continue`, but that button only dismisses the shell. The real opt-out path is the visible `Your Privacy Choices` opener into the OneTrust privacy center. |
+| `nbcnews.com` | US | CCPA settings flow | Validated May 13, 2026 in headed Chromium e2e for `reject_all + ccpaDoNotSell=true` and `accept_all + ccpaDoNotSell=true`. Important behavioral note: unlike CNBC, NBC News should use the visible `Your Privacy Choices` entry into the OneTrust privacy center without the CNBC-specific reload-on-save path. |
 | `disney.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. USNat handler: `RejectAll()`/`Accept()` commits consent to cookie, then tries Submit click, falls back to DOM removal if modal persists (isTrusted check confirmed as root cause). Human-validated May 2026. |
 | `espn.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. Same Disney-family modal and handler path. Human-validated May 2026. |
 | `nike.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. Dedicated MAIN-world handler in `cmp-api-handler.js` handles `/guest/settings/do-not-share-my-data`: waits for `#a11y-do-not-share`, clicks the checkbox (triggers React `onChange` → sets `ni_c=1PA=0` client-side). E2E-validated May 2026 for `reject_all`. Opt-in reversal not automatable (Nike's React component does not propagate the cookie update for programmatic unchecks). |
@@ -69,6 +71,20 @@ Use this to understand which sites share the same code path and will behave simi
 **Trigger for USNat direct path (new `executeOneTrustUSNatDirect`):**
 OneTrust is detected + no privacy-center opener button exists + visible toggles are present directly on the modal.
 This path is active for US CCPA opt-out notices where the banner shows a toggle + Submit directly (not behind a settings panel).
+
+**Separate Versant / CNBC-family note (added May 2026):**
+These are not the same as the Disney-family USNat direct-toggle flows.
+On CNBC, the homepage can start on a top-level OneTrust shell with:
+- visible `Continue`
+- visible `Your Privacy Choices`
+- hidden settings toggle markup already present in the DOM
+
+What matters:
+- `Continue` dismisses the shell; it is not the opt-out entry
+- `Your Privacy Choices` opens the real OneTrust privacy-center flow
+- the correct routing condition is `ccpaDoNotSell !== false`, even when `globalPreference === 'accept_all'`
+- already-open settings state must be treated as actionable without requiring another opener click
+- live validation for this family should use headed Chromium, because headless shell produced false negatives where the extension coordinator never bootstrapped on the page (`emcPref` stayed unset)
 
 **Sites also likely using OneTrust (from Priority 1 CCPA targets, not yet validated):**
 `walmart.com`, `target.com`, `foxnews.com`, `homedepot.com`
@@ -97,7 +113,7 @@ This path is active for US CCPA opt-out notices where the banner shows a toggle 
 
 | Site | Region | Special notes |
 |------|--------|--------------|
-| `dw.com` | EU | Dedicated handler; automation-covered |
+| `dw.com` | EU | Dedicated handler; automation-covered. Extension-driven privacy-page detours should return to content, but manual/footer-opened visits to `data-privacy-settings` must remain on that page. |
 
 ### Cookiebot
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
@@ -144,14 +160,14 @@ Sites marked 🔵 are lower risk but worth a spot-check if time allows.
 
 | Changed file | Must test | Spot-check |
 |-------------|-----------|------------|
-| `cmp-api-handler.js` | reuters.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
-| `dom-handler.js` | reuters.com, bloomberg.com, forbes.com | euronews.com, dw.com |
+| `cmp-api-handler.js` | reuters.com, cnbc.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
+| `dom-handler.js` | reuters.com, bloomberg.com, forbes.com, cnbc.com | euronews.com, dw.com |
 | `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, forbes.com, disney.com | ft.com |
 | `rules/cmps.json` (Sourcepoint entry) | nytimes.com, theverge.com | spiegel.de |
 | `rules/cmps.json` (Didomi entry) | euronews.com | — |
 | `rules/cmps.json` (ConsentManager entry) | dw.com | — |
 | `sp-frame-handler.js` | nytimes.com, theverge.com, theguardian.com, ft.com | wired.com, spiegel.de |
-| `main.js` (coordinator logic) | reuters.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, euronews.com |
+| `main.js` (coordinator logic) | reuters.com, cnbc.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, euronews.com |
 | `main.js` (site-specific handler) | Only the one site that handler covers | — |
 | `heuristic.js` | Any site where other tiers fail | — |
 | `tcf-interceptor.js` | nytimes.com (GDPR), spiegel.de | reuters.com |
@@ -305,6 +321,20 @@ loaded. The repeated Accept All reports on `zoom.com` were coming from
 `consentmanager:frame` three times on the same page and the browser landed on
 `https://www.zoom.com/en/trust/acceptable-use-guidelines/`, which then triggered the loop
 circuit breaker. Fix: add `www.zoom.com` to the ConsentManager frame-handler skip list.
+
+**Regression note (May 12, 2026):** The same false-positive ConsentManager frame path also showed
+up on `www.forbes.com` and `www.bloomberg.com`. Those sites use top-level OneTrust on the
+homepage, but incidental CM-like frame patterns were enough for `content/cm-frame-handler.js` to
+misfire, which matched reports of homepage redirects and duplicate/triplicate counts. Fix: extend
+the frame-handler skip list to include `www.forbes.com` and `www.bloomberg.com`.
+
+**NBC News sibling issue (May 13, 2026):** `www.nbcnews.com` also exposed incidental
+ConsentManager-like frame patterns. In live extension-backed tracing, the homepage redirect on
+reject was caused by `content/cm-frame-handler.js` recording `consentmanager:frame` and navigating
+ to an article page, while the real OneTrust `ot-group-id-SPD_BG` CCPA toggle remained unchanged.
+Fix: add `www.nbcnews.com` to the ConsentManager frame-handler skip list, and route NBC News
+through the visible OneTrust `Your Privacy Choices` opener instead of the CNBC-specific
+reload-on-save path.
 
 **Loop-detection thresholds:** 3 identical reports within 12 s (FAST) or 5 within 45 s (SLOW)
 trigger auto-disable. "Identical" = same site + preference + method + page URL.

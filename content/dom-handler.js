@@ -6,9 +6,43 @@ const DOM_TIMEOUT_MS = 10000;
 const EXPLICIT_ONETRUST_CONTROL_HOSTS = new Set([
   'www.bbc.com',
 ]);
+const ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set([
+  'www.cnbc.com',
+  'www.nbcnews.com',
+]);
+const ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set([
+  'www.cnbc.com',
+]);
+const ONETRUST_FORCE_CLEANUP_HOSTS = new Set([
+  'www.zoom.com',
+  'www.thomsonreuters.com',
+  'thomsonreuters.com',
+]);
+const ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set([
+  'www.thomsonreuters.com',
+  'thomsonreuters.com',
+]);
+const ONETRUST_CLEANUP_WATCH_MS = 15000;
+const ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set([
+  'www.thomsonreuters.com',
+  'thomsonreuters.com',
+]);
 const ZOOM_ONETRUST_HOSTS = new Set([
   'www.zoom.com',
 ]);
+const ONETRUST_ACTIONABLE_SURFACE_SELECTORS = [
+  '#onetrust-banner-sdk',
+  '#onetrust-consent-sdk',
+  '#onetrust-pc-sdk',
+  '.onetrust-pc-dark-filter',
+  '#onetrust-pc-btn-handler',
+  '#onetrust-accept-btn-handler',
+  '#onetrust-reject-all-handler',
+  '.ot-pc-refuse-all-handler',
+  '.save-preference-btn-handler',
+  '.category-switch-handler',
+  "input[id^='ot-group-id-']",
+];
 
 async function runDOMHandler(prefs) {
   const cmpsUrl = chrome.runtime.getURL('rules/cmps.json');
@@ -95,6 +129,18 @@ async function tryCMPs(cmps, prefs) {
     if (cmp.id === 'sourcepoint') continue;
     if (!detectCMP(cmp)) continue;
     if (isCMPBlockedOnHost(cmp.id, host, prefs.globalPreference)) continue;
+    if (cmp.id === 'onetrust' && shouldUseOneTrustPrivacyCenterOptOut(prefs, host)) {
+      if (await executeOneTrustRejectFlow(cmp, host)) {
+        return { method: `dom:${cmp.id}:ccpa`, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'onetrust' && prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(host)) {
+      if (await executeOneTrustPrivacyCenterAccept(cmp, host)) {
+        return { method: `dom:${cmp.id}`, cmpName: cmp.name };
+      }
+      continue;
+    }
     if (cmp.id === 'onetrust' && prefs.globalPreference === 'custom') {
       if (await executeOneTrustCustomFlow(cmp, prefs, host)) {
         return { method: `dom:${cmp.id}:custom`, cmpName: cmp.name };
@@ -118,6 +164,30 @@ async function tryCMPs(cmps, prefs) {
   return null;
 }
 
+function shouldUseOneTrustPrivacyCenterOptOut(prefs, host = location.hostname) {
+  return ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS.has(host) && prefs.ccpaDoNotSell !== false;
+}
+
+function shouldUseOneTrustPrivacyCenterAccept(host = location.hostname) {
+  return ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS.has(host);
+}
+
+function shouldForceOneTrustCleanup(host = location.hostname) {
+  return ONETRUST_FORCE_CLEANUP_HOSTS.has(host);
+}
+
+function hasVisibleOneTrustActionableSurface() {
+  return hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS);
+}
+
+function hasVisibleOneTrustPrivacyChoicesEntry(host = location.hostname) {
+  if (!ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS.has(host)) return false;
+  return hasVisibleSelector([
+    '#onetrust-pc-btn-handler',
+    '.ot-sdk-show-settings',
+  ]);
+}
+
 function detectCMP(cmp) {
   return cmp.detectors.some((d) => {
     if (d.type === 'css_selector') return !!document.querySelector(d.value);
@@ -135,8 +205,8 @@ async function executeActions(cmp, actions) {
       const el = document.querySelector(action.selector);
       if (el && isVisible(el)) {
         dispatchSyntheticClick(el);
-        if (cmp.id === 'onetrust' && ZOOM_ONETRUST_HOSTS.has(location.hostname)) {
-          scheduleZoomOneTrustCleanup();
+        if (cmp.id === 'onetrust' && shouldForceOneTrustCleanup(location.hostname)) {
+          scheduleHostOneTrustCleanup(location.hostname);
         }
         if (await waitForDismissal(cmp, actions)) return true;
       }
@@ -159,7 +229,21 @@ async function executeOneTrustRejectFlow(cmp, host = location.hostname) {
     return waitForDismissal(cmp, cmp.actions?.reject_all ?? []);
   }
 
-  const opened = clickFirstVisible([
+  const settingsVisible = hasVisibleSelector([
+    '.save-preference-btn-handler',
+    '.category-switch-handler',
+    "input[id^='ot-group-id-']",
+    '#onetrust-consent-sdk',
+    '#onetrust-pc-sdk',
+  ]);
+  const actionableSurfaceVisible = hasVisibleOneTrustActionableSurface();
+  const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry(host);
+
+  if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryVisible) {
+    return false;
+  }
+
+  const opened = settingsVisible || clickFirstVisible([
     '#onetrust-pc-btn-handler',
     '#ot-sdk-btn',
     '.ot-sdk-show-settings',
@@ -169,7 +253,7 @@ async function executeOneTrustRejectFlow(cmp, host = location.hostname) {
     'button[title*="Cookie Settings" i]',
     'button[aria-label*="Manage Preferences" i]',
     'button[title*="Manage Preferences" i]',
-  ]);
+  ]) || clickOneTrustContinueToSettings(host);
 
   if (!opened) {
     // USNat/CCPA direct opt-out modal: no privacy center opener exists.
@@ -185,25 +269,33 @@ async function executeOneTrustRejectFlow(cmp, host = location.hostname) {
     return false;
   }
 
-  if (clickFirstVisible([
+  const rejectSelectors = [
     '.ot-pc-refuse-all-handler',
     '#onetrust-reject-all-handler',
     'button[aria-label*="Reject All" i]',
     'button[title*="Reject All" i]',
     'button[aria-label*="Refuse All" i]',
     'button[title*="Refuse All" i]',
-  ])) {
+  ];
+  if (hasVisibleSelector(rejectSelectors)) {
+    dispatchPreHandleIfOneTrustReloadsOnSave(host);
+  }
+  if (clickFirstVisible(rejectSelectors)) {
     return waitForDismissal(cmp, cmp.actions?.reject_all ?? []);
   }
 
   disableVisibleOneTrustToggles();
   await delay(250);
 
-  if (!clickFirstVisible(oneTrustSaveSelectors(host))) {
+  const saveSelectors = oneTrustSaveSelectors(host);
+  if (hasVisibleSelector(saveSelectors)) {
+    dispatchPreHandleIfOneTrustReloadsOnSave(host);
+  }
+  if (!clickFirstVisible(saveSelectors)) {
     return false;
   }
 
-  if (ZOOM_ONETRUST_HOSTS.has(host)) scheduleZoomOneTrustCleanup();
+  if (shouldForceOneTrustCleanup(host)) scheduleHostOneTrustCleanup(host);
 
   return waitForDismissal(cmp, cmp.actions?.reject_all ?? []);
 }
@@ -255,6 +347,49 @@ async function executeOneTrustCustomFlow(cmp, prefs, host = location.hostname) {
   return waitForDismissal(cmp, cmp.actions?.reject_all ?? []);
 }
 
+async function executeOneTrustPrivacyCenterAccept(cmp, host = location.hostname) {
+  const settingsVisible = hasVisibleSelector([
+    '.save-preference-btn-handler',
+    '.category-switch-handler',
+    "input[id^='ot-group-id-']",
+    '#onetrust-consent-sdk',
+    '#onetrust-pc-sdk',
+  ]);
+  if (!settingsVisible) {
+    const opened = clickFirstVisible([
+      '#onetrust-pc-btn-handler',
+      '#ot-sdk-btn',
+      '.ot-sdk-show-settings',
+      'button[aria-label*="Privacy Choices" i]',
+      'button[title*="Privacy Choices" i]',
+      'button[aria-label*="Cookie Settings" i]',
+      'button[title*="Cookie Settings" i]',
+      'button[aria-label*="Manage Preferences" i]',
+      'button[title*="Manage Preferences" i]',
+    ]);
+    if (!opened) return false;
+  }
+
+  if (!(await waitForAnyVisible([
+    '.save-preference-btn-handler',
+    '#onetrust-accept-btn-handler',
+    '.category-switch-handler',
+    "input[id^='ot-group-id-']",
+  ], 4000))) {
+    return false;
+  }
+
+  enableVisibleOneTrustToggles();
+  await delay(250);
+
+  if (!clickFirstVisible(oneTrustSaveSelectors(host))) {
+    return false;
+  }
+
+  if (shouldForceOneTrustCleanup(host)) scheduleHostOneTrustCleanup(host);
+  return waitForDismissal(cmp, cmp.actions?.accept_all ?? []);
+}
+
 async function executeOneTrustUSNatDirect(cmp, host) {
   // Guard: only proceed when the confirm button is specifically labeled "Submit".
   // GDPR preference centers use "Confirm My Choices" and must not match here.
@@ -301,6 +436,25 @@ function oneTrustSaveSelectors(host = location.hostname) {
   return selectors;
 }
 
+function dispatchPreHandleIfOneTrustReloadsOnSave(host = location.hostname) {
+  if (!ONETRUST_RELOAD_ON_SAVE_HOSTS.has(host)) return;
+  document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {
+    detail: {
+      method: 'dom:onetrust:ccpa',
+      preference: document.documentElement.dataset.emcPref ?? 'reject_all',
+    },
+  }));
+}
+
+function clickOneTrustContinueToSettings(host = location.hostname) {
+  if (!ONETRUST_RELOAD_ON_SAVE_HOSTS.has(host)) return false;
+  const btn = document.querySelector('#onetrust-accept-btn-handler');
+  if (!btn || !isVisible(btn)) return false;
+  const text = btn.textContent?.trim() ?? '';
+  if (!/\bcontinue\b/i.test(text)) return false;
+  return dispatchSyntheticClick(btn);
+}
+
 function setOneTrustGroupStateById(id, checked) {
   const toggle = document.getElementById(id);
   if (!toggle || toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
@@ -317,6 +471,43 @@ function scheduleZoomOneTrustCleanup() {
   } catch (_) {}
 }
 
+function scheduleHostOneTrustCleanup(host = location.hostname) {
+  if (ZOOM_ONETRUST_HOSTS.has(host)) {
+    scheduleZoomOneTrustCleanup();
+    return;
+  }
+  cleanupGenericOneTrustArtifacts(host);
+  startOneTrustCleanupWatch(host);
+  try {
+    setTimeout(() => cleanupGenericOneTrustArtifacts(host), 1200);
+    setTimeout(() => cleanupGenericOneTrustArtifacts(host), 3500);
+  } catch (_) {}
+}
+
+let oneTrustCleanupWatchTimer = null;
+let oneTrustCleanupObserver = null;
+
+function startOneTrustCleanupWatch(host = location.hostname) {
+  if (!ONETRUST_AGGRESSIVE_CLEANUP_HOSTS.has(host)) return;
+  cleanupGenericOneTrustArtifacts(host);
+  try { oneTrustCleanupObserver?.disconnect(); } catch (_) {}
+  try { clearTimeout(oneTrustCleanupWatchTimer); } catch (_) {}
+  const root = document.body ?? document.documentElement;
+  if (root) {
+    oneTrustCleanupObserver = new MutationObserver(() => cleanupGenericOneTrustArtifacts(host));
+    try {
+      oneTrustCleanupObserver.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+    } catch (_) {}
+  }
+  try {
+    oneTrustCleanupWatchTimer = setTimeout(() => {
+      try { oneTrustCleanupObserver?.disconnect(); } catch (_) {}
+      oneTrustCleanupObserver = null;
+      oneTrustCleanupWatchTimer = null;
+    }, ONETRUST_CLEANUP_WATCH_MS);
+  } catch (_) {}
+}
+
 function cleanupZoomOneTrustArtifacts() {
   for (const sel of [
     '#onetrust-banner-sdk',
@@ -327,6 +518,27 @@ function cleanupZoomOneTrustArtifacts() {
     '.ot-sdk-row',
   ]) {
     for (const el of document.querySelectorAll(sel)) el.remove?.();
+  }
+  try {
+    document.body?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
+    document.documentElement?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
+    if (document.body) document.body.style.overflow = '';
+  } catch (_) {}
+}
+
+function cleanupGenericOneTrustArtifacts(host = location.hostname) {
+  const removeHiddenToo = ONETRUST_AGGRESSIVE_CLEANUP_HOSTS.has(host);
+  for (const sel of [
+    '#onetrust-banner-sdk',
+    '#onetrust-consent-sdk',
+    '#onetrust-pc-sdk',
+    '.onetrust-pc-dark-filter',
+    '.ot-sdk-container',
+    '.ot-sdk-row',
+  ]) {
+    for (const el of document.querySelectorAll(sel)) {
+      if (removeHiddenToo || isVisible(el)) el.remove?.();
+    }
   }
   try {
     document.body?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
@@ -364,14 +576,32 @@ function disableVisibleOneTrustToggles() {
   }
 }
 
+function enableVisibleOneTrustToggles() {
+  for (const toggle of visibleOneTrustToggles()) {
+    if (toggle.checked) continue;
+    forceOneTrustToggleState(toggle, true);
+  }
+}
+
 function visibleOneTrustToggles() {
   return Array.from(document.querySelectorAll(
     ".category-switch-handler, input[id^='ot-group-id-']"
   )).filter((el) =>
-    isVisible(el) &&
+    isOneTrustToggleInteractable(el) &&
     !el.disabled &&
     el.getAttribute('aria-disabled') !== 'true'
   );
+}
+
+function isOneTrustToggleInteractable(toggle) {
+  if (isVisible(toggle)) return true;
+  const label = findToggleLabel(toggle);
+  return Boolean(label && isVisible(label));
+}
+
+function findToggleLabel(toggle) {
+  if (!toggle?.id || typeof CSS?.escape !== 'function') return null;
+  return document.querySelector(`label[for="${CSS.escape(toggle.id)}"]`);
 }
 
 // Sets a checkbox to the desired state in a way that works with React controlled
@@ -388,9 +618,7 @@ function forceOneTrustToggleState(toggle, checked) {
   }
   toggle.dispatchEvent(new Event('change', { bubbles: true }));
   toggle.dispatchEvent(new Event('input', { bubbles: true }));
-  const label = toggle.id && typeof CSS?.escape === 'function'
-    ? document.querySelector(`label[for="${CSS.escape(toggle.id)}"]`)
-    : null;
+  const label = findToggleLabel(toggle);
   if (label) dispatchSyntheticClick(label);
 }
 

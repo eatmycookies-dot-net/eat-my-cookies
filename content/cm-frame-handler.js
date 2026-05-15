@@ -5,17 +5,26 @@
 
 (function () {
   const host = window.location.hostname;
+  const DW_RETURN_DELAY_MS = 5000;
+  const DW_RETURN_PENDING_KEY = '__emc_dw_return_pending__';
+  const DW_RETURN_PENDING_TTL_MS = 20000;
   // Sites where cm-frame-handler must not run, because ConsentManager-like DOM
   // patterns appear incidentally and would produce false positives.
   // BBC and LA Times have dedicated document-start handlers (bbc-sourcepoint-hook.js,
   // bbc-preferences.js, latimes-privacy.js, latimes-interstitial.js) — those sites work.
   // zoom.com uses OneTrust on the top-level page; CM-like frames there are unrelated
   // and were causing false Accept All reports.
+  // Forbes, Bloomberg, and NBC News also expose incidental CM-like frame patterns while their
+  // actual consent flow lives in the top-level page; letting this handler run there
+  // causes homepage redirects and duplicate/triplicate counts.
   const CM_FRAME_EXCLUDED_SITES = new Set([
     'www.bbc.com',
     'latimes.com',
     'www.latimes.com',
     'membership.latimes.com',
+    'www.forbes.com',
+    'www.bloomberg.com',
+    'www.nbcnews.com',
     'www.zoom.com',
   ]);
 
@@ -144,48 +153,57 @@
     const isDWInlinePage = window.top === window &&
       window.location.hostname === 'www.dw.com' &&
       deepQuerySelector('#cmpinlinepreferencesbox') !== null;
+    const shouldReturnFromDWInlinePage = isDWInlinePage && await hasDWAutoReturnPending();
+    const shouldMarkDWAutoReturn = !isDWInlinePage && topSite === 'www.dw.com';
 
+    if (shouldMarkDWAutoReturn) await markDWAutoReturnPending();
     if (tryClick(sels) && await waitForDismissal()) {
       report('consentmanager:frame', settings.globalPreference);
-      if (isDWInlinePage) { await new Promise(r => setTimeout(r, 400)); history.back(); }
+      if (shouldReturnFromDWInlinePage) { await new Promise(r => setTimeout(r, DW_RETURN_DELAY_MS)); await returnFromDWPrivacyPage(); }
       return;
     }
 
+    if (shouldMarkDWAutoReturn) await markDWAutoReturnPending();
     if (invokeCmpAction(accept ? 'accept' : 'reject') && await waitForDismissal(5000)) {
       report(`consentmanager:frame:${accept ? 'accept' : 'reject'}:api`, settings.globalPreference);
-      if (isDWInlinePage) { await new Promise(r => setTimeout(r, 400)); history.back(); }
+      if (shouldReturnFromDWInlinePage) { await new Promise(r => setTimeout(r, DW_RETURN_DELAY_MS)); await returnFromDWPrivacyPage(); }
       return;
     }
 
+    if (shouldMarkDWAutoReturn) await markDWAutoReturnPending();
     if (accept && await configureAcceptAll()) {
       report('consentmanager:frame:accept-settings', settings.globalPreference);
-      if (isDWInlinePage) { await new Promise(r => setTimeout(r, 400)); history.back(); }
+      if (shouldReturnFromDWInlinePage) { await new Promise(r => setTimeout(r, DW_RETURN_DELAY_MS)); await returnFromDWPrivacyPage(); }
       return;
     }
 
+    if (shouldMarkDWAutoReturn) await markDWAutoReturnPending();
     if (!accept && await configureNecessaryOnly()) {
       report('consentmanager:frame:settings', settings.globalPreference);
-      if (isDWInlinePage) { await new Promise(r => setTimeout(r, 400)); history.back(); }
+      if (shouldReturnFromDWInlinePage) { await new Promise(r => setTimeout(r, DW_RETURN_DELAY_MS)); await returnFromDWPrivacyPage(); }
       return;
     }
 
     const observer = new MutationObserver(async () => {
+      if (shouldMarkDWAutoReturn) await markDWAutoReturnPending();
       if (tryClick(sels) && await waitForDismissal()) {
         observer.disconnect();
         report('consentmanager:frame:deferred', settings.globalPreference);
-        if (isDWInlinePage) { await new Promise(r => setTimeout(r, 400)); history.back(); }
+        if (shouldReturnFromDWInlinePage) { await new Promise(r => setTimeout(r, DW_RETURN_DELAY_MS)); await returnFromDWPrivacyPage(); }
         return;
       }
+      if (shouldMarkDWAutoReturn) await markDWAutoReturnPending();
       if (accept && await configureAcceptAll()) {
         observer.disconnect();
         report('consentmanager:frame:accept-settings:deferred', settings.globalPreference);
-        if (isDWInlinePage) { await new Promise(r => setTimeout(r, 400)); history.back(); }
+        if (shouldReturnFromDWInlinePage) { await new Promise(r => setTimeout(r, DW_RETURN_DELAY_MS)); await returnFromDWPrivacyPage(); }
         return;
       }
+      if (shouldMarkDWAutoReturn) await markDWAutoReturnPending();
       if (!accept && await configureNecessaryOnly()) {
         observer.disconnect();
         report('consentmanager:frame:settings:deferred', settings.globalPreference);
-        if (isDWInlinePage) { await new Promise(r => setTimeout(r, 400)); history.back(); }
+        if (shouldReturnFromDWInlinePage) { await new Promise(r => setTimeout(r, DW_RETURN_DELAY_MS)); await returnFromDWPrivacyPage(); }
       }
     });
     observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
@@ -245,6 +263,71 @@
     }
 
     return waitForDismissal(5000);
+  }
+
+  async function returnFromDWPrivacyPage(timeoutMs = 10000) {
+    const targetUrl = dwReturnUrl();
+    if (targetUrl) {
+      try {
+        window.location.replace(targetUrl);
+      } catch (_) {}
+      await waitForDWReturn(timeoutMs);
+      await clearDWAutoReturnPending();
+      return;
+    }
+    try {
+      history.back();
+    } catch (_) {}
+    await waitForDWReturn(timeoutMs);
+    await clearDWAutoReturnPending();
+  }
+
+  function dwReturnUrl() {
+    try {
+      const referrer = document.referrer ? new URL(document.referrer) : null;
+      if (!referrer) return null;
+      if (referrer.hostname !== 'www.dw.com') return null;
+      if (referrer.pathname.includes('/data-privacy-settings/')) return null;
+      return referrer.href;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function waitForDWReturn(timeoutMs) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (!window.location.pathname.includes('/data-privacy-settings/') &&
+          deepQuerySelector('#cmpinlinepreferencesbox') === null) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
+  }
+
+  async function markDWAutoReturnPending() {
+    try {
+      await chrome.storage.local.set({
+        [DW_RETURN_PENDING_KEY]: { timestamp: Date.now() },
+      });
+    } catch (_) {}
+  }
+
+  async function hasDWAutoReturnPending() {
+    try {
+      const result = await chrome.storage.local.get({ [DW_RETURN_PENDING_KEY]: null });
+      const payload = result?.[DW_RETURN_PENDING_KEY];
+      return Boolean(payload?.timestamp && (Date.now() - payload.timestamp) < DW_RETURN_PENDING_TTL_MS);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function clearDWAutoReturnPending() {
+    try {
+      await chrome.storage.local.remove(DW_RETURN_PENDING_KEY);
+    } catch (_) {}
   }
 
   async function configureAcceptAll() {

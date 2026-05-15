@@ -8,6 +8,8 @@
 const site = location.hostname;
 const RUN_GUARD_PREFIX = '__emc_handled__';
 const FLOW_COOLDOWN_MS = 15000;
+const REJECT_RELOAD_GUARD_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com']);
+const PRE_HANDLE_PENDING_TTL_MS = 20000;
 const DO_NOT_HANDLE_URLS = new Set([
   'https://www.theguardian.com/help/accessibility-help',
 ]);
@@ -135,6 +137,16 @@ const DISNEY_FAMILY_USNAT_HOSTS = new Set([
 let latestRunId = 0;
 let currentRunSignature = null;
 
+document.addEventListener('__emc_pre_handle__', (event) => {
+  const detail = event?.detail ?? {};
+  const signature = currentRunSignature ?? document.documentElement.dataset.emcRunSignature ?? document.documentElement.dataset.emcPref ?? '';
+  const preference = detail.preference ?? document.documentElement.dataset.emcPref ?? 'reject_all';
+  const actionToken = persistPendingPreHandleAction(signature, detail.method, preference);
+  startFlowCooldown(runCooldownScope(signature));
+  firePreHandleAction(detail.method, preference, actionToken);
+  markHandledForCurrentPage(signature);
+});
+
 bootstrap();
 
 async function bootstrap(force = false) {
@@ -148,6 +160,11 @@ async function bootstrap(force = false) {
   if (siteOverrides.disabled) return;
   const prefs = resolvePrefs(settings, siteOverrides);
   currentRunSignature = prefsRunSignature(prefs);
+  document.documentElement.dataset.emcRunSignature = currentRunSignature;
+  const hadPendingPreHandleAction = hasPendingPreHandleAction(currentRunSignature);
+  await flushPendingPreHandleAction(currentRunSignature);
+  if (!force && hadPendingPreHandleAction) return;
+  if (!force && isFlowCoolingDown(runCooldownScope(currentRunSignature))) return;
   if (!force && wasHandledForCurrentPage(currentRunSignature)) return;
   if (runId !== latestRunId) return;
 
@@ -297,10 +314,6 @@ async function handleDW(prefs) {
     '.cmptogglelink',
     '.cmpboxbtnyescustomchoices',
     '.cmpboxbtnrejectcustomchoices',
-    'text:agree',
-    'text:reject',
-    'text:settings',
-    'text:save selection',
   ];
 
   const visible = await waitForSiteSelectors(selectors, 4000);
@@ -324,7 +337,7 @@ async function handleDW(prefs) {
   if (prefs.globalPreference === 'accept_all') {
     startFlowCooldown('dw');
     const accepted = await clickAndWait(
-      ['.cmptxt_btn_yes2', '.cmptxt_btn_yes', '.cmpboxbtnyes', '#cmpbntyestxt', 'text:agree', 'text:accept'],
+      ['.cmptxt_btn_yes2', '.cmptxt_btn_yes', '.cmpboxbtnyes', '#cmpbntyestxt'],
       dwWatchSelectors(),
       6000,
     );
@@ -342,7 +355,7 @@ async function handleDW(prefs) {
   } else {
     startFlowCooldown('dw');
     const rejected = await clickAndWait(
-      ['.cmptxt_btn_no2', '.cmptxt_btn_no', '.cmpboxbtnno', '#cmpbntnotxt', 'text:reject', 'text:only necessary'],
+      ['.cmptxt_btn_no2', '.cmptxt_btn_no', '.cmpboxbtnno', '#cmpbntnotxt'],
       dwWatchSelectors(),
       6000,
     );
@@ -359,7 +372,7 @@ async function handleDW(prefs) {
     }
   }
 
-  const settingsOpened = clickElement(['.cmpboxbtncustom', '#cmpbntcustomtxt', 'text:settings']);
+  const settingsOpened = clickElement(['.cmpboxbtncustom', '#cmpbntcustomtxt']);
   if (settingsOpened) {
     startFlowCooldown('dw');
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -785,8 +798,6 @@ async function configureDWSettings(preference) {
       '.cmpboxbtnaccept',
       '.cmpboxbtnacceptcustomchoices',
       '.cmpboxbtnyescustomchoices:not(.cmptxt_btn_save2)',
-      'text:agree',
-      'text:accept',
     ])) {
       await new Promise((resolve) => setTimeout(resolve, 900));
       if (await resolveDWPostChoice()) return true;
@@ -797,7 +808,6 @@ async function configureDWSettings(preference) {
       '.cmptxt_btn_no',
       '.cmpboxbtnreject',
       '.cmpboxbtnrejectcustomchoices',
-      'text:reject',
     ])) {
       await new Promise((resolve) => setTimeout(resolve, 900));
       if (await resolveDWPostChoice()) return true;
@@ -812,8 +822,6 @@ async function configureDWSettings(preference) {
     '.cmpboxbtnyescustomchoices.cmptxt_btn_save2',
     '.cmpboxbtnsave',
     '.cmpsave',
-    'text:save selection',
-    'text:save settings',
   ])) {
     return false;
   }
@@ -1226,6 +1234,14 @@ function cooldownKey(scope) {
   return `${RUN_GUARD_PREFIX}:cooldown:${site}:${scope}`;
 }
 
+function runCooldownScope(signature) {
+  return `run:${location.pathname}:${signature}`;
+}
+
+function pendingPreHandleActionKey(signature) {
+  return `${RUN_GUARD_PREFIX}:pending-action:${site}:${location.pathname}:${signature}`;
+}
+
 function wasHandledForCurrentPage(preference) {
   try {
     return sessionStorage.getItem(handledKey(preference)) === '1';
@@ -1253,6 +1269,85 @@ function isFlowCoolingDown(scope) {
   } catch (_) {
     return false;
   }
+}
+
+function persistPendingPreHandleAction(signature, method, preference) {
+  if (!REJECT_RELOAD_GUARD_HOSTS.has(site)) return;
+  if (!method) return;
+  const actionToken = `${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    localStorage.setItem(pendingPreHandleActionKey(signature), JSON.stringify({
+      method,
+      preference,
+      actionToken,
+      timestamp: Date.now(),
+    }));
+  } catch (_) {}
+  return actionToken;
+}
+
+function hasPendingPreHandleAction(signature) {
+  if (!REJECT_RELOAD_GUARD_HOSTS.has(site)) return false;
+  let payload = null;
+  try {
+    payload = JSON.parse(localStorage.getItem(pendingPreHandleActionKey(signature)) || 'null');
+  } catch (_) {
+    payload = null;
+  }
+  return isFreshPendingPreHandleAction(payload);
+}
+
+function isFreshPendingPreHandleAction(payload) {
+  return Boolean(
+    payload?.method &&
+    payload?.preference &&
+    payload?.actionToken &&
+    payload?.timestamp &&
+    (Date.now() - payload.timestamp) < PRE_HANDLE_PENDING_TTL_MS
+  );
+}
+
+function firePreHandleAction(method, preference, actionToken) {
+  if (!method || !actionToken) return;
+  try {
+    void chrome.runtime.sendMessage({
+      type: 'ACTION_FIRED',
+      site,
+      method,
+      preference,
+      actionToken,
+    });
+  } catch (_) {}
+}
+
+async function flushPendingPreHandleAction(signature) {
+  if (!REJECT_RELOAD_GUARD_HOSTS.has(site)) return;
+  let payload = null;
+  try {
+    payload = JSON.parse(localStorage.getItem(pendingPreHandleActionKey(signature)) || 'null');
+  } catch (_) {
+    payload = null;
+  }
+  if (!isFreshPendingPreHandleAction(payload)) {
+    clearPendingPreHandleAction(signature);
+    return;
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'ACTION_FIRED',
+      site,
+      method: payload.method,
+      preference: payload.preference,
+      actionToken: payload.actionToken,
+    });
+    if (response?.ok) clearPendingPreHandleAction(signature);
+  } catch (_) {}
+}
+
+function clearPendingPreHandleAction(signature) {
+  try {
+    localStorage.removeItem(pendingPreHandleActionKey(signature));
+  } catch (_) {}
 }
 
 function dispatchSyntheticClick(el) {

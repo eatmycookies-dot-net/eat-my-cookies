@@ -181,6 +181,20 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain("'membership.latimes.com'");
     expect(source).toContain('if (DOCUMENT_START_ONLY_SITES.has(site)) return;');
   });
+
+  it('can pre-mark reload-on-save flows before navigation interrupts reporting', () => {
+    expect(source).toContain("document.addEventListener('__emc_pre_handle__'");
+    expect(source).toContain('document.documentElement.dataset.emcRunSignature = currentRunSignature;');
+    expect(source).toContain('const actionToken = persistPendingPreHandleAction(signature, detail.method, preference);');
+    expect(source).toContain('startFlowCooldown(runCooldownScope(signature));');
+    expect(source).toContain("REJECT_RELOAD_GUARD_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com'])");
+    expect(source).toContain("const preference = detail.preference ?? document.documentElement.dataset.emcPref ?? 'reject_all';");
+    expect(source).toContain('firePreHandleAction(detail.method, preference, actionToken);');
+    expect(source).toContain('const hadPendingPreHandleAction = hasPendingPreHandleAction(currentRunSignature);');
+    expect(source).toContain('await flushPendingPreHandleAction(currentRunSignature);');
+    expect(source).toContain('if (!force && hadPendingPreHandleAction) return;');
+    expect(source).toContain('if (!force && isFlowCoolingDown(runCooldownScope(currentRunSignature))) return;');
+  });
 });
 
 describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
@@ -228,6 +242,42 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain('ot-group-id-SSPD_BG');
     expect(source).toContain('a.df-privacy-compliance');
   });
+
+  it('uses CNBC and NBC News for CCPA privacy-center routing, but only CNBC for reload-on-save pre-marking', () => {
+    expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com'])");
+    expect(source).toContain("ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set(['www.cnbc.com'])");
+    expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {");
+    expect(source).toContain("method: 'cmp_api:OneTrust:ccpa'");
+  });
+
+  it('treats an already-open OneTrust settings modal as actionable without requiring an opener click', () => {
+    expect(source).toContain('ONETRUST_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain('const settingsVisible = hasVisibleSelector([');
+    expect(source).toContain('const actionableSurfaceVisible = hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS);');
+    expect(source).toContain('const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry(window.location.hostname);');
+    expect(source).toContain('if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryVisible) {');
+    expect(source).toContain("'.save-preference-btn-handler'");
+    expect(source).toContain("const opened = settingsVisible || clickFirstVisible([");
+  });
+
+  it('treats CNBC Continue as the opener into OneTrust privacy settings', () => {
+    expect(source).toContain('clickOneTrustContinueToSettings');
+    expect(source).toContain('/\\bcontinue\\b/i.test(text)');
+  });
+
+  it('uses CCPA-specific OneTrust method labels and cleanup hosts for Thomson Reuters leftovers', () => {
+    expect(source).toContain("handleOneTrustPrivacyCenterReject('cmp_api:OneTrust:ccpa')");
+    expect(source).toContain("ONETRUST_FORCE_CLEANUP_HOSTS = new Set(['www.zoom.com', 'www.thomsonreuters.com', 'thomsonreuters.com'])");
+    expect(source).toContain("ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com'])");
+    expect(source).toContain('shouldForceOneTrustCleanup(window.location.hostname)');
+  });
+
+  it('has a dedicated OneTrust privacy-center accept path for Thomson Reuters-style pages', () => {
+    expect(source).toContain("ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com'])");
+    expect(source).toContain("if (prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(window.location.hostname))");
+    expect(source).toContain('handleOneTrustPrivacyCenterAccept');
+    expect(source).toContain('enableVisibleOneTrustToggles();');
+  });
 });
 
 describe('dom-handler.js — BBC onetrust save guard', () => {
@@ -238,6 +288,45 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
     expect(source).toContain("'www.bbc.com'");
     expect(source).toContain('oneTrustSaveSelectors');
     expect(source).toContain("if (!EXPLICIT_ONETRUST_CONTROL_HOSTS.has(host))");
+  });
+
+  it('uses CNBC and NBC News for DOM CCPA privacy-center routing, but only CNBC for reload-on-save pre-marking', () => {
+    expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set([");
+    expect(source).toContain("'www.nbcnews.com'");
+    expect(source).toContain("ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set([");
+    expect(source).toContain("'www.cnbc.com'");
+    expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {");
+    expect(source).toContain("method: 'dom:onetrust:ccpa'");
+  });
+
+  it('lets the DOM fallback act on an already-open OneTrust settings modal', () => {
+    expect(source).toContain('ONETRUST_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain('const settingsVisible = hasVisibleSelector([');
+    expect(source).toContain('const actionableSurfaceVisible = hasVisibleOneTrustActionableSurface();');
+    expect(source).toContain('const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry(host);');
+    expect(source).toContain('if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryVisible) {');
+    expect(source).toContain("'.save-preference-btn-handler'");
+    expect(source).toContain('const opened = settingsVisible || clickFirstVisible([');
+  });
+
+  it('lets the DOM fallback use CNBC Continue as the settings opener', () => {
+    expect(source).toContain('clickOneTrustContinueToSettings');
+    expect(source).toContain('/\\bcontinue\\b/i.test(text)');
+  });
+
+  it('uses CCPA-specific DOM method labels and cleanup hosts for Thomson Reuters leftovers', () => {
+    expect(source).toContain("return { method: `dom:${cmp.id}:ccpa`, cmpName: cmp.name }");
+    expect(source).toContain("ONETRUST_FORCE_CLEANUP_HOSTS = new Set([");
+    expect(source).toContain("ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set([");
+    expect(source).toContain("'www.thomsonreuters.com'");
+    expect(source).toContain('scheduleHostOneTrustCleanup(host)');
+  });
+
+  it('has a dedicated DOM privacy-center accept path for Thomson Reuters-style pages', () => {
+    expect(source).toContain("ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set([");
+    expect(source).toContain("if (cmp.id === 'onetrust' && prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(host))");
+    expect(source).toContain('executeOneTrustPrivacyCenterAccept');
+    expect(source).toContain('enableVisibleOneTrustToggles();');
   });
 });
 
@@ -259,8 +348,12 @@ describe('frame handlers — temporary skip guards', () => {
     expect(cmSource).toContain("'latimes.com'");
     expect(cmSource).toContain("'www.latimes.com'");
     expect(cmSource).toContain("'membership.latimes.com'");
+    expect(cmSource).toContain("'www.forbes.com'");
+    expect(cmSource).toContain("'www.bloomberg.com'");
+    expect(cmSource).toContain("'www.nbcnews.com'");
     expect(cmSource).toContain("'www.zoom.com'");
     expect(cmSource).toContain('CM_FRAME_EXCLUDED_SITES.has(topSite)');
+    expect(cmSource).toContain('returnFromDWPrivacyPage');
   });
 
   it('heuristic fallback skips BBC and LA Times', () => {
@@ -371,6 +464,11 @@ describe('service-worker.js — guardian frame click bridge', () => {
     expect(source).toContain("world: 'MAIN'");
     expect(source).toContain("frameIds: [frameId]");
     expect(source).toContain("el.click?.()");
+  });
+
+  it('dedupes early reload-safe action reports by action token', () => {
+    expect(source).toContain('actionToken');
+    expect(source).toContain("checkDuplicateAction(`action-token:${actionToken}`)");
   });
 });
 

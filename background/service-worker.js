@@ -144,12 +144,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function handleActionFired({ site, method, preference }, sender) {
+async function handleActionFired({ site, method, preference, actionToken }, sender) {
   site = normalizeSite(site, sender);
   const tabId = sender.tab?.id;
   const overrides = await getSiteOverrides();
   if (overrides[site]?.disabled) {
     return { ok: true, disabled: true };
+  }
+
+  if (actionToken && checkDuplicateAction(`action-token:${actionToken}`)) {
+    return { ok: true, deduped: true, dedupedByToken: true };
   }
 
   const pageUrl  = pageUrlFor(sender, site);
