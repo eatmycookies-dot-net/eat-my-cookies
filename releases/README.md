@@ -8,6 +8,15 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Upcoming (unreleased)
 
+### Ketch / Pret A Manger
+
+- Added site-specific Ketch support for `pret.com/en-GB`.
+- Pret's banner has no direct Reject All button — only "Customise my settings" — so the extension opens the Privacy Preference Center and applies preferences there.
+- Covers `Accept All`, `Reject All`, and `Custom`. Human-validated May 2026 on UK/en-GB.
+- Uses the `DYNAMIC_SITE_SPECIFIC_HOSTS` retry loop because Pret's Ketch banner loads asynchronously (~5s after page load).
+- Selectors are language-agnostic where possible: Ketch CSS variable class patterns (`[class*="rejectAllButton"]`, `[class*="acceptAllButton"]`) and `button[type="submit"]` for save, with text fallbacks for "Save choices" and "Confirm".
+- Fixed `readKetchVisibleSwitchState` to correctly read toggle state when the control element itself is the switch container — needed for Pret's sibling checkbox/toggle DOM layout, which was causing custom preference to toggle blindly.
+
 ---
 
 ## v1.1.0

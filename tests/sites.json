@@ -798,9 +798,9 @@
         "#ketch-consent-banner"
       ],
       "consentSelectors": [
-        "#ketch-banner-button-secondary",
-        "#ketch-banner-button-tertiary"
-      ]
+        "#ketch-banner-button-secondary"
+      ],
+      "handleWaitMs": 15000
     },
     {
       "name": "TAG24",

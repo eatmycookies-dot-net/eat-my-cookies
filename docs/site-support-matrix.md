@@ -37,6 +37,7 @@ These sites are in the active automated coverage inventory and should remain in 
 | `nytimes.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `reuters.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
 | `forbes.com` | Automation-covered | Ketch CMP. US region: accept/reject/custom all covered via Ketch privacy center. EU region: full banner (Accept All / Reject All Non-Required / Manage Preferences) — fixed May 2026 to respect user preference instead of forcing accept-only. EU e2e passes via VPN (`Forbes (EU/GDPR)` in sites.json). |
+| `pret.com` | Supported | Ketch CMP. 🇬🇧 UK (en-GB). Human-validated May 2026: `Accept All`, `Reject All`, and `Custom` all work. Site-specific config required — banner has no direct Reject All button; extension opens the Privacy Preference Center via "Customise my settings", then applies preferences using language-agnostic Ketch class selectors and `button[type="submit"]` for save. Uses `DYNAMIC_SITE_SPECIFIC_HOSTS` retry loop because the Ketch banner loads asynchronously (~5s after page load). **Upcoming release item.** |
 | `bloomberg.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
 | `theverge.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `wired.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
@@ -98,12 +99,6 @@ These sites still need direct handling work.
 ## Newly Added — Pending Human Validation
 
 Detected via automated VPN scan (Browsec → Germany/Lithuania EU IP) on 2026-05-29. CMP family confirmed by script fingerprinting; consent flows have **not** been human-validated yet.
-
-### Ketch — Needs Implementation
-
-| Site | URL | CMP | Validation result |
-| --- | --- | --- | --- |
-| Pret A Manger | [pret.com/en-GB](https://www.pret.com/en-GB) | Ketch | 🇬🇧 UK. Banner visible from EU IP but **extension does not yet handle Ketch**. Needs Ketch tier implementation. |
 
 ### Sourcepoint — Needs Human Validation
 

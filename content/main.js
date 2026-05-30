@@ -20,6 +20,7 @@ const DYNAMIC_SITE_SPECIFIC_HOSTS = new Set([
   'www.forbes.com',
   'www.ketch.com',
   'ketch.com',
+  'www.pret.com',
 ]);
 const CONSENTMANAGER_TOP_LEVEL_EXCLUDED_SITES = new Set([
   'www.bbc.com',
@@ -370,6 +371,53 @@ const KETCH_SITE_CONFIGS = {
       'text:your privacy',
     ],
     saveSelectors: ['text:save choices'],
+    exitSelectors: [],
+  },
+  'www.pret.com': {
+    siteLabel: 'Pret A Manger',
+    privacyCenterTitle: 'privacy preference center',
+    homeUrl: 'https://www.pret.com/en-GB',
+    cooldownScope: 'pret',
+    purposeTabSelectors: ['text:purposes', 'text:functionality'],
+    readySelectors: [
+      '#functionality',
+      '#analytics',
+      '#behavioral_advertising',
+    ],
+    settingsSelectors: [
+      '#functionality',
+      '#analytics',
+      '#behavioral_advertising',
+    ],
+    entrySelectors: [
+      '#ketch-banner-button-secondary',
+      'text:cookies settings',
+    ],
+    categoryRules: [
+      { id: 'functionality', labels: ['functionality'], desired: (prefs) => Boolean(prefs.functional) },
+      { id: 'analytics', labels: ['analytics', 'performance'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'behavioral_advertising', labels: ['behavioral advertising', 'targeting', 'advertising'], desired: (prefs) => Boolean(prefs.advertising) },
+    ],
+    bannerWatchSelectors: [
+      '#ketch-banner',
+      '#ketch-consent-banner',
+      '#ketch-banner-button-primary',
+      '#ketch-banner-button-secondary',
+    ],
+    bannerAcceptSelectors: [
+      '#ketch-banner-button-primary',
+      '[class*="acceptAllButton"]',
+    ],
+    // No direct Reject All on the banner — only Customize Settings (#ketch-banner-button-secondary).
+    // Clicking it opens the privacy center; once inside the class pattern clicks the modal's Reject All.
+    bannerRejectSelectors: [
+      '#ketch-banner-button-secondary',
+      '[class*="rejectAllButton"]',
+    ],
+    bannerManageSelectors: [
+      '#ketch-banner-button-secondary',
+    ],
+    saveSelectors: ['button[type="submit"]', 'text:save choices', 'text:confirm'],
     exitSelectors: [],
   },
 };
@@ -1119,6 +1167,9 @@ function readKetchToggleState(control) {
 }
 
 function readKetchVisibleSwitchState(control) {
+  const selfId = (control?.id || '').toLowerCase();
+  if (selfId.includes('switch-container-on')) return true;
+  if (selfId.includes('switch-container-off')) return false;
   const switchContainer = findKetchSwitchContainer(control);
   if (!switchContainer) return null;
   const id = (switchContainer.id || '').toLowerCase();
