@@ -268,6 +268,28 @@
       }
     },
     {
+      "id": "shopify",
+      "name": "Shopify Customer Privacy",
+      "note": "Shopify's native customer privacy banner can appear as a simple banner or a granular preferences dialog.",
+      "detectors": [
+        { "type": "css_selector", "value": "#shopify-pc__banner" },
+        { "type": "css_selector", "value": ".shopify-pc__banner__dialog" },
+        { "type": "css_selector", "value": "#shopify-pc__prefs__dialog" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#shopify-pc__banner__btn-decline" },
+          { "type": "click", "selector": "#shopify-pc__prefs__header-decline" },
+          { "type": "click", "selector": "button.shopify-pc__banner__btn-decline" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#shopify-pc__banner__btn-accept" },
+          { "type": "click", "selector": "#shopify-pc__prefs__header-accept" },
+          { "type": "click", "selector": "button.shopify-pc__banner__btn-accept" }
+        ]
+      }
+    },
+    {
       "id": "klaro",
       "name": "Klaro",
       "detectors": [

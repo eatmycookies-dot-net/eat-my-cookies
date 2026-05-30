@@ -1093,6 +1093,44 @@
       "consentSelectors": [
         "#onetrust-reject-all-handler"
       ]
+    },
+    {
+      "name": "Cees Pronk Store (VPN Custom)",
+      "url": "https://ceespronkstore.com/en",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Shopify Customer Privacy",
+      "tier": "cmp-api/dom",
+      "preference": "custom",
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": true,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "bannerSelectors": [
+        "#shopify-pc__banner",
+        ".shopify-pc__banner__dialog",
+        "#shopify-pc__prefs",
+        "#shopify-pc__prefs__dialog",
+        ".shopify-pc__prefs__dialog"
+      ],
+      "consentSelectors": [
+        "#shopify-pc__banner__btn-manage-prefs",
+        "#shopify-pc__prefs__header-save",
+        "#shopify-pc__prefs__preferences-input",
+        "#shopify-pc__prefs__marketing-input",
+        "#shopify-pc__prefs__analytics-input"
+      ],
+      "expectedShopifyConsent": {
+        "preferences": true,
+        "analytics": true,
+        "marketing": false
+      }
     }
   ]
 }

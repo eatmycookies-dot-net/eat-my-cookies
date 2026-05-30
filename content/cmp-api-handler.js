@@ -285,6 +285,57 @@
       }
       return true;
     },
+    privacyBanner: async (w, prefs) => {
+      if (!w.privacyBanner) return false;
+      if (!hasVisibleSelector(CMP_SELECTORS.privacyBanner ?? [])) return false;
+      if (prefs.globalPreference === 'custom') return false;
+
+      if (typeof w.privacyBanner.showPreferences === 'function' &&
+        !hasVisibleSelector(shopifyPreferenceSelectors())) {
+        try {
+          await w.privacyBanner.showPreferences();
+        } catch (_) {}
+      }
+
+      const consentApi = await waitForShopifyConsentApi(w, 6000);
+      if (!consentApi?.setTrackingConsent) return false;
+
+      const desiredConsent = {
+        marketing: prefs.globalPreference === 'accept_all'
+          ? true
+          : prefs.globalPreference === 'reject_all'
+            ? false
+            : Boolean(prefs.advertising),
+        analytics: prefs.globalPreference === 'accept_all'
+          ? true
+          : prefs.globalPreference === 'reject_all'
+            ? false
+            : Boolean(prefs.analytics),
+        preferences: prefs.globalPreference === 'accept_all'
+          ? true
+          : prefs.globalPreference === 'reject_all'
+            ? false
+            : Boolean(prefs.functional) || prefs.uncategorized === 'accept',
+      };
+
+      const submission = await submitShopifyConsent(consentApi, desiredConsent);
+      if (!submission.ok) return false;
+
+      await waitForShopifyConsent(consentApi, desiredConsent, 2500).catch(() => false);
+
+      closeShopifyPrivacyUi();
+      cleanupShopifyPrivacyArtifacts();
+      await delay(150);
+      _handled = true;
+      document.dispatchEvent(new CustomEvent('__emc_handled__', {
+        detail: {
+          method: prefs.globalPreference === 'custom'
+            ? 'cmp_api:Shopify:custom'
+            : 'cmp_api:Shopify',
+        },
+      }));
+      return false;
+    },
     Nike: async (w, prefs) => {
       if (!NIKE_CCPA_HOSTS.has(w.location.hostname)) return false;
       if (!/^\/(?:guest|member)\/settings\/do-not-share-my-data/.test(w.location.pathname)) return false;
@@ -333,6 +384,15 @@
     truste: ['#truste-consent-track', '.truste_overlay'],
     _axcb: ['#axeptio_overlay', '.axeptio_widget'],
     _iub: ['#iubenda-cs-banner', '.iubenda-cs-content', '.iubenda-cs-reject-btn', '.iubenda-cs-accept-btn'],
+    privacyBanner: [
+      '#shopify-pc__banner',
+      '.shopify-pc__banner__dialog',
+      '#shopify-pc__prefs',
+      '#shopify-pc__prefs__dialog',
+      '.shopify-pc__prefs__dialog',
+      '#shopify-pc__prefs__header-save',
+      '#shopify-pc__banner__btn-manage-prefs',
+    ],
     Nike: [],
   };
 
@@ -558,6 +618,18 @@
     ];
   }
 
+  function shopifyPreferenceSelectors() {
+    return [
+      '#shopify-pc__prefs',
+      '#shopify-pc__prefs__dialog',
+      '.shopify-pc__prefs__dialog',
+      '#shopify-pc__prefs__header-save',
+      '#shopify-pc__prefs__preferences-input',
+      '#shopify-pc__prefs__marketing-input',
+      '#shopify-pc__prefs__analytics-input',
+    ];
+  }
+
   function hasVisibleSourcepointSelector() {
     return hasVisibleSelector(sourcepointSelectors());
   }
@@ -642,14 +714,118 @@
     return false;
   }
 
+  function getShopifyConsentApi(w = window) {
+    return w.Shopify?.customerPrivacy ?? w.Shopify?.trackingConsent ?? null;
+  }
+
+  async function waitForShopifyConsentApi(w = window, timeoutMs = 6000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const consentApi = getShopifyConsentApi(w);
+      if (consentApi?.setTrackingConsent) return consentApi;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    return getShopifyConsentApi(w);
+  }
+
+  async function submitShopifyConsent(consentApi, desiredConsent) {
+    try {
+      const result = await new Promise((resolve) => {
+        consentApi.setTrackingConsent(desiredConsent, (error, data) => {
+          resolve({ error, data });
+        });
+      });
+      return {
+        ok: !result?.error,
+        data: result?.data ?? null,
+        error: result?.error ?? null,
+      };
+    } catch (_) {
+      return { ok: false, data: null, error: true };
+    }
+  }
+
+  async function waitForShopifyConsent(consentApi, desiredConsent, timeoutMs = 2500) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const current = consentApi.currentVisitorConsent?.();
+      if (shopifyConsentMatches(current, desiredConsent)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    return shopifyConsentMatches(consentApi.currentVisitorConsent?.(), desiredConsent);
+  }
+
+  function shopifyConsentMatches(current, desiredConsent) {
+    if (!current) return false;
+    return normalizeShopifyConsent(current.marketing) === desiredConsent.marketing &&
+      normalizeShopifyConsent(current.analytics) === desiredConsent.analytics &&
+      normalizeShopifyConsent(current.preferences) === desiredConsent.preferences;
+  }
+
+  function normalizeShopifyConsent(value) {
+    if (value === 'yes' || value === true) return true;
+    if (value === 'no' || value === false) return false;
+    return null;
+  }
+
+  function cleanupShopifyPrivacyArtifacts() {
+    for (const selector of [
+      '#shopify-pc__banner',
+      '#shopify-pc__prefs',
+      '#shopify-pc__prefs__dialog',
+      '#shopify-pc__prefs__overlay',
+      '.shopify-pc__banner__dialog',
+      '.shopify-pc__prefs__dialog',
+      '.shopify-pc__prefs__overlay',
+    ]) {
+      for (const el of document.querySelectorAll(selector)) {
+        if (!(el instanceof HTMLElement)) continue;
+        el.style.display = 'none';
+        el.setAttribute('aria-hidden', 'true');
+      }
+    }
+    try {
+      document.documentElement?.classList?.remove('lock');
+      document.body?.classList?.remove('lock');
+      if (document.documentElement) document.documentElement.style.overflow = '';
+      if (document.body) document.body.style.overflow = '';
+    } catch (_) {}
+  }
+
+  function closeShopifyPrivacyUi() {
+    const closeButton = firstVisibleElement([
+      '#shopify-pc__prefs__header-close',
+      'button.shopify-pc__prefs__header-close',
+    ]);
+    if (closeButton) {
+      dispatchSyntheticClick(closeButton);
+    }
+  }
+
   function hasVisibleSelector(selectors) {
     return selectors.some((selector) => {
-      const el = document.querySelector(selector);
-      if (!el) return false;
-      const rect = el.getBoundingClientRect();
-      const style = getComputedStyle(el);
-      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+      for (const el of document.querySelectorAll(selector)) {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        if (rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden') {
+          return true;
+        }
+      }
+      return false;
     });
+  }
+
+  function firstVisibleElement(selectors) {
+    for (const selector of selectors) {
+      for (const el of document.querySelectorAll(selector)) {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        if (rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden') {
+          return el;
+        }
+      }
+    }
+    return null;
   }
 
   function isBlockedForHost(handlerName, preference) {

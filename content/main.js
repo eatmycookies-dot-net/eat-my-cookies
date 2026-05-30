@@ -8,6 +8,7 @@
 const site = location.hostname;
 const RUN_GUARD_PREFIX = '__emc_handled__';
 const FLOW_COOLDOWN_MS = 15000;
+const SHOPIFY_MAIN_WORLD_TIMEOUT_MS = 5000;
 const REJECT_RELOAD_GUARD_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com']);
 const PRE_HANDLE_PENDING_TTL_MS = 20000;
 const DO_NOT_HANDLE_URLS = new Set([
@@ -28,6 +29,7 @@ const DOCUMENT_START_ONLY_SITES = new Set([
 ]);
 let siteSpecificWatchStarted = false;
 let siteSpecificFlowLock = null;
+let shopifyWatchStarted = false;
 let bloombergCcpaBridgeInstalled = false;
 let bloombergCcpaWatchToken = 0;
 let bloombergCcpaManualOpenUntil = 0;
@@ -187,6 +189,7 @@ const KETCH_SITE_CONFIGS = {
       'button[title*="Manage Preferences" i]',
       'text:manage preferences',
     ],
+    customRejectBaseline: true,
     saveSelectors: ['text:save your choices'],
     exitSelectors: ['text:exit'],
   },
@@ -248,6 +251,7 @@ const KETCH_SITE_CONFIGS = {
       'button[title*="Manage Preferences" i]',
       'text:manage preferences',
     ],
+    customRejectBaseline: true,
     saveSelectors: ['text:save your choices'],
     exitSelectors: ['text:exit'],
   },
@@ -403,6 +407,7 @@ async function bootstrap(force = false) {
   const prefs = resolvePrefs(settings, siteOverrides);
   currentRunSignature = prefsRunSignature(prefs);
   document.documentElement.dataset.emcRunSignature = currentRunSignature;
+  scheduleShopifyWatch(prefs);
   const hadPendingPreHandleAction = hasPendingPreHandleAction(currentRunSignature);
   await flushPendingPreHandleAction(currentRunSignature);
   if (!force && hadPendingPreHandleAction) return;
@@ -421,13 +426,20 @@ async function bootstrap(force = false) {
   }
 
   if (await handleSiteSpecificFlow(siteOverrides, prefs)) return;
+  if (await handleShopifyBanner(prefs)) return;
   scheduleDynamicSiteSpecificWatch();
   if (runId !== latestRunId) return;
+
+  const preferShopifyMainWorld = shouldUseShopifyMainWorldOnly(prefs);
+  const mainWorldResultPromise = waitForMainWorldResult(
+    preferShopifyMainWorld ? SHOPIFY_MAIN_WORLD_TIMEOUT_MS : 3000,
+    preferShopifyMainWorld ? prefs : null,
+  );
 
   document.documentElement.dataset.emcPref = prefs.globalPreference;
   document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: prefs }));
 
-  const mainWorldResult = await waitForMainWorldResult(3000);
+  const mainWorldResult = await mainWorldResultPromise;
   if (mainWorldResult) {
     return reportAction(mainWorldResult.method, prefs.globalPreference);
   }
@@ -446,9 +458,11 @@ async function bootstrap(force = false) {
     return reportAction(domResult.method, prefs.globalPreference);
   }
 
-  const heuristicResult = runHeuristic(prefs);
-  if (heuristicResult) {
-    return reportAction(heuristicResult.method, prefs.globalPreference);
+  if (prefs.globalPreference !== 'custom') {
+    const heuristicResult = runHeuristic(prefs);
+    if (heuristicResult) {
+      return reportAction(heuristicResult.method, prefs.globalPreference);
+    }
   }
 
   if (force) {
@@ -575,6 +589,146 @@ async function handleSiteSpecificFlow(siteOverrides, prefs) {
     allowAcceptOverride: true,
   });
   return true;
+}
+
+async function handleShopifyBanner(prefs) {
+  if (!hasVisibleShopifySurface()) return false;
+
+  const dialog = findVisibleShopifyPrefsDialog();
+  const banner = findVisibleShopifyBanner();
+
+  if (prefs?.globalPreference === 'accept_all') {
+    const accepted = clickShopifyButton(
+      banner,
+      ['#shopify-pc__banner__btn-accept'],
+      ['accept']
+    ) || clickShopifyButton(
+      dialog,
+      ['#shopify-pc__prefs__header-accept'],
+      ['accept all']
+    );
+    if (!accepted) return false;
+    if (!(await waitForSelectorsToDisappear(shopifyWatchSelectors(), 7000))) return false;
+    await reportAction('site_specific:shopify:accept_all', prefs.globalPreference);
+    return true;
+  }
+
+  if (prefs?.globalPreference === 'reject_all') {
+    const rejected = clickShopifyButton(
+      banner,
+      ['#shopify-pc__banner__btn-decline'],
+      ['decline']
+    ) || clickShopifyButton(
+      dialog,
+      ['#shopify-pc__prefs__header-decline'],
+      ['decline all', 'reject all']
+    );
+    if (!rejected) return false;
+    if (!(await waitForSelectorsToDisappear(shopifyWatchSelectors(), 7000))) return false;
+    await reportAction('site_specific:shopify:reject_all', prefs.globalPreference);
+    return true;
+  }
+
+  if (prefs?.globalPreference !== 'custom') return false;
+
+  const desiredStates = {
+    preferences: Boolean(prefs.functional) || prefs.uncategorized === 'accept',
+    marketing: Boolean(prefs.advertising),
+    analytics: Boolean(prefs.analytics),
+  };
+  const allDesiredOn = Object.values(desiredStates).every(Boolean);
+  const allDesiredOff = Object.values(desiredStates).every((value) => !value);
+
+  if (allDesiredOn) {
+    if (clickShopifyButton(dialog, ['#shopify-pc__prefs__header-accept'], ['accept all']) ||
+      clickShopifyButton(banner, ['#shopify-pc__banner__btn-accept'], ['accept'])) {
+      if (await waitForSelectorsToDisappear(shopifyWatchSelectors(), 7000)) {
+        await reportAction('site_specific:shopify:accept_all', prefs.globalPreference);
+        return true;
+      }
+    }
+  }
+
+  if (allDesiredOff) {
+    if (clickShopifyButton(dialog, ['#shopify-pc__prefs__header-decline'], ['decline all', 'reject all']) ||
+      clickShopifyButton(banner, ['#shopify-pc__banner__btn-decline'], ['decline'])) {
+      if (await waitForSelectorsToDisappear(shopifyWatchSelectors(), 7000)) {
+        await reportAction('site_specific:shopify:reject_all', prefs.globalPreference);
+        return true;
+      }
+    }
+  }
+
+  let activeDialog = dialog;
+  if (!activeDialog) {
+    const opened = clickShopifyButton(banner, ['#shopify-pc__banner__btn-manage-prefs'], ['manage preferences', 'manage']);
+    if (!opened) return false;
+    const visible = await waitForSiteSelectors(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog'], 5000);
+    if (!visible) return false;
+    activeDialog = findVisibleShopifyPrefsDialog();
+    if (!activeDialog) return false;
+  }
+
+  const appliedPreferences = applyShopifyToggleState(activeDialog, 'shopify-pc__prefs__preferences-input', desiredStates.preferences);
+  const appliedMarketing = applyShopifyToggleState(activeDialog, 'shopify-pc__prefs__marketing-input', desiredStates.marketing);
+  const appliedAnalytics = applyShopifyToggleState(activeDialog, 'shopify-pc__prefs__analytics-input', desiredStates.analytics);
+  if (!appliedPreferences || !appliedMarketing || !appliedAnalytics) return false;
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
+  const saved = clickShopifyButton(activeDialog, ['#shopify-pc__prefs__header-save'], ['save my choices', 'save choices', 'save']);
+  if (!saved) return false;
+  if (!(await waitForSelectorsToDisappear(shopifyWatchSelectors(), 7000))) return false;
+
+  await reportAction('site_specific:shopify:custom', prefs.globalPreference);
+  return true;
+}
+
+function scheduleShopifyWatch(prefs) {
+  if (prefs?.globalPreference !== 'custom' || shopifyWatchStarted) return;
+  shopifyWatchStarted = true;
+  let stopped = false;
+  let running = false;
+
+  const stop = () => {
+    stopped = true;
+    try { observer?.disconnect(); } catch (_) {}
+  };
+
+  const tryHandle = async () => {
+    if (stopped || running) return;
+    if (currentRunSignature && wasHandledForCurrentPage(currentRunSignature)) {
+      stop();
+      return;
+    }
+    running = true;
+    try {
+      const handled = await handleShopifyBanner(prefs);
+      if (handled) stop();
+    } finally {
+      running = false;
+    }
+  };
+
+  const observer = new MutationObserver(() => {
+    void tryHandle();
+  });
+
+  try {
+    observer.observe(document.body ?? document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
+  } catch (_) {
+    shopifyWatchStarted = false;
+    return;
+  }
+
+  for (const ms of [300, 800, 1600, 3000, 5000, 8000, 12000]) {
+    setTimeout(() => { void tryHandle(); }, ms);
+  }
+  setTimeout(() => stop(), 15000);
 }
 
 async function handleForbesPrivacyCenter(siteOverrides, prefs) {
@@ -821,6 +975,19 @@ async function applyKetchPreferences(config, prefs) {
     return 'applied';
   }
 
+  let usedRejectBaseline = false;
+  const shouldUseRejectBaseline = Boolean(
+    config.customRejectBaseline &&
+    prefs?.globalPreference === 'custom' &&
+    mutableRules.length > 0 &&
+    !allDesiredOn &&
+    !allDesiredOff
+  );
+  if (shouldUseRejectBaseline && clickElement(config.bannerRejectSelectors)) {
+    usedRejectBaseline = true;
+    await waitForKetchRulesState(mutableRules, false, 1500);
+  }
+
   let mutableCount = 0;
   let presentCount = 0;
   for (const rule of config.categoryRules ?? []) {
@@ -830,6 +997,7 @@ async function applyKetchPreferences(config, prefs) {
     presentCount += 1;
     if (isKetchToggleDisabled(control)) continue;
     mutableCount += 1;
+    if (usedRejectBaseline && !desired) continue;
     await applyKetchRuleState(rule, desired);
   }
 
@@ -1589,20 +1757,42 @@ async function turnOffLeMondeInputs() {
   await new Promise((resolve) => setTimeout(resolve, 150));
 }
 
-function waitForMainWorldResult(timeoutMs) {
+function waitForMainWorldResult(timeoutMs, redispatchPrefs = null) {
   return new Promise((resolve) => {
+    let intervalId = null;
     const timer = setTimeout(() => {
+      if (intervalId) clearInterval(intervalId);
       document.removeEventListener('__emc_handled__', handler);
       resolve(null);
     }, timeoutMs);
 
     function handler(e) {
       clearTimeout(timer);
+      if (intervalId) clearInterval(intervalId);
       resolve(e.detail);
+    }
+
+    if (redispatchPrefs?.globalPreference) {
+      intervalId = setInterval(() => {
+        document.documentElement.dataset.emcPref = redispatchPrefs.globalPreference;
+        document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: redispatchPrefs }));
+      }, 400);
     }
 
     document.addEventListener('__emc_handled__', handler, { once: true });
   });
+}
+
+function shouldUseShopifyMainWorldOnly(prefs) {
+  if (prefs?.globalPreference !== 'custom') return false;
+  return [
+    '#shopify-pc__banner',
+    '#shopify-pc__prefs',
+    '#shopify-pc__prefs__dialog',
+    '.shopify-pc__prefs__dialog',
+    '#shopify-pc__banner__btn-manage-prefs',
+    '#shopify-pc__prefs__header-save',
+  ].some((selector) => document.querySelector(selector));
 }
 
 function resolvePrefs(settings, siteOverrides = {}) {
@@ -1677,6 +1867,100 @@ function clickElement(selectors) {
     }
   }
   return false;
+}
+
+function clickShopifyButton(root, selectors = [], textOptions = []) {
+  if (!root) return false;
+  for (const selector of selectors) {
+    const el = root.querySelector(selector);
+    if (el && isVisible(el)) {
+      return activateShopifyButton(el);
+    }
+  }
+  const lowered = textOptions.map((text) => text.toLowerCase());
+  for (const el of root.querySelectorAll('button, [role="button"]')) {
+    const text = el.textContent?.trim().toLowerCase() ?? '';
+    if (!text || !isVisible(el)) continue;
+    if (lowered.some((phrase) => text.includes(phrase))) {
+      return activateShopifyButton(el);
+    }
+  }
+  return false;
+}
+
+function activateShopifyButton(el) {
+  const target = clickTargetFor(el);
+  try {
+    target.focus?.();
+    target.click?.();
+    return true;
+  } catch (_) {}
+  return dispatchSyntheticClick(target);
+}
+
+function hasVisibleShopifySurface() {
+  return shopifyWatchSelectors().some((selector) => {
+    return Array.from(document.querySelectorAll(selector)).some((el) => isVisible(el));
+  });
+}
+
+function shopifyWatchSelectors() {
+  return [
+    '#shopify-pc__banner',
+    '.shopify-pc__banner__dialog',
+    '#shopify-pc__prefs',
+    '#shopify-pc__prefs__dialog',
+    '.shopify-pc__prefs__dialog',
+  ];
+}
+
+function findVisibleShopifyBanner() {
+  return firstVisibleElementOnPage([
+    '#shopify-pc__banner',
+    '.shopify-pc__banner__dialog',
+  ]);
+}
+
+function findVisibleShopifyPrefsDialog() {
+  return firstVisibleElementOnPage([
+    '#shopify-pc__prefs__dialog',
+    '.shopify-pc__prefs__dialog',
+  ]);
+}
+
+function firstVisibleElementOnPage(selectors) {
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (isVisible(el)) return el;
+    }
+  }
+  return null;
+}
+
+function applyShopifyToggleState(root, id, checked) {
+  const toggle = findShopifyToggleInRoot(root, id);
+  if (!(toggle instanceof HTMLInputElement)) return false;
+  if (toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+  if (Boolean(toggle.checked) === checked) return true;
+
+  const label = toggle.labels?.[0] ?? toggle.closest('label');
+  if (label && isVisible(label)) {
+    try { label.click(); } catch (_) { dispatchSyntheticClick(label); }
+  }
+  if (Boolean(toggle.checked) === checked) return true;
+
+  try { toggle.click(); } catch (_) { dispatchSyntheticClick(toggle); }
+  if (Boolean(toggle.checked) === checked) return true;
+
+  forceCheckboxState(toggle, checked);
+  return Boolean(toggle.checked) === checked;
+}
+
+function findShopifyToggleInRoot(root, id) {
+  if (!root?.querySelectorAll) return null;
+  const escaped = typeof CSS?.escape === 'function' ? CSS.escape(id) : id;
+  const matches = Array.from(root.querySelectorAll(`#${escaped}`));
+  return matches.find((el) => el instanceof HTMLInputElement && isVisible(el)) ?? null;
 }
 
 async function waitForSelectorsToDisappear(selectors, timeoutMs) {

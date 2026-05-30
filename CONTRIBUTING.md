@@ -58,6 +58,17 @@ Create a store-ready zip:
 npm run build:zip
 ```
 
+Release zips keep the plain semver filename. `npm run build:zip` will refuse to overwrite an existing artifact for the current version, so bump semver first when cutting another public release:
+
+```bash
+npm run version:patch
+# or:
+npm run version:minor
+npm run version:major
+```
+
+The single source of truth for the current release version is [`version.json`](version.json). Use the version scripts rather than editing `manifest.json`, `package.json`, or test metadata by hand.
+
 Run unit tests plus static validation:
 
 ```bash
@@ -94,6 +105,14 @@ Use those when a CMP changes visible labels by language and you want the validat
 For extension UI strings, use the shared localization helper in [`utils/i18n.js`](utils/i18n.js) and add keys to `_locales/*/messages.json` instead of hardcoding new popup or context-menu copy in JavaScript.
 
 UI localization is not enough by itself. If a new language should also work for localized consent banners, update the matcher/fallback phrases in `content/*.js` and extend the locale regression tests in `tests/unit/locale-support.test.js`.
+
+When touching Ketch or other geo-sensitive CMPs, do not assume one region tells the whole story. A site can serve:
+
+- a simple banner in one geography
+- a full privacy center in another
+- different category names or toggle behavior by legislation bucket
+
+Document the tested geography in your notes and prefer real-region validation before declaring a site "fixed".
 
 ## Icon Generation
 
@@ -198,6 +217,32 @@ npm run test:detect-cmp                        # CMP discovery scan
 
 Prefer `npm run verify` during normal iteration, `npm run test` before opening a PR when code behavior changed, and targeted `npm run test:e2e` when you touched a supported site or CMP flow.
 
+### Ketch-specific testing notes
+
+Ketch needs extra care because banner actions and custom settings are not always equivalent:
+
+- `Accept All` and `Reject All` may be wired to real SDK state transitions even when direct toggle clicks are not
+- mixed custom states can behave differently from "all on" or "all off"
+- opening a privacy center from a footer link can reuse existing consent state from the same session
+
+When validating a Ketch change:
+
+1. Test `Accept All`
+2. Test `Reject All`
+3. Test at least one mixed custom state such as:
+   - `Functional = off`
+   - `Analytics = on`
+   - `Advertising = off`
+4. Reopen the site's privacy link and confirm the saved state matches what the extension attempted
+5. Confirm the action is also recorded in popup stats / `Recent`
+
+For Forbes specifically, prefer checking both:
+
+- the first banner surface
+- the later `Forbes Privacy Center` settings page
+
+The same applies to Ketch demo/testing surfaces such as `ketch.com`, which are useful for isolating Ketch behavior without a publisher-specific shell.
+
 ## Site Integration Guidance
 
 When adding or fixing a site:
@@ -211,6 +256,7 @@ When adding or fixing a site:
 5. Keep site-specific logic tightly scoped to the affected host.
 6. If the site is locale-sensitive, add or update `locale` and `acceptLanguage` in `tests/sites.json` and validate the real language variant.
 7. Update [docs/site-support-matrix.md](docs/site-support-matrix.md) when the practical support status changed, especially if you moved a site between "supported", "supported with caveats", and "needs implementation".
+8. If you learn something vendor-specific that is useful but not yet productized, add a note to `docs/cmp-impact-map.md` and, if sensitive or speculative, the private research notes instead of leaving it only in commit history or chat.
 
 As a rule, a small verified API path is better than a large set of guessed selectors.
 

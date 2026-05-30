@@ -149,6 +149,18 @@ What matters:
 - Ketch may present materially different toggle sets, defaults, or legal choices for Quebec, Brazil, Australia, India, and newer US state-law buckets
 - future Ketch work should include a legislation-coverage pass, not just per-site DOM validation
 
+### Shopify Customer Privacy
+**Handler files:** `main.js` + `cmp-api-handler.js` + `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `ceespronkstore.com` | EU | Human-validated May 30, 2026 on a VPN storefront session. Shopify's native consent UI can appear first as a compact lower-left banner (`Accept`, `Decline`, `Manage preferences`) or as the larger preferences dialog, so changes to any of the shared Shopify handlers should be rechecked against both surfaces. |
+
+What matters:
+- Shopify can render duplicate consent nodes with the same IDs, so visible-element targeting matters more than `querySelector` first-match behavior.
+- The compact banner and the full preferences dialog are both valid entry surfaces; support claims should account for both.
+- Geo-sensitive validation matters here: many Shopify storefronts only show this flow consistently from an EU IP.
+
 ### Cookiebot
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
 
@@ -194,14 +206,15 @@ Sites marked 🔵 are lower risk but worth a spot-check if time allows.
 
 | Changed file | Must test | Spot-check |
 |-------------|-----------|------------|
-| `cmp-api-handler.js` | reuters.com, cnbc.com, schwab.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
-| `dom-handler.js` | reuters.com, bloomberg.com, forbes.com, cnbc.com, schwab.com | euronews.com, dw.com |
+| `cmp-api-handler.js` | reuters.com, cnbc.com, schwab.com, ceespronkstore.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
+| `dom-handler.js` | reuters.com, bloomberg.com, forbes.com, cnbc.com, schwab.com, ceespronkstore.com | euronews.com, dw.com |
 | `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, disney.com | ft.com |
+| `rules/cmps.json` (Shopify entry) | ceespronkstore.com | — |
 | `rules/cmps.json` (Sourcepoint entry) | nytimes.com, theverge.com | spiegel.de |
 | `rules/cmps.json` (Didomi entry) | euronews.com | — |
 | `rules/cmps.json` (ConsentManager entry) | dw.com | — |
 | `sp-frame-handler.js` | nytimes.com, theverge.com, theguardian.com, ft.com | wired.com, spiegel.de |
-| `main.js` (coordinator logic) | reuters.com, cnbc.com, schwab.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, euronews.com |
+| `main.js` (coordinator logic) | reuters.com, cnbc.com, schwab.com, ceespronkstore.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, euronews.com |
 | `main.js` (site-specific handler) | Only the one site that handler covers | — |
 | `heuristic.js` | Any site where other tiers fail | — |
 | `tcf-interceptor.js` | nytimes.com (GDPR), spiegel.de | reuters.com |

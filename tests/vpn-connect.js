@@ -63,10 +63,12 @@ if (!VPN_EXT_DIR) {
 const PROFILE_DIR  = process.env.EMC_VPN_PROFILE
   ? path.resolve(process.env.EMC_VPN_PROFILE)
   : path.resolve(__dirname, '..', '.tmp-vpn-profile');
+const BROWSER_HOME_DIR = path.resolve(__dirname, '..', '.tmp-browser-home');
 
 const SCREENSHOT_DIR = path.join(PROFILE_DIR, 'screenshots');
 
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+fs.mkdirSync(BROWSER_HOME_DIR, { recursive: true });
 
 // ── Extension ID detection ────────────────────────────────────────────────────
 // Chrome assigns each loaded extension an ID derived from its public key (or
@@ -106,6 +108,10 @@ async function main() {
       '--no-first-run',
       '--no-default-browser-check',
     ],
+    env: {
+      ...process.env,
+      HOME: BROWSER_HOME_DIR,
+    },
     viewport: { width: 400, height: 600 },
   });
 

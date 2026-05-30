@@ -111,6 +111,7 @@ const CMP_FINGERPRINTS = [
   { name: 'Usercentrics',   scripts: ['app.usercentrics.eu'],                       globals: ['usercentrics', 'UC_UI'],        selectors: ['#usercentrics-root', '.uc-banner-content'] },
   { name: 'Consentmanager', scripts: ['delivery.consentmanager.net'],               globals: ['cmp2'],                         selectors: ['#cmpbox', '.cmpbox'] },
   { name: 'AppConsent',     scripts: ['appconsent.io', 'figconsent.com'],           globals: ['ACFigConsent'],                 selectors: ['.ac-banner', '#fig-consent-banner'] },
+  { name: 'Shopify',        scripts: ['shopifycloud/privacy-banner'],               globals: ['privacyBanner'],                selectors: ['#shopify-pc__banner', '.shopify-pc__banner__dialog', '#shopify-pc__prefs__dialog'] },
   { name: 'Axeptio',        scripts: ['axept.io', 'static.axept.io'],               globals: ['axeptio'],                      selectors: ['#axeptio_overlay', '#axeptio_btn'] },
   { name: 'Orestio/CMP.io', scripts: ['orestbida.github.io', 'cdn.jsdelivr.net/gh/orestbida/cookieconsent'], globals: ['CookieConsentApi'], selectors: ['#cc-main', '.cc-overlay-wrapper'] },
 ];

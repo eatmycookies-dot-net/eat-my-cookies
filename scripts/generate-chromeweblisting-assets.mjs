@@ -8,6 +8,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const EXT_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(EXT_ROOT, "chromeweblisting");
+const RELEASE_VERSION = JSON.parse(
+  fs.readFileSync(path.join(EXT_ROOT, "version.json"), "utf8"),
+).version;
 
 const BRAND = {
   bg: "#f6f2ea",
@@ -560,7 +563,7 @@ async function newPopupPage(browser, server, state) {
           const root = window.location.href.replace(/popup\/popup\.html.*$/, "");
           return `${root}${assetPath}`;
         },
-        getManifest: () => ({ version: "1.0.1" }),
+        getManifest: () => ({ version: RELEASE_VERSION }),
         sendMessage: async (message) => {
           if (message.type === "CLEAR_RECENT_ACTIVITY") {
             localState.stats.recentActivity = [];

@@ -47,6 +47,52 @@ const ONETRUST_ACTIONABLE_SURFACE_SELECTORS = [
   '.category-switch-handler',
   "input[id^='ot-group-id-']",
 ];
+const SHOPIFY_ACTIONABLE_SURFACE_SELECTORS = [
+  '#shopify-pc__banner',
+  '.shopify-pc__banner__dialog',
+  '#shopify-pc__prefs__dialog',
+  '.shopify-pc__prefs__dialog',
+  '#shopify-pc__banner__btn-accept',
+  '#shopify-pc__banner__btn-decline',
+  '#shopify-pc__banner__btn-manage-prefs',
+  '#shopify-pc__prefs__header-accept',
+  '#shopify-pc__prefs__header-decline',
+  '#shopify-pc__prefs__header-save',
+  '#shopify-pc__prefs__preferences-input',
+  '#shopify-pc__prefs__marketing-input',
+  '#shopify-pc__prefs__analytics-input',
+];
+const SHOPIFY_BANNER_ACCEPT_SELECTORS = [
+  '#shopify-pc__banner__btn-accept',
+  'button.shopify-pc__banner__btn-accept',
+];
+const SHOPIFY_BANNER_DECLINE_SELECTORS = [
+  '#shopify-pc__banner__btn-decline',
+  'button.shopify-pc__banner__btn-decline',
+];
+const SHOPIFY_BANNER_MANAGE_SELECTORS = [
+  '#shopify-pc__banner__btn-manage-prefs',
+  'button.shopify-pc__banner__btn-manage-prefs',
+  'button[aria-haspopup="dialog"].shopify-pc__banner__btn-manage-prefs',
+];
+const SHOPIFY_PREFS_ACCEPT_SELECTORS = [
+  '#shopify-pc__prefs__header-accept',
+  'button.shopify-pc__prefs__header-accept',
+];
+const SHOPIFY_PREFS_DECLINE_SELECTORS = [
+  '#shopify-pc__prefs__header-decline',
+  'button.shopify-pc__prefs__header-decline',
+];
+const SHOPIFY_PREFS_SAVE_SELECTORS = [
+  '#shopify-pc__prefs__header-save',
+  'button.shopify-pc__prefs__header-save',
+];
+const SHOPIFY_PREFS_CLOSE_SELECTORS = [
+  '#shopify-pc__prefs__header-close',
+  'button.shopify-pc__prefs__header-close',
+];
+const SHOPIFY_STABLE_HIDDEN_MS = 1500;
+const SHOPIFY_DISMISS_TIMEOUT_MS = 7000;
 
 async function runDOMHandler(prefs) {
   const cmpsUrl = chrome.runtime.getURL('rules/cmps.json');
@@ -57,54 +103,46 @@ async function runDOMHandler(prefs) {
 
   return new Promise((resolve) => {
     const start = Date.now();
+    let done = false;
+    let running = false;
+
+    const checkOnce = async () => {
+      if (done || running) return;
+      running = true;
+      try {
+        const result = await tryCMPs(cmps, prefs);
+        if (result && !done) {
+          done = true;
+          resolve(result);
+          return;
+        }
+        if (Date.now() - start > DOM_TIMEOUT_MS && !done) {
+          done = true;
+          resolve(null);
+        }
+      } finally {
+        running = false;
+      }
+    };
+
+    for (const ms of [500, 1200, 2500, 4500, 8000]) {
+      setTimeout(checkOnce, ms);
+    }
+    setTimeout(() => {
+      if (!done) {
+        done = true;
+        resolve(null);
+      }
+    }, DOM_TIMEOUT_MS);
 
     if (isSPA()) {
       // SPAs generate continuous DOM mutations. Polling at fixed intervals avoids
       // observer-driven re-entry loops after we've already handled the banner.
-      let done = false;
-      let running = false;
-
-      const checkOnce = async () => {
-        if (done || running) return;
-        running = true;
-        try {
-          const result = await tryCMPs(cmps, prefs);
-          if (result && !done) {
-            done = true;
-            resolve(result);
-          } else if (Date.now() - start > DOM_TIMEOUT_MS && !done) {
-            done = true;
-            resolve(null);
-          }
-        } finally {
-          running = false;
-        }
-      };
-
-      for (const ms of [500, 1200, 2500, 4500, 8000]) {
-        setTimeout(checkOnce, ms);
-      }
-      setTimeout(() => { if (!done) { done = true; resolve(null); } }, DOM_TIMEOUT_MS);
+      return;
     } else {
-      let running = false;
-
       const observer = new MutationObserver(async () => {
-        if (running) return;
-        running = true;
-        try {
-          const result = await tryCMPs(cmps, prefs);
-          if (result) {
-            observer.disconnect();
-            resolve(result);
-            return;
-          }
-          if (Date.now() - start > DOM_TIMEOUT_MS) {
-            observer.disconnect();
-            resolve(null);
-          }
-        } finally {
-          running = false;
-        }
+        await checkOnce();
+        if (done) observer.disconnect();
       });
 
       observer.observe(document.body ?? document.documentElement, {
@@ -154,6 +192,14 @@ async function tryCMPs(cmps, prefs) {
     if (cmp.id === 'onetrust' && prefs.globalPreference !== 'accept_all') {
       if (await executeOneTrustRejectFlow(cmp, host)) {
         return { method: `dom:${cmp.id}`, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'shopify') {
+      if (prefs.globalPreference === 'custom') continue;
+      if (await executeShopifyFlow(cmp, prefs)) {
+        const suffix = prefs.globalPreference === 'custom' ? ':custom' : '';
+        return { method: `dom:${cmp.id}${suffix}`, cmpName: cmp.name };
       }
       continue;
     }
@@ -418,6 +464,101 @@ function clickUSNatSubmitIfPresent() {
   return dispatchSyntheticClick(btn);
 }
 
+async function executeShopifyFlow(cmp, prefs) {
+  if (!hasVisibleSelector(SHOPIFY_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  const bannerRoot = firstVisibleElement(['#shopify-pc__banner', '.shopify-pc__banner__dialog']);
+  const prefsRoot = firstVisibleElement(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog']);
+  const desiredStates = {
+    preferences: Boolean(prefs.functional) || prefs.uncategorized === 'accept',
+    marketing: Boolean(prefs.advertising),
+    analytics: Boolean(prefs.analytics),
+  };
+  const stateValues = Object.values(desiredStates);
+  const allDesiredOn = stateValues.length > 0 && stateValues.every(Boolean);
+  const allDesiredOff = stateValues.length > 0 && stateValues.every((value) => !value);
+
+  if (allDesiredOn && (
+    clickFirstVisibleWithin(bannerRoot ?? prefsRoot, [...SHOPIFY_BANNER_ACCEPT_SELECTORS, ...SHOPIFY_PREFS_ACCEPT_SELECTORS]) ||
+    clickFirstVisible([...SHOPIFY_BANNER_ACCEPT_SELECTORS, ...SHOPIFY_PREFS_ACCEPT_SELECTORS]) ||
+    clickShopifyButtonByText(/accept all/i, bannerRoot ?? prefsRoot)
+  )) {
+    return waitForShopifyDismissal(cmp);
+  }
+
+  if (allDesiredOff && (
+    clickFirstVisibleWithin(bannerRoot ?? prefsRoot, [...SHOPIFY_BANNER_DECLINE_SELECTORS, ...SHOPIFY_PREFS_DECLINE_SELECTORS]) ||
+    clickFirstVisible([...SHOPIFY_BANNER_DECLINE_SELECTORS, ...SHOPIFY_PREFS_DECLINE_SELECTORS]) ||
+    clickShopifyButtonByText(/(?:decline|reject) all/i, bannerRoot ?? prefsRoot)
+  )) {
+    return waitForShopifyDismissal(cmp);
+  }
+
+  const prefsVisible = hasVisibleSelector(shopifyPreferencesSurfaceSelectors());
+  const opened = prefsVisible || clickFirstVisibleWithin(bannerRoot, [
+    ...SHOPIFY_BANNER_MANAGE_SELECTORS,
+    'button[aria-label*="Manage" i]',
+    'button[title*="Manage" i]',
+  ]) || clickFirstVisible([
+    ...SHOPIFY_BANNER_MANAGE_SELECTORS,
+    'button[aria-label*="Manage" i]',
+    'button[title*="Manage" i]',
+  ]);
+  if (!opened) return false;
+
+  if (!(await waitForAnyVisible(shopifyPreferencesSurfaceSelectors(), 4000))) {
+    return false;
+  }
+
+  const activePrefsRoot = firstVisibleElement(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog']) ?? prefsRoot;
+
+  if (allDesiredOn && (
+    clickFirstVisibleWithin(activePrefsRoot, SHOPIFY_PREFS_ACCEPT_SELECTORS) ||
+    clickFirstVisible(SHOPIFY_PREFS_ACCEPT_SELECTORS) ||
+    clickShopifyButtonByText(/accept all/i, activePrefsRoot)
+  )) {
+    return waitForShopifyDismissal(cmp);
+  }
+
+  if (allDesiredOff && (
+    clickFirstVisibleWithin(activePrefsRoot, SHOPIFY_PREFS_DECLINE_SELECTORS) ||
+    clickFirstVisible(SHOPIFY_PREFS_DECLINE_SELECTORS) ||
+    clickShopifyButtonByText(/(?:decline|reject) all/i, activePrefsRoot)
+  )) {
+    return waitForShopifyDismissal(cmp);
+  }
+
+  const appliedPreferences = await setShopifyGroupStateById(activePrefsRoot, 'shopify-pc__prefs__preferences-input', desiredStates.preferences);
+  const appliedMarketing = await setShopifyGroupStateById(activePrefsRoot, 'shopify-pc__prefs__marketing-input', desiredStates.marketing);
+  const appliedAnalytics = await setShopifyGroupStateById(activePrefsRoot, 'shopify-pc__prefs__analytics-input', desiredStates.analytics);
+
+  if (!appliedPreferences || !appliedMarketing || !appliedAnalytics) {
+    return false;
+  }
+
+  await delay(250);
+
+  const saveClicked = clickFirstVisibleWithin(activePrefsRoot, [
+    ...SHOPIFY_PREFS_SAVE_SELECTORS,
+    'button[aria-label*="Save" i]',
+    'button[title*="Save" i]',
+  ]) || clickFirstVisible([
+    ...SHOPIFY_PREFS_SAVE_SELECTORS,
+    'button[aria-label*="Save" i]',
+    'button[title*="Save" i]',
+  ]) || clickShopifyButtonByText(
+    /save (?:my )?choices/i,
+    activePrefsRoot
+  );
+  if (!saveClicked) {
+    return false;
+  }
+
+  return waitForShopifyDismissal(cmp);
+}
+
 function oneTrustSaveSelectors(host = location.hostname) {
   const selectors = [
     '.save-preference-btn-handler',
@@ -465,6 +606,99 @@ function setOneTrustGroupStateById(id, checked) {
   if (Boolean(toggle.checked) === checked) return true;
   forceOneTrustToggleState(toggle, checked);
   return true;
+}
+
+function selectorActions(selectors) {
+  return selectors.map((selector) => ({ type: 'click', selector }));
+}
+
+function waitForShopifyDismissal(cmp) {
+  return waitForDismissal(cmp, selectorActions(shopifyDismissSelectors()), SHOPIFY_DISMISS_TIMEOUT_MS);
+}
+
+function shopifyPreferencesSurfaceSelectors() {
+  return [
+    '#shopify-pc__prefs__dialog',
+    '.shopify-pc__prefs__dialog',
+    '#shopify-pc__prefs__header-save',
+    '#shopify-pc__prefs__preferences-input',
+    '#shopify-pc__prefs__marketing-input',
+    '#shopify-pc__prefs__analytics-input',
+  ];
+}
+
+function shopifyDismissSelectors() {
+  return [
+    '#shopify-pc__banner',
+    '.shopify-pc__banner__dialog',
+    '#shopify-pc__prefs',
+    '#shopify-pc__prefs__dialog',
+    '.shopify-pc__prefs__dialog',
+    ...SHOPIFY_BANNER_MANAGE_SELECTORS,
+    ...SHOPIFY_BANNER_ACCEPT_SELECTORS,
+    ...SHOPIFY_BANNER_DECLINE_SELECTORS,
+    ...SHOPIFY_PREFS_ACCEPT_SELECTORS,
+    ...SHOPIFY_PREFS_DECLINE_SELECTORS,
+    ...SHOPIFY_PREFS_SAVE_SELECTORS,
+    ...SHOPIFY_PREFS_CLOSE_SELECTORS,
+  ];
+}
+
+function clickShopifyButtonByText(pattern, root) {
+  if (!root) return false;
+  const buttons = root.querySelectorAll('button, [role="button"]');
+  for (const button of buttons) {
+    if (!isVisible(button)) continue;
+    const text = button.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!pattern.test(text)) continue;
+    return dispatchSyntheticClick(button);
+  }
+  return false;
+}
+
+async function setShopifyGroupStateById(root, id, checked) {
+  const toggle = findVisibleElementById(id, root);
+  if (!toggle || toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+  if (Boolean(toggle.checked) === checked) return true;
+
+  const interactionTarget = findShopifyToggleInteractionTarget(toggle);
+  if (interactionTarget && dispatchSyntheticClick(interactionTarget)) {
+    if (await waitForShopifyToggleState(toggle, checked, 700)) return true;
+  }
+
+  forceShopifyToggleState(toggle, checked);
+  return waitForShopifyToggleState(toggle, checked, 700);
+}
+
+function findShopifyToggleInteractionTarget(toggle) {
+  const nestedLabel = toggle.closest?.('label');
+  if (nestedLabel && isVisible(nestedLabel)) return nestedLabel;
+  const explicitLabel = toggle.labels?.[0];
+  if (explicitLabel && isVisible(explicitLabel)) return explicitLabel;
+  if (isVisible(toggle)) return toggle;
+  return nestedLabel || explicitLabel || toggle;
+}
+
+async function waitForShopifyToggleState(toggle, checked, timeoutMs = 700) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (Boolean(toggle.checked) === checked) return true;
+    await delay(50);
+  }
+  return Boolean(toggle.checked) === checked;
+}
+
+function forceShopifyToggleState(toggle, checked) {
+  const nativeSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype, 'checked'
+  )?.set;
+  if (nativeSetter) {
+    nativeSetter.call(toggle, checked);
+  } else {
+    toggle.checked = checked;
+  }
+  toggle.dispatchEvent(new Event('input', { bubbles: true }));
+  toggle.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function scheduleZoomOneTrustCleanup() {
@@ -559,18 +793,26 @@ function isVisible(el) {
 
 function clickFirstVisible(selectors) {
   for (const selector of selectors) {
-    const el = document.querySelector(selector);
-    if (!el || !isVisible(el)) continue;
+    const el = firstVisibleElement([selector]);
+    if (!el) continue;
+    return dispatchSyntheticClick(el);
+  }
+  return false;
+}
+
+function clickFirstVisibleWithin(root, selectors) {
+  if (!root) return false;
+  for (const selector of selectors) {
+    const el = firstVisibleElementWithin(root, [selector]);
+    if (!el) continue;
     return dispatchSyntheticClick(el);
   }
   return false;
 }
 
 function hasVisibleSelector(selectors) {
-  return selectors.some((selector) => {
-    const el = document.querySelector(selector);
-    return Boolean(el && isVisible(el));
-  });
+  return selectors.some((selector) => document.querySelectorAll(selector).length > 0 &&
+    Array.from(document.querySelectorAll(selector)).some((el) => isVisible(el)));
 }
 
 function disableVisibleOneTrustToggles() {
@@ -629,10 +871,7 @@ function forceOneTrustToggleState(toggle, checked) {
 async function waitForAnyVisible(selectors, timeoutMs = 3000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (el && isVisible(el)) return true;
-    }
+    if (selectors.some((selector) => firstVisibleElement([selector]))) return true;
     await delay(200);
   }
   return false;
@@ -644,15 +883,23 @@ async function waitForDismissal(cmp, actions, timeoutMs = 4000) {
     ...actions.filter((a) => a.type === 'click').map((a) => a.selector),
   ];
 
-  const requiresStableHidden = cmp.id === 'onetrust' && ZOOM_ONETRUST_HOSTS.has(location.hostname);
-  const stableHiddenMs = requiresStableHidden ? 1200 : 0;
-  if (requiresStableHidden) timeoutMs += 2500;
+  const requiresStableHidden =
+    (cmp.id === 'onetrust' && ZOOM_ONETRUST_HOSTS.has(location.hostname)) ||
+    cmp.id === 'shopify';
+  const stableHiddenMs =
+    cmp.id === 'shopify'
+      ? SHOPIFY_STABLE_HIDDEN_MS
+      : requiresStableHidden
+        ? 1200
+        : 0;
+  if (cmp.id === 'onetrust' && ZOOM_ONETRUST_HOSTS.has(location.hostname)) {
+    timeoutMs += 2500;
+  }
   const started = Date.now();
   let hiddenSince = null;
   while (Date.now() - started < timeoutMs) {
     const stillVisible = selectors.some((selector) => {
-      const el = document.querySelector(selector);
-      return el && isVisible(el);
+      return Array.from(document.querySelectorAll(selector)).some((el) => isVisible(el));
     });
     if (!stillVisible) {
       if (!requiresStableHidden) return true;
@@ -664,6 +911,34 @@ async function waitForDismissal(cmp, actions, timeoutMs = 4000) {
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   return false;
+}
+
+function firstVisibleElement(selectors) {
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (isVisible(el)) return el;
+    }
+  }
+  return null;
+}
+
+function firstVisibleElementWithin(root, selectors) {
+  if (!root) return null;
+  for (const selector of selectors) {
+    for (const el of root.querySelectorAll(selector)) {
+      if (isVisible(el)) return el;
+    }
+  }
+  return null;
+}
+
+function findVisibleElementById(id, root = document) {
+  const escapedId = typeof CSS?.escape === 'function' ? CSS.escape(id) : id;
+  const matches = Array.from(root.querySelectorAll(`#${escapedId}`));
+  const visibleMatch = matches.find((el) => isVisible(el));
+  if (visibleMatch) return visibleMatch;
+  if (root !== document) return null;
+  return matches.at(-1) ?? null;
 }
 
 function isCMPBlockedOnHost(cmpId, host, preference) {

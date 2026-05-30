@@ -56,6 +56,7 @@ const VPN_PROFILE_DIR = vpnProfileArg
   : process.env.EMC_VPN_PROFILE
     ? path.resolve(process.env.EMC_VPN_PROFILE)
     : path.resolve(__dirname, '..', '.tmp-vpn-profile');
+const BROWSER_HOME_DIR = path.resolve(__dirname, '..', '.tmp-browser-home');
 
 function argVal(args, key) {
   const match = args.find(a => a.startsWith(key + '='));
@@ -227,6 +228,14 @@ async function testSite(page, site) {
     detail += '; toggle state verified';
   }
 
+  if (site.expectedShopifyConsent) {
+    const mismatch = await readShopifyConsentMismatch(page, site.expectedShopifyConsent);
+    if (mismatch) {
+      return { status: 'FAIL', detail: mismatch };
+    }
+    detail += '; Shopify consent verified';
+  }
+
   if (site.followUpNavigation?.enabled) {
     const followUp = await runFollowUpNavigation(page, site);
     if (!followUp.ok) {
@@ -241,6 +250,37 @@ async function testSite(page, site) {
   }
 
   return { status: 'PASS', detail };
+}
+
+async function readShopifyConsentMismatch(page, expected) {
+  const actual = await page.evaluate(() => {
+    const api = window.Shopify?.customerPrivacy ?? window.Shopify?.trackingConsent;
+    return api?.currentVisitorConsent?.() ?? null;
+  });
+
+  if (!actual) {
+    return 'Banner dismissed but Shopify consent API was unavailable';
+  }
+
+  const normalizedActual = {
+    marketing: normalizeShopifyConsent(actual.marketing),
+    analytics: normalizeShopifyConsent(actual.analytics),
+    preferences: normalizeShopifyConsent(actual.preferences),
+  };
+
+  for (const [key, wanted] of Object.entries(expected)) {
+    if (normalizedActual[key] !== wanted) {
+      return `Banner dismissed but Shopify consent ${key} expected=${wanted} actual=${normalizedActual[key]}`;
+    }
+  }
+
+  return null;
+}
+
+function normalizeShopifyConsent(value) {
+  if (value === 'yes' || value === true) return true;
+  if (value === 'no' || value === false) return false;
+  return null;
 }
 
 async function buildFailureDetail(page, site, beforeStats, prefix) {
@@ -480,11 +520,11 @@ function isAccessibilityHelpUrl(url) {
 function buildCategoryPreferences(globalPreference, overrides = {}) {
   const accept = globalPreference === 'accept_all';
   return {
-    functional: true,
-    analytics: accept,
-    advertising: accept,
+    functional: overrides.functional ?? true,
+    analytics: overrides.analytics ?? accept,
+    advertising: overrides.advertising ?? accept,
     ccpaDoNotSell: overrides.ccpaDoNotSell ?? !accept,
-    uncategorized: accept ? 'accept' : 'reject',
+    uncategorized: overrides.uncategorized ?? (accept ? 'accept' : 'reject'),
   };
 }
 
@@ -536,7 +576,7 @@ async function writePreferences(browser, preference, site = null) {
     globalPreference: preference,
     onboardingComplete: true,
     showBadgeCount: true,
-    categoryPreferences: buildCategoryPreferences(preference, {
+    categoryPreferences: buildCategoryPreferences(preference, site?.categoryPreferences ?? {
       ccpaDoNotSell: site?.ccpaDoNotSell,
     }),
     milestonesShown: [],
@@ -624,6 +664,7 @@ async function readStatsSnapshot(browser) {
   if (useVpn) {
     fs.mkdirSync(VPN_PROFILE_DIR, { recursive: true });
   }
+  fs.mkdirSync(BROWSER_HOME_DIR, { recursive: true });
 
   const browser = await chromium.launchPersistentContext(userDataDir, {
     headless: !headed && !useVpn,   // --vpn always forces headed
@@ -632,6 +673,10 @@ async function readStatsSnapshot(browser) {
       `--load-extension=${extPaths.join(',')}`,
       '--no-sandbox',
     ],
+    env: {
+      ...process.env,
+      HOME: BROWSER_HOME_DIR,
+    },
     viewport: { width: 1280, height: 800 },
   });
 

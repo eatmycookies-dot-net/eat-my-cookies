@@ -7,51 +7,83 @@
   "author": "Eat My Cookies",
   "homepage_url": "https://eatmycookies.net",
   "default_locale": "en",
-
-  "permissions": ["storage", "scripting", "contextMenus", "tabs", "browsingData"],
-  "host_permissions": ["<all_urls>"],
-
+  "permissions": [
+    "storage",
+    "scripting",
+    "contextMenus",
+    "tabs",
+    "browsingData"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
   },
-
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/bbc-sourcepoint-hook.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/bbc-sourcepoint-hook.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/bbc-preferences.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/bbc-preferences.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/latimes-privacy.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/latimes-privacy.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/latimes-interstitial.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/latimes-interstitial.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/tcf-interceptor.js", "content/gcm-injector.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/tcf-interceptor.js",
+        "content/gcm-injector.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/cmp-api-handler.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/cmp-api-handler.js"
+      ],
       "run_at": "document_idle",
       "world": "MAIN"
     },
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "js": [
         "content/dom-handler.js",
         "content/heuristic.js",
@@ -61,21 +93,29 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/sp-frame-handler.js", "content/cm-frame-handler.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/sp-frame-handler.js",
+        "content/cm-frame-handler.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true,
       "match_about_blank": true
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/appconsent-frame-handler.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/appconsent-frame-handler.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true,
       "match_about_blank": true
     }
   ],
-
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
@@ -86,23 +126,23 @@
     },
     "default_title": "__MSG_extensionName__"
   },
-
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-
   "options_page": "onboarding/onboarding.html",
-
   "web_accessible_resources": [
     {
-      "resources": ["rules/cmps.json"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "rules/cmps.json"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
-
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   }

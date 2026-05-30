@@ -22,6 +22,7 @@ These sites currently behave well for the tested flows and have recent human con
 | `elpais.com` | Supported | Human-validated: Accept, Reject, and Custom behaved correctly. |
 | `ft.com` | Supported | Human-validated as working well. |
 | `www.theguardian.com` | Supported | Human-validated: homepage Accept and Reject currently work. |
+| `ceespronkstore.com` | Supported | Shopify Customer Privacy storefront. Human-validated May 30, 2026: `Accept All`, `Reject All`, and `Custom` are expected to work from an EU/VPN storefront session. Important nuance: Shopify can surface either the lower-left banner or the full preferences dialog first depending on timing and geo. |
 
 ## Automation-Covered
 

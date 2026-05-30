@@ -24,6 +24,10 @@ const ROOT = path.resolve(__dirname, "..");
 const DIST = path.join(ROOT, "dist");
 const RELEASES = path.join(ROOT, "releases");
 const BUILD_META_FILE = "build-meta.json";
+const VERSION_FILE = path.join(ROOT, "version.json");
+const PACKAGE_FILE = path.join(ROOT, "package.json");
+const MANIFEST_FILE = path.join(ROOT, "manifest.json");
+const SITES_FILE = path.join(ROOT, "tests", "sites.json");
 
 const INCLUDE = [
   "manifest.json",
@@ -132,6 +136,17 @@ function validateManifest(distPath) {
     }
   }
   return errs;
+}
+
+function validateVersionSync(expectedVersion) {
+  const files = [
+    ["package.json", readJson(PACKAGE_FILE).version],
+    ["manifest.json", readJson(MANIFEST_FILE).version],
+    ["tests/sites.json", readJson(SITES_FILE).version],
+  ];
+  return files
+    .filter(([, version]) => version !== expectedVersion)
+    .map(([file, version]) => `${file} version ${version} does not match version.json (${expectedVersion})`);
 }
 
 function parseArgs(argv) {
@@ -279,9 +294,7 @@ function writeBuildMeta(distPath, version) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const manifest = readJson(path.join(ROOT, "manifest.json"));
-  const version = manifest.version;
-
+  const version = readJson(VERSION_FILE).version;
   console.log("\nEat My Cookies — build\n");
   console.log(`  Version : ${version}`);
 
@@ -310,6 +323,7 @@ function main() {
   console.log(`  Generated: ${BUILD_META_FILE.padEnd(29)} (1 file)`);
 
   const errors = validateManifest(DIST);
+  errors.push(...validateVersionSync(version));
   const size = dirSize(DIST);
 
   console.log(`\n  Files   : ${totalFiles}`);
@@ -329,6 +343,12 @@ function main() {
     const zipName = `eat-my-cookies-v${version}.zip`;
     const zipPath = path.join(RELEASES, zipName);
     ensureDir(RELEASES);
+    if (exists(zipPath)) {
+      console.log(`\n  ERROR   : releases/${zipName} already exists`);
+      console.log("  Hint    : bump the extension version before packaging a new release.");
+      console.log("            Try: npm run version:patch");
+      process.exit(1);
+    }
     fs.writeFileSync(zipPath, createZipBuffer(DIST, new Set([BUILD_META_FILE])));
     const zipSize = fs.statSync(zipPath).size;
     console.log(`  Zipped  : releases/${zipName} (${human(zipSize)})`);

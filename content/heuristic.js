@@ -50,7 +50,7 @@ const MODAL_SELECTORS = [
 ];
 
 function runHeuristic(prefs) {
-  if (shouldSkipHeuristic()) return null;
+  if (shouldSkipHeuristic(prefs)) return null;
   const patterns = prefs.globalPreference === 'accept_all' ? ACCEPT_PATTERNS : REJECT_PATTERNS;
   const candidates = collectCandidates(patterns);
   if (!candidates.length) return null;
@@ -104,7 +104,8 @@ function isVisible(el) {
   return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
 }
 
-function shouldSkipHeuristic() {
+function shouldSkipHeuristic(prefs) {
+  if (prefs?.globalPreference === 'custom') return true;
   if (document.querySelector("[id^='sp_message_container'], [id^='sp_message_iframe']")) return true;
   return ['www.theguardian.com', 'www.euronews.com', 'www.ft.com', 'www.dw.com', 'www.bbc.com', 'latimes.com', 'www.latimes.com', 'membership.latimes.com'].includes(location.hostname);
 }

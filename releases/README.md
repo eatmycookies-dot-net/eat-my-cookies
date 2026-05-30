@@ -6,6 +6,50 @@ Project message for release context:
 
 Cookie banners are annoying. Eat My Cookies is a free Chrome extension that handles them based on user preferences, so people don't have to fix them site by site. No backend, no tracking, no ads.
 
+## Upcoming (unreleased)
+
+### Shopify Customer Privacy
+
+- Added expected support for Shopify's native Customer Privacy banner and preferences flow.
+- Human validation on `ceespronkstore.com` now confirms the core Shopify flows are expected to work:
+  - `Accept All` records activity and dismisses the banner.
+  - `Reject All` records activity and dismisses the banner.
+  - `Custom` is now expected to complete on Shopify storefronts, though timing around which Shopify surface appears first can still vary by store and geo.
+- Contributor note: for geo-sensitive Shopify storefronts, prefer an EU/VPN validation path before claiming regressions or support gaps.
+
+### Ketch / Forbes
+
+- Refactored Ketch into a reusable privacy-center handler instead of keeping Forbes on a one-off site path.
+- Added explicit Ketch support for `forbes.com`, `www.forbes.com`, `ketch.com`, and `www.ketch.com`.
+- Fixed Forbes EU banner handling so visible `Reject All Non-Required` and `Manage Preferences` paths are treated as actionable instead of falsely flagged as accept-only.
+- Fixed Forbes/Ketch stats reporting when a banner action transitions into the settings surface before the final save/report step.
+- Stabilized Ketch mixed custom handling:
+  - Ketch demo pages no longer fight the rendered UI as aggressively when applying mixed custom states.
+  - Forbes mixed custom now uses a Ketch reject baseline before re-enabling selected categories, which fixed the real-world “all on” / “all off” / “mixed custom” split.
+
+### Schwab
+
+- Prevented false-positive ConsentManager handling from redirecting logged-in Schwab users away from the account summary page.
+- Added OneTrust coverage for Schwab privacy-choice flows on `schwab.com` / `www.schwab.com`, including the `Your Privacy Choices` modal used on agreement/resource pages.
+- Documented Schwab support and caveats in the support matrix and CMP impact notes.
+
+### Bloomberg
+
+- Tightened Bloomberg-specific Sourcepoint routing so EU/GDPR flows are not mistaken for the US CCPA privacy-manager path.
+- Fixed Bloomberg GDPR reject handling for the first-layer Sourcepoint modal and improved modal dismissal behavior.
+- Fixed Bloomberg activity reporting so successful dismissals count even when the iframe closes quickly.
+
+### VPN Validation / Tooling
+
+- Added Browsec-based VPN validation tooling and contributor guidance for EU/IP-sensitive sites.
+- Added CMP discovery tooling for research across real geo variants.
+- Added focused live diagnostic scripts for Bloomberg and Forbes exception flows.
+
+### Release Packaging
+
+- Release packages use the plain semver filename, for example `eat-my-cookies-v1.0.1.zip`.
+- `npm run build:zip` now refuses to overwrite an existing zip for the current version, so you must intentionally bump semver before cutting another release artifact.
+
 ## v1.0.1
 
 ### OneTrust / Versant
@@ -64,8 +108,9 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Packaging
 
-- Upload artifact: `eat-my-cookies-v1.0.1.zip`
+- Upload artifact: `eat-my-cookies-v<version>.zip`
 - Run `npm run build` to generate a fresh `dist/`.
+- Run `npm run version:patch` (or `version:minor` / `version:major`) before packaging a new public release for an already-published version line.
 - Run `npm run build:zip` to generate a clean Chrome Web Store package in this folder.
 - `npm run verify` should pass before submission.
 - The submission zip should not contain hidden junk such as `.DS_Store`.
@@ -92,12 +137,14 @@ Suggested review sites:
 - `https://www.bbc.com/`
 - `https://www.latimes.com/`
 - `https://www.theguardian.com/`
+- `https://www.forbes.com/`
 
 Reviewer notes:
 
 - The extension runs locally in the browser.
 - It does not use remote code.
 - Some sites expose custom, paywall-like, or limited consent flows; in those cases the extension may show a warning or site-specific behavior instead of claiming success.
+- Some flows are geo-sensitive. Forbes, Bloomberg, DW, and similar sites can present materially different consent UI outside the US.
 
 ### Permissions Summary
 

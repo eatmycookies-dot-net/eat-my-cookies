@@ -232,6 +232,7 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain("siteLabel: 'Ketch'");
     expect(source).toContain("privacyCenterTitle: 'forbes privacy center'");
     expect(source).toContain("privacyCenterTitle: 'your privacy'");
+    expect(source).toContain('customRejectBaseline: true');
     expect(source).toContain('getKetchSiteConfig');
     expect(source).toContain('handleKetchPrivacyCenter');
     expect(source).toContain('const prefersAcceptAll = isEffectivelyAcceptAllPrefs(prefs);');
@@ -301,10 +302,10 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('const allDesiredOff = mutableRules.length > 0 && mutableRules.every((rule) => desiredStates[rule.id] === false);');
     expect(source).toContain('if (allDesiredOn && clickElement(config.bannerAcceptSelectors)) {');
     expect(source).toContain('if (allDesiredOff && clickElement(config.bannerRejectSelectors)) {');
-    expect(source).not.toContain('let usedRejectBaseline = false;');
-    expect(source).not.toContain('await waitForKetchRulesState(mutableRules, false, 1200);');
-    expect(source).not.toContain('if (mutableRules.length > 0 && clickElement(config.bannerRejectSelectors)) {');
-    expect(source).not.toContain('if (usedRejectBaseline && !desired) continue;');
+    expect(source).toContain('let usedRejectBaseline = false;');
+    expect(source).toContain('config.customRejectBaseline');
+    expect(source).toContain('await waitForKetchRulesState(mutableRules, false, 1500);');
+    expect(source).toContain('if (usedRejectBaseline && !desired) continue;');
     expect(source).toContain('await applyKetchRuleState(rule, desired);');
     expect(source).toContain('const trustCurrentState = options.trustCurrentState !== false;');
     expect(source).toContain('if (interactionTarget && interactionTarget !== control) {');
@@ -351,6 +352,29 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('await flushPendingPreHandleAction(currentRunSignature);');
     expect(source).toContain('if (!force && hadPendingPreHandleAction) return;');
     expect(source).toContain('if (!force && isFlowCoolingDown(runCooldownScope(currentRunSignature))) return;');
+  });
+
+  it('holds Shopify custom on the main-world path and redispatches prefs while the API initializes', () => {
+    expect(source).toContain('SHOPIFY_MAIN_WORLD_TIMEOUT_MS = 5000');
+    expect(source).toContain("if (prefs?.globalPreference === 'accept_all') {");
+    expect(source).toContain("if (prefs?.globalPreference === 'reject_all') {");
+    expect(source).toContain("if (prefs?.globalPreference !== 'custom') return false;");
+    expect(source).toContain("await reportAction('site_specific:shopify:accept_all', prefs.globalPreference);");
+    expect(source).toContain("await reportAction('site_specific:shopify:reject_all', prefs.globalPreference);");
+    expect(source).toContain('return activateShopifyButton(el);');
+    expect(source).toContain('function activateShopifyButton(el) {');
+    expect(source).toContain('const preferShopifyMainWorld = shouldUseShopifyMainWorldOnly(prefs);');
+    expect(source).toContain('const mainWorldResultPromise = waitForMainWorldResult(');
+    expect(source).toContain('preferShopifyMainWorld ? SHOPIFY_MAIN_WORLD_TIMEOUT_MS : 3000');
+    expect(source).toContain('preferShopifyMainWorld ? prefs : null');
+    expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: prefs }));");
+    expect(source).toContain('const mainWorldResult = await mainWorldResultPromise;');
+    expect(source).toContain('function shouldUseShopifyMainWorldOnly(prefs) {');
+    expect(source).toContain("if (prefs?.globalPreference !== 'custom') return false;");
+    expect(source).toContain("if (prefs?.globalPreference !== 'custom' || shopifyWatchStarted) return;");
+    expect(source).toContain("'#shopify-pc__prefs__header-save'");
+    expect(source).toContain("intervalId = setInterval(() => {");
+    expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: redispatchPrefs }));");
   });
 });
 
@@ -475,6 +499,23 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain('handleOneTrustPrivacyCenterAccept');
     expect(source).toContain('enableVisibleOneTrustToggles();');
   });
+
+  it('uses Shopify privacyBanner and customerPrivacy APIs before falling back to DOM work', () => {
+    expect(source).toContain('privacyBanner: async (w, prefs) => {');
+    expect(source).toContain('if (!w.privacyBanner) return false;');
+    expect(source).toContain("if (prefs.globalPreference === 'custom') return false;");
+    expect(source).toContain("typeof w.privacyBanner.showPreferences === 'function'");
+    expect(source).toContain('getShopifyConsentApi');
+    expect(source).toContain('waitForShopifyConsentApi');
+    expect(source).toContain('submitShopifyConsent');
+    expect(source).toContain('waitForShopifyConsent');
+    expect(source).toContain('closeShopifyPrivacyUi');
+    expect(source).toContain('cleanupShopifyPrivacyArtifacts');
+    expect(source).toContain('cmp_api:Shopify:custom');
+    expect(source).toContain("'#shopify-pc__prefs__header-save'");
+    expect(source).toContain("w.Shopify?.customerPrivacy ?? w.Shopify?.trackingConsent ?? null");
+    expect(source).toContain("normalizeShopifyConsent(current.preferences) === desiredConsent.preferences");
+  });
 });
 
 describe('dom-handler.js — BBC onetrust save guard', () => {
@@ -531,6 +572,59 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
   it('includes Schwab in the DOM OneTrust privacy-choice accept allowlist', () => {
     expect(source).toContain("'www.schwab.com'");
     expect(source).toContain("'schwab.com'");
+  });
+
+  it('supports Shopify banner and preferences-dialog handling as a first-class DOM flow', () => {
+    const shopifyForceBlock = source.slice(
+      source.indexOf('function forceShopifyToggleState(toggle, checked) {'),
+      source.indexOf('function scheduleZoomOneTrustCleanup()', source.indexOf('function forceShopifyToggleState(toggle, checked) {')),
+    );
+    expect(source).toContain('SHOPIFY_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain('SHOPIFY_BANNER_ACCEPT_SELECTORS');
+    expect(source).toContain('SHOPIFY_BANNER_DECLINE_SELECTORS');
+    expect(source).toContain('SHOPIFY_BANNER_MANAGE_SELECTORS');
+    expect(source).toContain('SHOPIFY_PREFS_ACCEPT_SELECTORS');
+    expect(source).toContain('SHOPIFY_PREFS_DECLINE_SELECTORS');
+    expect(source).toContain('SHOPIFY_PREFS_SAVE_SELECTORS');
+    expect(source).toContain('SHOPIFY_PREFS_CLOSE_SELECTORS');
+    expect(source).toContain("if (cmp.id === 'shopify') {");
+    expect(source).toContain('executeShopifyFlow');
+    expect(source).toContain("'#shopify-pc__banner__btn-manage-prefs'");
+    expect(source).toContain("'#shopify-pc__prefs__header-save'");
+    expect(source).toContain("'#shopify-pc__prefs__header-accept'");
+    expect(source).toContain("'#shopify-pc__prefs__header-decline'");
+    expect(source).toContain("'#shopify-pc__prefs__header-close'");
+    expect(source).toContain("'shopify-pc__prefs__preferences-input'");
+    expect(source).toContain("'shopify-pc__prefs__marketing-input'");
+    expect(source).toContain("'shopify-pc__prefs__analytics-input'");
+    expect(source).toContain("Boolean(prefs.functional) || prefs.uncategorized === 'accept'");
+    expect(source).toContain('setShopifyGroupStateById');
+    expect(source).toContain('forceShopifyToggleState');
+    expect(source).toContain('findShopifyToggleInteractionTarget');
+    expect(source).toContain('waitForShopifyToggleState');
+    expect(source).toContain('clickFirstVisibleWithin');
+    expect(source).toContain('firstVisibleElementWithin');
+    expect(source).toContain('const appliedPreferences = await setShopifyGroupStateById(activePrefsRoot,');
+    expect(source).toContain('const appliedMarketing = await setShopifyGroupStateById(activePrefsRoot,');
+    expect(source).toContain('const appliedAnalytics = await setShopifyGroupStateById(activePrefsRoot,');
+    expect(source).toContain('if (!appliedPreferences || !appliedMarketing || !appliedAnalytics) {');
+    expect(shopifyForceBlock).not.toContain('findShopifyToggleLabel(toggle)');
+    expect(shopifyForceBlock).not.toContain('if (label) dispatchSyntheticClick(label);');
+    expect(source).toContain('clickShopifyButtonByText');
+    expect(source).toContain("const bannerRoot = firstVisibleElement(['#shopify-pc__banner', '.shopify-pc__banner__dialog']);");
+    expect(source).toContain("const prefsRoot = firstVisibleElement(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog']);");
+    expect(source).toContain('clickShopifyButtonByText(/accept all/i, bannerRoot ?? prefsRoot)');
+    expect(source).toContain('clickShopifyButtonByText(/(?:decline|reject) all/i, bannerRoot ?? prefsRoot)');
+    expect(source).toContain("const activePrefsRoot = firstVisibleElement(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog']) ?? prefsRoot;");
+    expect(source).toContain('/save (?:my )?choices/i');
+    expect(source).toContain('/(?:decline|reject) all/i');
+    expect(source).toContain('waitForShopifyDismissal');
+    expect(source).toContain('shopifyDismissSelectors');
+    expect(source).toContain('SHOPIFY_STABLE_HIDDEN_MS = 1500');
+    expect(source).toContain('SHOPIFY_DISMISS_TIMEOUT_MS = 7000');
+    expect(source).toContain("cmp.id === 'shopify'");
+    expect(source).toContain('findVisibleElementById(id, root = document)');
+    expect(source).toContain('firstVisibleElement');
   });
 });
 
@@ -660,6 +754,13 @@ describe('frame handlers — temporary skip guards', () => {
     expect(heuristicSource).toContain("'latimes.com'");
     expect(heuristicSource).toContain("'www.latimes.com'");
     expect(heuristicSource).toContain("'membership.latimes.com'");
+  });
+
+  it('heuristic fallback is disabled for custom preference mode', () => {
+    const mainSource = readSource('content/main.js');
+    expect(heuristicSource).toContain("if (prefs?.globalPreference === 'custom') return true;");
+    expect(mainSource).toContain("if (prefs.globalPreference !== 'custom') {");
+    expect(mainSource).toContain('const heuristicResult = runHeuristic(prefs);');
   });
 
   it('bbc document-start preference seeding writes first-party cookies and clears US privacy state when needed', () => {
