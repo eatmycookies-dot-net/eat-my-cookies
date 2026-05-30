@@ -8,6 +8,10 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Upcoming (unreleased)
 
+---
+
+## v1.1.0
+
 ### CookieScript
 
 - Added full CookieScript support covering `Accept All`, `Reject All`, and `Custom` preference flows.
@@ -57,7 +61,7 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ### Release Packaging
 
-- Release packages use the plain semver filename, for example `eat-my-cookies-v1.0.1.zip`.
+- Release packages use the plain semver filename, for example `eat-my-cookies-v1.1.0.zip`.
 - `npm run build:zip` now refuses to overwrite an existing zip for the current version, so you must intentionally bump semver before cutting another release artifact.
 
 ## v1.0.1
