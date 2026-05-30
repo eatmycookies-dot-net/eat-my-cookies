@@ -504,6 +504,10 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain('privacyBanner: async (w, prefs) => {');
     expect(source).toContain('if (!w.privacyBanner) return false;');
     expect(source).toContain("if (prefs.globalPreference === 'custom') return false;");
+    expect(source).toContain("const bannerClicked = prefs.globalPreference === 'accept_all'");
+    expect(source).toContain("'#shopify-pc__banner__btn-accept'");
+    expect(source).toContain("'#shopify-pc__banner__btn-decline'");
+    expect(source).toContain("return 'cmp_api:Shopify';");
     expect(source).toContain("typeof w.privacyBanner.showPreferences === 'function'");
     expect(source).toContain('getShopifyConsentApi');
     expect(source).toContain('waitForShopifyConsentApi');
@@ -515,6 +519,8 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain("'#shopify-pc__prefs__header-save'");
     expect(source).toContain("w.Shopify?.customerPrivacy ?? w.Shopify?.trackingConsent ?? null");
     expect(source).toContain("normalizeShopifyConsent(current.preferences) === desiredConsent.preferences");
+    expect(source).toContain('return activateVisibleElement(el);');
+    expect(source).toContain('function activateVisibleElement(el) {');
   });
 });
 

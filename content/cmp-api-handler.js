@@ -290,6 +290,21 @@
       if (!hasVisibleSelector(CMP_SELECTORS.privacyBanner ?? [])) return false;
       if (prefs.globalPreference === 'custom') return false;
 
+      const bannerClicked = prefs.globalPreference === 'accept_all'
+        ? activateVisibleElement(firstVisibleElement([
+          '#shopify-pc__banner__btn-accept',
+          'button.shopify-pc__banner__btn-accept',
+        ]))
+        : prefs.globalPreference === 'reject_all'
+          ? activateVisibleElement(firstVisibleElement([
+            '#shopify-pc__banner__btn-decline',
+            'button.shopify-pc__banner__btn-decline',
+          ]))
+          : false;
+      if (bannerClicked) {
+        return 'cmp_api:Shopify';
+      }
+
       if (typeof w.privacyBanner.showPreferences === 'function' &&
         !hasVisibleSelector(shopifyPreferenceSelectors())) {
         try {
@@ -1339,9 +1354,19 @@
     for (const selector of selectors) {
       const el = document.querySelector(selector);
       if (!isVisible(el)) continue;
-      return dispatchSyntheticClick(el);
+      return activateVisibleElement(el);
     }
     return false;
+  }
+
+  function activateVisibleElement(el) {
+    if (!el) return false;
+    try {
+      el.focus?.({ preventScroll: true });
+      el.click?.();
+      return true;
+    } catch (_) {}
+    return dispatchSyntheticClick(el);
   }
 
   function hasVisibleOneTrustPrivacyChoicesEntry(host = window.location.hostname) {
