@@ -106,6 +106,7 @@ const CMP_FINGERPRINTS = [
   { name: 'Sourcepoint',    scripts: ['sourcepoint.com', '_sp_'],                   globals: ['_sp_', '__tcfapi'],              selectors: ['[id^="sp_message_container"]', '[id^="sp_message_iframe"]'] },
   { name: 'TrustArc',       scripts: ['consent.trustarc.com', 'truste.com'],        globals: ['truste', 'TrustArcConsent'],     selectors: ['.truste_overlay', '#truste-consent-track'] },
   { name: 'Iubenda',        scripts: ['cdn.iubenda.com'],                           globals: ['_iub'],                         selectors: ['#iubenda-cs-banner', '.iubenda-cs-rationale'] },
+  { name: 'CookieScript',   scripts: ['cdn.cookie-script.com', 'cookie-script.com'], globals: ['CookieScript'],                selectors: ['#cookiescript_injected', '#cookiescript_injected_wrapper', '#cookiescript_accept', '#cookiescript_reject'] },
   { name: 'Quantcast',      scripts: ['quantcast.mgr.consensu.org', 'quantcast'],   globals: ['__qcCmpApi'],                   selectors: ['.qc-cmp2-container', '.qc-cmp-showing'] },
   { name: 'Cookiebot',      scripts: ['cookiebot.com', 'consentcdn.com'],           globals: ['Cookiebot', 'CookieConsent'],   selectors: ['#CybotCookiebotDialog', '#CybotCookiebotDialogBody'] },
   { name: 'Usercentrics',   scripts: ['app.usercentrics.eu'],                       globals: ['usercentrics', 'UC_UI'],        selectors: ['#usercentrics-root', '.uc-banner-content'] },

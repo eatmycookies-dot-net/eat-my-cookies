@@ -8,6 +8,16 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Upcoming (unreleased)
 
+### CookieScript
+
+- Added full CookieScript support covering `Accept All`, `Reject All`, and `Custom` preference flows.
+- Detection uses `window.CookieScript` JS global plus CSS selectors (`#cookiescript_injected`, `#cookiescript_accept`, `#cookiescript_reject`, and related IDs).
+- `Accept All` and `Reject All` call `instance.acceptAllAction()` / `instance.rejectAllAction()` via the CookieScript page API when available; the DOM fallback clicks `#cookiescript_accept` / `#cookiescript_reject`.
+- `Custom` opens the preferences panel via `#cookiescript_manage` (or the matching `aria-controls` button), sets per-category toggles for Functional, Performance/Analytics, and Targeting/Advertising, handles the Unclassified category through its `<select>` element, then saves via `#cookiescript_save` or a localised save/close button (EN/ES/FR/DE/IT).
+- Targeting/Advertising is forced off when `ccpaDoNotSell` is enabled.
+- A `CookieScriptLoaded` event listener bootstraps preference handling as soon as the CMP signals readiness, avoiding timing races on slow pages.
+- Human validation on `habitium.com` confirms all three flows complete correctly.
+
 ### Shopify Customer Privacy
 
 - Added expected support for Shopify's native Customer Privacy banner and preferences flow.

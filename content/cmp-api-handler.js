@@ -285,6 +285,25 @@
       }
       return true;
     },
+    CookieScript: (w, prefs) => {
+      const instance = w.CookieScript?.instance;
+
+      if (prefs.globalPreference === 'accept_all') {
+        if (!instance) return false;
+        if (typeof instance.acceptAllAction !== 'function') return false;
+        instance.acceptAllAction();
+        return true;
+      }
+
+      if (prefs.globalPreference === 'custom') {
+        return handleCookieScriptCustom(prefs);
+      }
+
+      if (!instance) return false;
+      if (typeof instance.rejectAllAction !== 'function') return false;
+      instance.rejectAllAction();
+      return true;
+    },
     privacyBanner: async (w, prefs) => {
       if (!w.privacyBanner) return false;
       if (!hasVisibleSelector(CMP_SELECTORS.privacyBanner ?? [])) return false;
@@ -399,6 +418,14 @@
     truste: ['#truste-consent-track', '.truste_overlay'],
     _axcb: ['#axeptio_overlay', '.axeptio_widget'],
     _iub: ['#iubenda-cs-banner', '.iubenda-cs-content', '.iubenda-cs-reject-btn', '.iubenda-cs-accept-btn'],
+    CookieScript: [
+      '#cookiescript_injected',
+      '#cookiescript_injected_wrapper',
+      '#cookiescript_checkboxes',
+      '#cookiescript_accept',
+      '#cookiescript_reject',
+      '#cookiescript_save',
+    ],
     privacyBanner: [
       '#shopify-pc__banner',
       '.shopify-pc__banner__dialog',
@@ -545,6 +572,13 @@
       syncOneTrustConsent();
     }, ms);
   }
+
+  window.addEventListener('CookieScriptLoaded', () => {
+    if (_handled) return;
+    bootstrapPrefsFromDataset();
+    if (!_prefs?.globalPreference) return;
+    tryHandlers();
+  });
 
   // React/Next.js SPAs emit hundreds of DOM mutations per second. A MutationObserver
   // there re-enters tryHandlers() continuously even after _handled = true, causing
@@ -781,6 +815,146 @@
     if (value === 'yes' || value === true) return true;
     if (value === 'no' || value === false) return false;
     return null;
+  }
+
+  async function handleCookieScriptCustom(prefs) {
+    const preferencesVisible = hasVisibleSelector(cookieScriptPreferenceSelectors());
+    const opened = preferencesVisible || clickFirstVisible([
+      '#cookiescript_manage',
+      '#cookiescript_manage_wrap',
+      'button[aria-controls="cookiescript_checkboxes"]',
+      '[role="button"][aria-controls="cookiescript_checkboxes"]',
+    ]);
+    if (!opened) return false;
+
+    if (!(await waitForAnyVisible(cookieScriptPreferenceSelectors(), 4000))) {
+      return false;
+    }
+
+    const appliedFunctional = await setCookieScriptToggleStateById('cookiescript_category_functionality', Boolean(prefs.functional));
+    const appliedPerformance = await setCookieScriptToggleStateById('cookiescript_category_performance', Boolean(prefs.analytics));
+    const appliedTargeting = await setCookieScriptToggleStateById(
+      'cookiescript_category_targeting',
+      Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false,
+    );
+    const appliedUnclassified = setCookieScriptSelectStateById(
+      'cookiescript_category_unclassified',
+      prefs.uncategorized === 'accept',
+    );
+
+    const appliedResults = [
+      appliedFunctional,
+      appliedPerformance,
+      appliedTargeting,
+      appliedUnclassified,
+    ];
+    const appliedCount = appliedResults.filter((value) => value !== null).length;
+    if (appliedCount === 0 || appliedResults.includes(false)) {
+      return false;
+    }
+
+    await delay(250);
+
+    const saveClicked = clickFirstVisible(cookieScriptSaveSelectors()) ||
+      clickCookieScriptButtonByText(/(?:save|guardar|enregistrer|speichern|salva).*(?:close|fechar|fermer|schlie(?:ss|ß)en|chiudi)?/i);
+    return saveClicked ? 'cmp_api:CookieScript:custom' : false;
+  }
+
+  function cookieScriptPreferenceSelectors() {
+    return [
+      '#cookiescript_checkboxes',
+      '#cookiescript_category_functionality',
+      '#cookiescript_category_performance',
+      '#cookiescript_category_targeting',
+      '#cookiescript_category_unclassified',
+      '#cookiescript_save',
+    ];
+  }
+
+  function cookieScriptSaveSelectors() {
+    return [
+      '#cookiescript_save',
+      'button#cookiescript_save',
+      '[role="button"]#cookiescript_save',
+    ];
+  }
+
+  function clickCookieScriptButtonByText(pattern) {
+    const root = firstVisibleElement(['#cookiescript_injected', '#cookiescript_injected_wrapper']) ?? document;
+    const buttons = root.querySelectorAll('button, [role="button"]');
+    for (const button of buttons) {
+      if (!isVisible(button)) continue;
+      const text = button.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      if (!pattern.test(text)) continue;
+      return dispatchSyntheticClick(button);
+    }
+    return false;
+  }
+
+  async function setCookieScriptToggleStateById(id, checked) {
+    const toggle = document.getElementById(id);
+    if (!(toggle instanceof HTMLInputElement)) return null;
+    if (toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+
+    const interactionTarget = findCookieScriptToggleInteractionTarget(toggle);
+    if (!interactionTarget || (!isVisible(interactionTarget) && !isVisible(toggle))) return null;
+    if (Boolean(toggle.checked) === checked) return true;
+
+    if (dispatchSyntheticClick(interactionTarget) && (await waitForCookieScriptToggleState(toggle, checked, 700))) {
+      return true;
+    }
+
+    forceCookieScriptToggleState(toggle, checked);
+    return waitForCookieScriptToggleState(toggle, checked, 700);
+  }
+
+  function findCookieScriptToggleInteractionTarget(toggle) {
+    const explicitLabel = toggle.labels?.[0];
+    if (explicitLabel && isVisible(explicitLabel)) return explicitLabel;
+    const nestedLabel = toggle.closest?.('label');
+    if (nestedLabel && isVisible(nestedLabel)) return nestedLabel;
+    if (isVisible(toggle)) return toggle;
+    return explicitLabel || nestedLabel || toggle;
+  }
+
+  async function waitForCookieScriptToggleState(toggle, checked, timeoutMs = 700) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (Boolean(toggle.checked) === checked) return true;
+      await delay(50);
+    }
+    return Boolean(toggle.checked) === checked;
+  }
+
+  function forceCookieScriptToggleState(toggle, checked) {
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, 'checked'
+    )?.set;
+    if (nativeSetter) {
+      nativeSetter.call(toggle, checked);
+    } else {
+      toggle.checked = checked;
+    }
+    toggle.dispatchEvent(new Event('input', { bubbles: true }));
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function setCookieScriptSelectStateById(id, accept) {
+    const select = document.getElementById(id);
+    if (!(select instanceof HTMLSelectElement)) return null;
+    if (select.disabled || select.getAttribute('aria-disabled') === 'true' || !isVisible(select)) return false;
+
+    const desiredOption = Array.from(select.options).find((option) => {
+      const haystack = `${option.value ?? ''} ${option.textContent ?? ''}`.toLowerCase();
+      return accept ? /accept|allow|agree|yes|permit/.test(haystack) : /reject|deny|decline|disagree|no/.test(haystack);
+    });
+    if (!desiredOption) return false;
+    if (select.value === desiredOption.value) return true;
+
+    select.value = desiredOption.value;
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return select.value === desiredOption.value;
   }
 
   function cleanupShopifyPrivacyArtifacts() {

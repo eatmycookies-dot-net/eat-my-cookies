@@ -219,6 +219,27 @@
       }
     },
     {
+      "id": "cookiescript",
+      "name": "CookieScript",
+      "detectors": [
+        { "type": "js_global",    "value": "window.CookieScript" },
+        { "type": "css_selector", "value": "#cookiescript_injected" },
+        { "type": "css_selector", "value": "#cookiescript_injected_wrapper" },
+        { "type": "css_selector", "value": "#cookiescript_accept" },
+        { "type": "css_selector", "value": "#cookiescript_reject" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#cookiescript_reject" },
+          { "type": "click", "selector": "#cookiescript_save" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#cookiescript_accept" },
+          { "type": "click", "selector": "#cookiescript_save" }
+        ]
+      }
+    },
+    {
       "id": "consentmanager",
       "name": "ConsentManager",
       "note": "Used by DW. Banner injects into #cmpwrapper in the main frame.",

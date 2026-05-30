@@ -522,6 +522,20 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain('return activateVisibleElement(el);');
     expect(source).toContain('function activateVisibleElement(el) {');
   });
+
+  it('uses explicit CookieScript controls for custom mode instead of the generic acceptAction shortcut', () => {
+    expect(source).toContain('return handleCookieScriptCustom(prefs);');
+    expect(source).toContain("'cookiescript_category_functionality'");
+    expect(source).toContain("'cookiescript_category_performance'");
+    expect(source).toContain("'cookiescript_category_targeting'");
+    expect(source).toContain("'cookiescript_category_unclassified'");
+    expect(source).toContain("'cmp_api:CookieScript:custom'");
+    expect(source).toContain('setCookieScriptToggleStateById');
+    expect(source).toContain('setCookieScriptSelectStateById');
+    expect(source).toContain('clickCookieScriptButtonByText');
+    expect(source).toContain("'#cookiescript_manage_wrap'");
+    expect(source).not.toContain("instance.acceptAction(categories);");
+  });
 });
 
 describe('dom-handler.js — BBC onetrust save guard', () => {
@@ -631,6 +645,23 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
     expect(source).toContain("cmp.id === 'shopify'");
     expect(source).toContain('findVisibleElementById(id, root = document)');
     expect(source).toContain('firstVisibleElement');
+  });
+
+  it('has a first-class CookieScript custom DOM flow with category-level controls', () => {
+    expect(source).toContain("if (cmp.id === 'cookiescript' && prefs.globalPreference === 'custom') {");
+    expect(source).toContain('executeCookieScriptCustomFlow');
+    expect(source).toContain('COOKIESCRIPT_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain('COOKIESCRIPT_SAVE_SELECTORS');
+    expect(source).toContain('cookieScriptPreferenceSelectors');
+    expect(source).toContain('cookieScriptDismissSelectors');
+    expect(source).toContain('clickCookieScriptButtonByText');
+    expect(source).toContain('setCookieScriptToggleStateById');
+    expect(source).toContain('setCookieScriptSelectStateById');
+    expect(source).toContain("'cookiescript_category_functionality'");
+    expect(source).toContain("'cookiescript_category_performance'");
+    expect(source).toContain("'cookiescript_category_targeting'");
+    expect(source).toContain("'cookiescript_category_unclassified'");
+    expect(source).toContain('Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false');
   });
 });
 

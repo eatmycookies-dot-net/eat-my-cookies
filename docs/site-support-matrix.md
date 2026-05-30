@@ -24,6 +24,7 @@ These sites currently behave well for the tested flows and have recent human con
 | `www.theguardian.com` | Supported | Human-validated: homepage Accept and Reject currently work. |
 | `ceespronkstore.com` | Supported | Shopify Customer Privacy storefront. Human-validated May 30, 2026: `Accept All`, `Reject All`, and `Custom` are expected to work from an EU/VPN storefront session. Important nuance: Shopify can surface either the lower-left banner or the full preferences dialog first depending on timing and geo. |
 | `bernstein-sanitarios.pt` | Supported | Human-validated May 30, 2026. Top-level Consentmanager storefront: `Accept All`, `Reject All`, and `Custom` now work through the in-page preferences UI. Important nuance: the CMP presents one category pane at a time (`Function`, `Marketing`, `Preferences`, `Measurement`, `Other`, `Social media`), so custom handling must traverse the left-side navigation before saving. |
+| `habitium.com` | Supported | Human-validated May 30, 2026. CookieScript CMP: `Accept All`, `Reject All`, and `Custom` all complete correctly. Custom flow opens the preferences panel, sets Functional, Performance, Targeting, and Unclassified toggles, then saves. Targeting is suppressed when `ccpaDoNotSell` is enabled. |
 
 ## Automation-Covered
 

@@ -15,7 +15,7 @@ It runs locally in the browser, applies the preference you choose, keeps a runni
 
 ## What It Does
 
-- Handles common cookie consent technologies: Sourcepoint, OneTrust, Shopify Customer Privacy, ConsentManager, Didomi, Iubenda, TrustArc, AppConsent, and custom site-specific flows.
+- Handles common cookie consent technologies: Sourcepoint, OneTrust, Shopify Customer Privacy, ConsentManager, Didomi, Iubenda, CookieScript, TrustArc, AppConsent, and custom site-specific flows.
 - Supports `Reject All`, `Accept All`, and a `Custom` mode for per-category preferences (Functional, Analytics, Advertising, Uncategorized/Custom Purposes), plus a top-level `CCPA: Do not sell/share` toggle.
 - Handles geo-specific redirect flows — sites that send visitors to a dedicated consent settings page (e.g. DW.com) can be completed inline, with extension-initiated detours returned to content automatically while intentional user-opened privacy pages remain accessible.
 - Uses publisher-owned privacy APIs and shared first-party signals when that path is safer than banner clicking, including BBC's Sourcepoint US privacy flow and LA Times' `rdp` / `c_rdp` CCPA path.
