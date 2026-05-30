@@ -47,7 +47,7 @@
     '.cmpboxbtnyes',
     '.cmpboxbtnaccept',
     '.cmpboxbtnacceptcustomchoices',
-    '.cmpboxbtnyescustomchoices:not(.cmptxt_btn_save2)',
+    '.cmpboxbtnyescustomchoices:not(.cmptxt_btn_save2):not(.cmptxt_btn_save)',
     '#cmpbntyestxt',
     'a[data-cmp-action="acceptall"]',
     'a[onclick*="acceptAll"]',
@@ -66,9 +66,11 @@
 
   const SAVE_SELS = [
     '.cmptxt_btn_save2',
+    '.cmptxt_btn_save',
     '.cmpsave',
     '.cmpboxbtnsave',
     '.cmpboxbtnyescustomchoices.cmptxt_btn_save2',
+    '.cmpboxbtnyescustomchoices.cmptxt_btn_save',
     'button[data-cmp-action="save"]',
     'text:save selection',
     'text:save settings',
@@ -353,7 +355,7 @@
     if (!(await waitForSettingsView(500))) {
       return false;
     }
-    if (tryClick(['.cmptxt_btn_yes2', '.cmpboxbtnaccept', '.cmpboxbtnacceptcustomchoices', '.cmpboxbtnyescustomchoices:not(.cmptxt_btn_save2)', 'text:agree', 'text:accept']) &&
+    if (tryClick(['.cmptxt_btn_yes2', '.cmpboxbtnaccept', '.cmpboxbtnacceptcustomchoices', '.cmpboxbtnyescustomchoices:not(.cmptxt_btn_save2):not(.cmptxt_btn_save)', 'text:agree', 'text:accept']) &&
       await waitForDismissal(5000)) {
       return true;
     }

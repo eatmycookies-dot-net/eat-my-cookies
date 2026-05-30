@@ -21,6 +21,19 @@ const DYNAMIC_SITE_SPECIFIC_HOSTS = new Set([
   'www.ketch.com',
   'ketch.com',
 ]);
+const CONSENTMANAGER_TOP_LEVEL_EXCLUDED_SITES = new Set([
+  'www.bbc.com',
+  'latimes.com',
+  'www.latimes.com',
+  'membership.latimes.com',
+  'www.forbes.com',
+  'forbes.com',
+  'www.bloomberg.com',
+  'www.nbcnews.com',
+  'www.zoom.com',
+  'www.ft.com',
+  'www.theguardian.com',
+]);
 const DOCUMENT_START_ONLY_SITES = new Set([
   'www.bbc.com',
   'latimes.com',
@@ -549,6 +562,9 @@ async function handleSiteSpecificFlow(siteOverrides, prefs) {
     return handleBloombergTermsGate(siteOverrides, prefs);
   }
   if (site === 'www.dw.com') {
+    return handleDW(prefs);
+  }
+  if (hasTopLevelConsentManagerSurface()) {
     return handleDW(prefs);
   }
   if (site === 'www.ft.com') {
@@ -1425,7 +1441,7 @@ async function handleDW(prefs) {
 
   if (onSettingsPage) {
     startFlowCooldown('dw');
-    const configured = await configureDWSettings(prefs.globalPreference);
+    const configured = await configureDWSettings(prefs);
     if (configured) {
       await reportAction(
         prefs.globalPreference === 'accept_all' ? 'site_specific:accept_all' : 'site_specific:settings_save',
@@ -1447,13 +1463,13 @@ async function handleDW(prefs) {
       return true;
     }
     if (await waitForSiteSelectors(['.cmpboxbtnyescustomchoices', '.cmpboxbtnrejectcustomchoices', 'text:save selection'], 1200)) {
-      const configured = await configureDWSettings(prefs.globalPreference);
+      const configured = await configureDWSettings(prefs);
       if (configured) {
         await reportAction('site_specific:accept_all', 'accept_all');
         return true;
       }
     }
-  } else {
+  } else if (prefs.globalPreference === 'reject_all') {
     startFlowCooldown('dw');
     const rejected = await clickAndWait(
       ['.cmptxt_btn_no2', '.cmptxt_btn_no', '.cmpboxbtnno', '#cmpbntnotxt'],
@@ -1465,7 +1481,7 @@ async function handleDW(prefs) {
       return true;
     }
     if (await waitForSiteSelectors(['.cmpboxbtnyescustomchoices', '.cmpboxbtnrejectcustomchoices', 'text:save selection'], 1200)) {
-      const configured = await configureDWSettings(prefs.globalPreference);
+      const configured = await configureDWSettings(prefs);
       if (configured) {
         await reportAction('site_specific:settings_save', prefs.globalPreference);
         return true;
@@ -1477,7 +1493,7 @@ async function handleDW(prefs) {
   if (settingsOpened) {
     startFlowCooldown('dw');
     await new Promise((resolve) => setTimeout(resolve, 250));
-    const configured = await configureDWSettings(prefs.globalPreference);
+    const configured = await configureDWSettings(prefs);
     if (configured) {
       await reportAction(
         prefs.globalPreference === 'accept_all' ? 'site_specific:accept_all' : 'site_specific:settings_save',
@@ -2026,12 +2042,39 @@ function clickTargetFor(el) {
   return el.closest?.('button, [role="button"], a, input[type="button"], input[type="submit"]') ?? el;
 }
 
-async function configureDWSettings(preference) {
+function hasTopLevelConsentManagerSurface() {
+  if (window.top !== window) return false;
+  if (CONSENTMANAGER_TOP_LEVEL_EXCLUDED_SITES.has(site)) return false;
+  if (window.cmpmngr?.eventwrapper) return true;
+
+  return [
+    '#cmpbox',
+    '#cmpinlinepreferencesbox',
+    '.cmpboxbtnno',
+    '.cmpboxbtnyes',
+    '.cmpboxbtnaccept',
+    '.cmpboxbtnreject',
+    '.cmpboxbtncustom',
+    '.cmpboxbtnsave',
+    '.cmpboxbtnyescustomchoices',
+    '.cmpboxbtnrejectcustomchoices',
+    '.cmptogglelink',
+    '.cmptogglelinkspan',
+    '[data-cmp-purpose]',
+    '[data-cmp-action]',
+  ].some((selector) => {
+    const el = queryElement(selector);
+    return el && isVisible(el);
+  });
+}
+
+async function configureDWSettings(prefs) {
   const visible = await waitForSiteSelectors(
     [
       '.cmptxt_btn_yes2',
       '.cmptxt_btn_no2',
       '.cmptxt_btn_save2',
+      '.cmptxt_btn_save',
       '.cmpboxnaviitem',
       '.cmptogglelink',
       '.cmptogglelinkspan',
@@ -2043,18 +2086,18 @@ async function configureDWSettings(preference) {
   );
   if (!visible) return false;
 
-  if (preference === 'accept_all') {
+  if (prefs.globalPreference === 'accept_all') {
     if (clickElement([
       '.cmptxt_btn_yes2',
       '.cmptxt_btn_yes',
       '.cmpboxbtnaccept',
       '.cmpboxbtnacceptcustomchoices',
-      '.cmpboxbtnyescustomchoices:not(.cmptxt_btn_save2)',
+      '.cmpboxbtnyescustomchoices:not(.cmptxt_btn_save2):not(.cmptxt_btn_save)',
     ])) {
       await new Promise((resolve) => setTimeout(resolve, 900));
       if (await resolveDWPostChoice()) return true;
     }
-  } else {
+  } else if (prefs.globalPreference === 'reject_all') {
     if (clickElement([
       '.cmptxt_btn_no2',
       '.cmptxt_btn_no',
@@ -2066,12 +2109,18 @@ async function configureDWSettings(preference) {
     }
   }
 
-  toggleOffDWRows();
+  if (prefs.globalPreference === 'custom') {
+    await applyDWCustomRows(prefs);
+  } else {
+    toggleOffDWRows();
+  }
   await new Promise((resolve) => setTimeout(resolve, 220));
 
   if (!clickElement([
     '.cmptxt_btn_save2',
+    '.cmptxt_btn_save',
     '.cmpboxbtnyescustomchoices.cmptxt_btn_save2',
+    '.cmpboxbtnyescustomchoices.cmptxt_btn_save',
     '.cmpboxbtnsave',
     '.cmpsave',
   ])) {
@@ -2127,13 +2176,104 @@ function toggleOffDWRows() {
     const text = row.textContent?.trim().toLowerCase() ?? '';
     if (!text || /strictly necessary|always on|necessary|security|fraud/i.test(text)) continue;
 
-    const stateText = row.querySelector('.cmpofftext, .cmpontxt, .cmptxt_off, .cmponofftext')?.textContent?.trim().toLowerCase() ?? '';
-    const toggle = row.querySelector('.cmptogglelink, .cmptogglelinkspan, [role="checkbox"], [role="switch"], [aria-checked]');
-    if (!toggle || !isVisible(toggle)) continue;
+    const toggle = findDWRowToggle(row);
+    if (!toggle) continue;
+    if (readDWToggleState(row, toggle) === false) continue;
+    dispatchSyntheticClick(toggle);
+  }
+}
 
-    const ariaChecked = toggle.getAttribute('aria-checked');
-    if (ariaChecked === 'false') continue;
-    if (stateText && /inactive|off/.test(stateText)) continue;
+async function applyDWCustomRows(prefs) {
+  const rules = [
+    {
+      labels: ['function'],
+      desired: true,
+    },
+    {
+      labels: ['marketing'],
+      desired: Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false,
+    },
+    {
+      labels: ['preferences'],
+      desired: Boolean(prefs.functional),
+    },
+    {
+      labels: ['measurement'],
+      desired: Boolean(prefs.analytics),
+    },
+    {
+      labels: ['other'],
+      desired: prefs.uncategorized === 'accept',
+    },
+    {
+      labels: ['social media'],
+      desired: Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false,
+    },
+  ];
+
+  for (const rule of rules) {
+    const opened = clickDWCategoryNav(rule.labels);
+    if (!opened) continue;
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    setDWCurrentPageToggles(rule.desired, { allowNecessary: rule.desired === true && rule.labels.includes('function') });
+  }
+}
+
+function findDWRowToggle(row) {
+  const toggle = row.querySelector('.cmptogglelink, .cmptogglelinkspan, [role="checkbox"], [role="switch"], [aria-checked]');
+  if (!toggle || !isVisible(toggle)) return null;
+  return toggle;
+}
+
+function readDWToggleState(row, toggle) {
+  const ariaChecked = toggle.getAttribute('aria-checked');
+  if (ariaChecked === 'true') return true;
+  if (ariaChecked === 'false') return false;
+
+  const stateText = row.querySelector('.cmpofftext, .cmpontxt, .cmptxt_off, .cmponofftext')?.textContent?.trim().toLowerCase() ?? '';
+  if (stateText) {
+    if (/inactive|off/.test(stateText)) return false;
+    if (/active|on/.test(stateText)) return true;
+  }
+
+  const className = `${toggle.className ?? ''} ${row.className ?? ''}`.toLowerCase();
+  if (/\boff\b|inactive/.test(className)) return false;
+  if (/\bon\b|active/.test(className)) return true;
+  return null;
+}
+
+function clickDWCategoryNav(labels) {
+  const candidates = deepQuerySelectorAll('.cmpboxnaviitem, [role="tab"], button, a, li, div');
+  for (const candidate of candidates) {
+    if (!isVisible(candidate)) continue;
+    if (candidate.querySelector('.cmptogglelink, .cmptogglelinkspan, [role="checkbox"], [role="switch"], [aria-checked], input[type="checkbox"]')) continue;
+
+    const text = candidate.textContent?.trim().toLowerCase() ?? '';
+    if (!text) continue;
+    if (!labels.some((label) => text.includes(label))) continue;
+
+    dispatchSyntheticClick(clickTargetFor(candidate));
+    return true;
+  }
+  return false;
+}
+
+function setDWCurrentPageToggles(desired, { allowNecessary = false } = {}) {
+  const rows = deepQuerySelectorAll('tr, li, [data-cmp-purpose], .cmpboxnaviitem');
+  const seen = new Set();
+  for (const row of rows) {
+    if (seen.has(row) || !isVisible(row)) continue;
+    seen.add(row);
+
+    const toggle = findDWRowToggle(row);
+    if (!toggle) continue;
+
+    const text = row.textContent?.trim().toLowerCase() ?? '';
+    if (!text) continue;
+    if (!allowNecessary && /strictly necessary|always on|necessary|security|fraud|data controller/i.test(text)) continue;
+
+    const current = readDWToggleState(row, toggle);
+    if (current == null || current === desired) continue;
     dispatchSyntheticClick(toggle);
   }
 }

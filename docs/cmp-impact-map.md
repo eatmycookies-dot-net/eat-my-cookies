@@ -39,7 +39,7 @@ and which sites to re-test after a change lands.
 | `content/latimes-interstitial.js` | latimes.com |
 | `main.js` → `handleGuardian*` | theguardian.com, support.theguardian.com |
 | `main.js` → `handleFT` | ft.com |
-| `main.js` → `handleDW` | dw.com |
+| `main.js` → `handleDW` | dw.com, bernstein-sanitarios.pt |
 | `main.js` → `handleEuronews` | euronews.com |
 | `main.js` → `handleLeMonde` | lemonde.fr |
 | `main.js` → `ACCEPT_OR_WARN_SITES` | repubblica.it, lefigaro.fr, abc.es, lavanguardia.com, corriere.it, ilsole24ore.com, lastampa.it, ilmessaggero.it |
@@ -125,6 +125,7 @@ What matters:
 | Site | Region | Special notes |
 |------|--------|--------------|
 | `dw.com` | EU | Dedicated handler; automation-covered. Extension-driven privacy-page detours should return to content, but manual/footer-opened visits to `data-privacy-settings` must remain on that page. |
+| `bernstein-sanitarios.pt` | EU | Human-validated May 30, 2026. Top-level Consentmanager storefront using `#cmpwrapper` / `#cmpbox` directly in the page rather than a cross-origin frame. The working path must recognize `cmptxt_btn_save`, avoid misclassifying `.cmpboxbtnyescustomchoices` save buttons as accept buttons, and traverse the left-side category navigation so custom prefs apply across `Function`, `Marketing`, `Preferences`, `Measurement`, `Other`, and `Social media` before `Save + Exit`. |
 
 ### Ketch
 **Handler files:** `main.js` (reusable Ketch privacy-center path)
@@ -212,9 +213,9 @@ Sites marked 🔵 are lower risk but worth a spot-check if time allows.
 | `rules/cmps.json` (Shopify entry) | ceespronkstore.com | — |
 | `rules/cmps.json` (Sourcepoint entry) | nytimes.com, theverge.com | spiegel.de |
 | `rules/cmps.json` (Didomi entry) | euronews.com | — |
-| `rules/cmps.json` (ConsentManager entry) | dw.com | — |
+| `rules/cmps.json` (ConsentManager entry) | dw.com, bernstein-sanitarios.pt | — |
 | `sp-frame-handler.js` | nytimes.com, theverge.com, theguardian.com, ft.com | wired.com, spiegel.de |
-| `main.js` (coordinator logic) | reuters.com, cnbc.com, schwab.com, ceespronkstore.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, euronews.com |
+| `main.js` (coordinator logic) | reuters.com, cnbc.com, schwab.com, ceespronkstore.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, bernstein-sanitarios.pt, euronews.com |
 | `main.js` (site-specific handler) | Only the one site that handler covers | — |
 | `heuristic.js` | Any site where other tiers fail | — |
 | `tcf-interceptor.js` | nytimes.com (GDPR), spiegel.de | reuters.com |

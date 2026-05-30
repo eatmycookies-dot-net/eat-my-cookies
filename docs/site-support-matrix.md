@@ -23,6 +23,7 @@ These sites currently behave well for the tested flows and have recent human con
 | `ft.com` | Supported | Human-validated as working well. |
 | `www.theguardian.com` | Supported | Human-validated: homepage Accept and Reject currently work. |
 | `ceespronkstore.com` | Supported | Shopify Customer Privacy storefront. Human-validated May 30, 2026: `Accept All`, `Reject All`, and `Custom` are expected to work from an EU/VPN storefront session. Important nuance: Shopify can surface either the lower-left banner or the full preferences dialog first depending on timing and geo. |
+| `bernstein-sanitarios.pt` | Supported | Human-validated May 30, 2026. Top-level Consentmanager storefront: `Accept All`, `Reject All`, and `Custom` now work through the in-page preferences UI. Important nuance: the CMP presents one category pane at a time (`Function`, `Marketing`, `Preferences`, `Measurement`, `Other`, `Social media`), so custom handling must traverse the left-side navigation before saving. |
 
 ## Automation-Covered
 
@@ -30,7 +31,7 @@ These sites are in the active automated coverage inventory and should remain in 
 
 | Site | Status | Notes |
 | --- | --- | --- |
-| `dw.com` | Automation-covered | EU VPN single-site test passes (site_specific:deny_all). Full-run failures were timing artifacts. Important nuance: extension-initiated trips through DW's privacy-settings page should return to the original content page, but a user who opens the footer privacy page intentionally should stay there. |
+| `dw.com` | Automation-covered | EU VPN single-site test passes (site_specific:deny_all). The same page-level Consentmanager handler now also covers direct top-level storefront implementations such as `bernstein-sanitarios.pt`. Important nuance: extension-initiated trips through DW's privacy-settings page should return to the original content page, but a user who opens the footer privacy page intentionally should stay there. |
 | `spiegel.de` | Automation-covered | Active e2e coverage for the current Sourcepoint/iframe flow. |
 | `nytimes.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `reuters.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
