@@ -13,12 +13,25 @@ const PRE_HANDLE_PENDING_TTL_MS = 20000;
 const DO_NOT_HANDLE_URLS = new Set([
   'https://www.theguardian.com/help/accessibility-help',
 ]);
+const DYNAMIC_SITE_SPECIFIC_HOSTS = new Set([
+  'www.bloomberg.com',
+  'forbes.com',
+  'www.forbes.com',
+  'www.ketch.com',
+  'ketch.com',
+]);
 const DOCUMENT_START_ONLY_SITES = new Set([
   'www.bbc.com',
   'latimes.com',
   'www.latimes.com',
   'membership.latimes.com',
 ]);
+let siteSpecificWatchStarted = false;
+let siteSpecificFlowLock = null;
+let bloombergCcpaBridgeInstalled = false;
+let bloombergCcpaWatchToken = 0;
+let bloombergCcpaManualOpenUntil = 0;
+const BLOOMBERG_CCPA_MANUAL_SUPPRESS_MS = 15000;
 
 const ACCEPT_OR_WARN_SITES = {
   'www.repubblica.it': {
@@ -41,23 +54,23 @@ const ACCEPT_OR_WARN_SITES = {
     acceptSelectors: ['.fig-consent-banner__accept', '.button__acceptAll'],
   },
   'www.abc.es': {
-    reason: 'This wall currently offers accepting cookies or a subscription-based rejection flow.',
+    reason: 'Rejecting cookies requires a paid subscription (€3.99+/month). Accept is the only free path.',
     detectSelectors: [
-      'text:configura tu navegación',
+      '.evolok-components-button',
       'text:aceptar y continuar',
       'text:rechazar y pagar',
       'text:para seguir navegando sin cookies',
     ],
-    acceptSelectors: ['text:aceptar y continuar'],
+    acceptSelectors: ['.evolok-agree-button', '#didomi-notice-agree-button', 'text:aceptar y continuar'],
   },
   'www.lavanguardia.com': {
-    reason: 'This wall currently offers accepting cookies or a subscription-based rejection flow.',
+    reason: 'Rejecting cookies requires a paid subscription. Accept is the only free path.',
     detectSelectors: [
-      'text:obtener más información y configuración',
+      '.evolok-components-button',
       'text:aceptar y continuar',
       'text:rechazar y suscribirse',
     ],
-    acceptSelectors: ['text:aceptar y continuar'],
+    acceptSelectors: ['.evolok-agree-button', '#didomi-notice-agree-button', 'text:aceptar y continuar'],
   },
   'www.corriere.it': {
     reason: 'This wall currently offers accepting cookies or a consentless subscription path.',
@@ -112,6 +125,235 @@ const ACCEPT_OR_WARN_SITES = {
       'text:accetta e continua',
       'text:accetta',
     ],
+  },
+};
+
+const KETCH_SITE_CONFIGS = {
+  'forbes.com': {
+    siteLabel: 'Forbes',
+    privacyCenterTitle: 'forbes privacy center',
+    homeUrl: 'https://www.forbes.com/',
+    cooldownScope: 'forbes',
+    purposeTabSelectors: ['#ketch-preferences-navigation-purposes-tab', 'text:cookie preferences'],
+    readySelectors: [
+      '#ketch-preferences-navigation-purposes-tab',
+      '#ketch-preferences-navigation-welcome-tab',
+      '#behavioral_advertising',
+      '#analytics',
+      '#functional',
+      'text:save your choices',
+      'text:exit',
+    ],
+    settingsSelectors: [
+      '#behavioral_advertising',
+      '#analytics',
+      '#functional',
+      'text:save your choices',
+    ],
+    entrySelectors: [
+      'text:cookie preferences',
+      'text:your data privacy rights',
+      'text:do-not-sell',
+      'text:limit my sensitive personal information',
+    ],
+    categoryRules: [
+      { id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising'], desired: (prefs) => Boolean(prefs.advertising) },
+      { id: 'analytics', labels: ['analytics'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'functional', labels: ['functional'], desired: (prefs) => Boolean(prefs.functional) },
+    ],
+    bannerWatchSelectors: [
+      '#ketch-banner',
+      '#ketch-consent-banner',
+      '#ketch-banner-button-primary',
+      '#ketch-banner-button-secondary',
+      '#ketch-banner-button-tertiary',
+      'button[aria-label*="Accept All" i]',
+      'button[aria-label*="Reject All Non-Required" i]',
+      'button[aria-label*="Manage Preferences" i]',
+    ],
+    bannerAcceptSelectors: [
+      '#ketch-banner-button-primary',
+      'button[aria-label*="Accept All" i]',
+      'text:accept all',
+    ],
+    bannerRejectSelectors: [
+      '#ketch-banner-button-secondary',
+      'button[aria-label*="Reject All Non-Required" i]',
+      'text:reject all non-required',
+    ],
+    bannerManageSelectors: [
+      '#ketch-banner-button-tertiary',
+      'button[aria-label*="Manage Preferences" i]',
+      'button[title*="Manage Preferences" i]',
+      'text:manage preferences',
+    ],
+    saveSelectors: ['text:save your choices'],
+    exitSelectors: ['text:exit'],
+  },
+  'www.forbes.com': {
+    siteLabel: 'Forbes',
+    privacyCenterTitle: 'forbes privacy center',
+    homeUrl: 'https://www.forbes.com/',
+    cooldownScope: 'forbes',
+    purposeTabSelectors: ['#ketch-preferences-navigation-purposes-tab', 'text:cookie preferences'],
+    readySelectors: [
+      '#ketch-preferences-navigation-purposes-tab',
+      '#ketch-preferences-navigation-welcome-tab',
+      '#behavioral_advertising',
+      '#analytics',
+      '#functional',
+      'text:save your choices',
+      'text:exit',
+    ],
+    settingsSelectors: [
+      '#behavioral_advertising',
+      '#analytics',
+      '#functional',
+      'text:save your choices',
+    ],
+    entrySelectors: [
+      'text:cookie preferences',
+      'text:your data privacy rights',
+      'text:do-not-sell',
+      'text:limit my sensitive personal information',
+    ],
+    categoryRules: [
+      { id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising'], desired: (prefs) => Boolean(prefs.advertising) },
+      { id: 'analytics', labels: ['analytics'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'functional', labels: ['functional'], desired: (prefs) => Boolean(prefs.functional) },
+    ],
+    bannerWatchSelectors: [
+      '#ketch-banner',
+      '#ketch-consent-banner',
+      '#ketch-banner-button-primary',
+      '#ketch-banner-button-secondary',
+      '#ketch-banner-button-tertiary',
+      'button[aria-label*="Accept All" i]',
+      'button[aria-label*="Reject All Non-Required" i]',
+      'button[aria-label*="Manage Preferences" i]',
+    ],
+    bannerAcceptSelectors: [
+      '#ketch-banner-button-primary',
+      'button[aria-label*="Accept All" i]',
+      'text:accept all',
+    ],
+    bannerRejectSelectors: [
+      '#ketch-banner-button-secondary',
+      'button[aria-label*="Reject All Non-Required" i]',
+      'text:reject all non-required',
+    ],
+    bannerManageSelectors: [
+      '#ketch-banner-button-tertiary',
+      'button[aria-label*="Manage Preferences" i]',
+      'button[title*="Manage Preferences" i]',
+      'text:manage preferences',
+    ],
+    saveSelectors: ['text:save your choices'],
+    exitSelectors: ['text:exit'],
+  },
+  'www.ketch.com': {
+    siteLabel: 'Ketch',
+    privacyCenterTitle: 'your privacy',
+    homeUrl: 'https://www.ketch.com/',
+    cooldownScope: 'ketch',
+    purposeTabSelectors: ['text:purposes'],
+    readySelectors: [
+      'text:your privacy',
+      'text:save choices',
+      '#analytics',
+      '#behavioral_advertising',
+      '#personalization',
+    ],
+    settingsSelectors: [
+      'text:save choices',
+      '#analytics',
+      '#behavioral_advertising',
+      '#personalization',
+    ],
+    entrySelectors: [
+      'text:your privacy',
+      'text:save choices',
+      'text:analytics',
+      'text:behavioral advertising',
+      'text:personalization',
+    ],
+    categoryRules: [
+      { id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising'], desired: (prefs) => Boolean(prefs.advertising) },
+      { id: 'analytics', labels: ['analytics'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'personalization', labels: ['personalization'], desired: (prefs) => Boolean(prefs.functional) || prefs.uncategorized === 'accept' },
+    ],
+    bannerWatchSelectors: [
+      'text:your privacy',
+      'text:save choices',
+      '#analytics',
+      '#behavioral_advertising',
+      '#personalization',
+      'text:reject all',
+      'text:accept all',
+    ],
+    bannerAcceptSelectors: [
+      'text:accept all',
+    ],
+    bannerRejectSelectors: [
+      'text:reject all',
+    ],
+    bannerManageSelectors: [
+      'text:your privacy',
+    ],
+    saveSelectors: ['text:save choices'],
+    exitSelectors: [],
+  },
+  'ketch.com': {
+    siteLabel: 'Ketch',
+    privacyCenterTitle: 'your privacy',
+    homeUrl: 'https://www.ketch.com/',
+    cooldownScope: 'ketch',
+    purposeTabSelectors: ['text:purposes'],
+    readySelectors: [
+      'text:your privacy',
+      'text:save choices',
+      '#analytics',
+      '#behavioral_advertising',
+      '#personalization',
+    ],
+    settingsSelectors: [
+      'text:save choices',
+      '#analytics',
+      '#behavioral_advertising',
+      '#personalization',
+    ],
+    entrySelectors: [
+      'text:your privacy',
+      'text:save choices',
+      'text:analytics',
+      'text:behavioral advertising',
+      'text:personalization',
+    ],
+    categoryRules: [
+      { id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising'], desired: (prefs) => Boolean(prefs.advertising) },
+      { id: 'analytics', labels: ['analytics'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'personalization', labels: ['personalization'], desired: (prefs) => Boolean(prefs.functional) || prefs.uncategorized === 'accept' },
+    ],
+    bannerWatchSelectors: [
+      'text:your privacy',
+      'text:save choices',
+      '#analytics',
+      '#behavioral_advertising',
+      '#personalization',
+      'text:reject all',
+      'text:accept all',
+    ],
+    bannerAcceptSelectors: [
+      'text:accept all',
+    ],
+    bannerRejectSelectors: [
+      'text:reject all',
+    ],
+    bannerManageSelectors: [
+      'text:your privacy',
+    ],
+    saveSelectors: ['text:save choices'],
+    exitSelectors: [],
   },
 };
 
@@ -179,6 +421,7 @@ async function bootstrap(force = false) {
   }
 
   if (await handleSiteSpecificFlow(siteOverrides, prefs)) return;
+  scheduleDynamicSiteSpecificWatch();
   if (runId !== latestRunId) return;
 
   document.documentElement.dataset.emcPref = prefs.globalPreference;
@@ -221,9 +464,75 @@ function shouldSkipCurrentUrl() {
   }
 }
 
+function scheduleDynamicSiteSpecificWatch() {
+  if (!DYNAMIC_SITE_SPECIFIC_HOSTS.has(site) || siteSpecificWatchStarted) return;
+  siteSpecificWatchStarted = true;
+  const keepWatchingAfterHandle = site === 'forbes.com' || site === 'www.forbes.com' || site === 'www.ketch.com' || site === 'ketch.com';
+  const watchDurationMs = keepWatchingAfterHandle ? 120000 : 15000;
+
+  let settled = false;
+  let running = false;
+  const stop = () => {
+    settled = true;
+    observer?.disconnect();
+  };
+
+  const tryHandle = async () => {
+    if (settled || running) return;
+    running = true;
+    try {
+      const settings = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+      if (!settings?.onboardingComplete) return;
+      const siteOverrides = await chrome.runtime.sendMessage({ type: 'GET_SITE_OVERRIDES', domain: site }) ?? {};
+      if (siteOverrides.disabled) {
+        stop();
+        return;
+      }
+      const prefs = resolvePrefs(settings, siteOverrides);
+      document.documentElement.dataset.emcPref = prefs.globalPreference;
+      document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: prefs }));
+      const handled = await handleSiteSpecificFlow(siteOverrides, prefs);
+      if (handled && !keepWatchingAfterHandle) stop();
+    } finally {
+      running = false;
+    }
+  };
+
+  const observer = new MutationObserver(() => {
+    void tryHandle();
+  });
+
+  try {
+    observer.observe(document.body ?? document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
+  } catch (_) {
+    siteSpecificWatchStarted = false;
+    return;
+  }
+
+  for (const ms of [500, 1500, 3000, 5000, 8000, 12000]) {
+    setTimeout(() => { void tryHandle(); }, ms);
+  }
+  setTimeout(() => {
+    observer.disconnect();
+    settled = true;
+  }, watchDurationMs);
+}
+
 async function handleSiteSpecificFlow(siteOverrides, prefs) {
   if (site === 'www.lemonde.fr') {
     return handleLeMonde(prefs, siteOverrides);
+  }
+  const ketchConfig = getKetchSiteConfig(site);
+  if (ketchConfig) {
+    return handleKetchPrivacyCenter(siteOverrides, prefs, ketchConfig);
+  }
+  if (site === 'www.bloomberg.com') {
+    ensureBloombergCcpaBridge(prefs);
+    return handleBloombergTermsGate(siteOverrides, prefs);
   }
   if (site === 'www.dw.com') {
     return handleDW(prefs);
@@ -266,6 +575,630 @@ async function handleSiteSpecificFlow(siteOverrides, prefs) {
     allowAcceptOverride: true,
   });
   return true;
+}
+
+async function handleForbesPrivacyCenter(siteOverrides, prefs) {
+  return handleKetchPrivacyCenter(siteOverrides, prefs, getKetchSiteConfig('www.forbes.com'));
+}
+
+function isEffectivelyAcceptAllPrefs(prefs) {
+  return Boolean(
+    prefs &&
+    prefs.functional === true &&
+    prefs.analytics === true &&
+    prefs.advertising === true &&
+    prefs.ccpaDoNotSell === false
+  );
+}
+
+function isBloombergCookieAcceptAligned(prefs) {
+  return Boolean(
+    prefs &&
+    prefs.functional === true &&
+    prefs.analytics === true &&
+    prefs.advertising === true &&
+    prefs.uncategorized === 'accept'
+  );
+}
+
+function getKetchSiteConfig(host = site) {
+  return KETCH_SITE_CONFIGS[host] ?? null;
+}
+
+async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = {}) {
+  if (!config) return false;
+
+  const prefersAcceptAll = isEffectivelyAcceptAllPrefs(prefs);
+  const interactionLockScope = `ketch:${config.cooldownScope}:${prefs.globalPreference}`;
+  const { bypassLock = false } = options;
+  if (!bypassLock && isSiteSpecificFlowLocked(interactionLockScope)) return true;
+  const onPrivacyCenterPage = isKetchPrivacyCenterPage(config);
+  if (!onPrivacyCenterPage) {
+    if (isKetchBannerVisible(config)) {
+      startSiteSpecificFlowLock(interactionLockScope);
+      if (siteOverrides.alwaysAccept || prefs.globalPreference === 'accept_all') {
+        const accepted = await clickAndWaitRetry(
+          config.bannerAcceptSelectors,
+          config.bannerWatchSelectors,
+          7000,
+          2,
+        );
+        if (!accepted) return false;
+        await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+        await reportAction(siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:ketch:accept_all', 'accept_all');
+        return true;
+      }
+
+      if (prefs.globalPreference === 'reject_all') {
+        const rejected = await clickKetchBannerActionAndWait(
+          config.bannerRejectSelectors,
+          config.bannerWatchSelectors,
+          config.settingsSelectors,
+          7000,
+          2,
+        );
+        if (!rejected) return false;
+        if (isKetchPrivacyCenterPage(config) || await waitForSiteSelectors(config.settingsSelectors, 1200)) {
+          return handleKetchPrivacyCenter(siteOverrides, prefs, config, { bypassLock: true });
+        }
+        await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+        await reportAction('site_specific:ketch:reject_all', 'reject_all');
+        return true;
+      }
+
+      const opened = clickElement(config.bannerManageSelectors);
+      if (!opened) return false;
+      const openedCenter = await waitForSiteSelectors(config.settingsSelectors, 5000);
+      if (!openedCenter) return false;
+    } else {
+      if (!hasVisibleKetchPrivacyCenterEntry(config)) return false;
+
+      // Before falling back to unsupported-site reporting, give the banner one
+      // more chance to render — EU geo regions can show a full Ketch banner
+      // (Accept / Reject / Manage) that takes a few extra seconds to load.
+      // The dynamic watcher keeps retrying for sites in DYNAMIC_SITE_SPECIFIC_HOSTS,
+      // so if the banner appears later it will be handled correctly.
+      if (DYNAMIC_SITE_SPECIFIC_HOSTS.has(site)) {
+        const bannerLate = await waitForSiteSelectors(config.bannerWatchSelectors, 6000);
+        if (bannerLate) {
+          // Banner now visible — re-enter so the banner branch handles it
+          return handleKetchPrivacyCenter(siteOverrides, prefs, config, { bypassLock: true });
+        }
+        // Banner still not visible after extra wait — the watcher will keep
+        // retrying, so return false here rather than prematurely warning the user.
+        return false;
+      }
+
+      if (prefs.globalPreference === 'reject_all') {
+        const rejected = await clickKetchBannerActionAndWait(
+          config.bannerRejectSelectors,
+          config.bannerWatchSelectors,
+          config.settingsSelectors,
+          7000,
+          2,
+        );
+        if (rejected) {
+          if (isKetchPrivacyCenterPage(config) || await waitForSiteSelectors(config.settingsSelectors, 1200)) {
+            return handleKetchPrivacyCenter(siteOverrides, prefs, config, { bypassLock: true });
+          }
+          await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+          await reportAction('site_specific:ketch:reject_all', 'reject_all');
+          return true;
+        }
+      }
+      if (prefs.globalPreference === 'custom') {
+        const opened = clickElement(config.bannerManageSelectors);
+        if (opened) {
+          const openedCenter = await waitForSiteSelectors(config.settingsSelectors, 5000);
+          if (openedCenter) {
+            return handleKetchPrivacyCenter(siteOverrides, prefs, config, { bypassLock: true });
+          }
+        }
+      }
+      if (prefersAcceptAll) {
+        await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+        return true;
+      }
+      await chrome.runtime.sendMessage({
+        type: 'REPORT_UNSUPPORTED_SITE',
+        site,
+        reason: `${config.siteLabel} appears to be offering an accept-only/privacy-center flow for this location. Reject/custom preferences are not being applied automatically on this visit. If you want this warning to stop here, switch this site to Accept All.`,
+        allowAcceptOverride: true,
+      });
+      return true;
+    }
+  }
+
+  const visible = await waitForSiteSelectors(config.readySelectors, 4000);
+  if (!visible) return false;
+  if (siteOverrides.alwaysAccept && isFlowCoolingDown(config.cooldownScope)) return true;
+  startSiteSpecificFlowLock(interactionLockScope);
+
+  clickElement(config.purposeTabSelectors);
+
+  const ready = await waitForSiteSelectors(config.settingsSelectors, 3000);
+  if (!ready) return false;
+
+  const outcome = await applyKetchPreferences(config, prefs);
+  if (outcome === 'locked') {
+    if (prefersAcceptAll && isKetchAcceptOnlyState(config)) {
+      await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+      return true;
+    }
+    await chrome.runtime.sendMessage({
+      type: 'REPORT_UNSUPPORTED_SITE',
+      site,
+      reason: `${config.siteLabel} opened its Ketch privacy center, but the available cookie controls are locked on this visit and could not be changed safely.`,
+      allowAcceptOverride: true,
+    });
+    return true;
+  }
+  if (outcome !== 'applied') return false;
+
+  startFlowCooldown(config.cooldownScope);
+  if (!clickElement(config.saveSelectors)) return false;
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await exitKetchPrivacyCenter(config);
+  await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+  await reportAction(
+    siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:ketch:save',
+    siteOverrides.alwaysAccept ? 'accept_all' : prefs.globalPreference,
+  );
+  return true;
+}
+
+function isKetchPrivacyCenterPage(config) {
+  if (!config) return false;
+  const bodyText = (document.body?.innerText || '').toLowerCase();
+  if (!bodyText.includes(config.privacyCenterTitle)) return false;
+  const saveButton = queryElement(config.saveSelectors[0]);
+  const exitButton = queryElement(config.exitSelectors[0]);
+
+  return Boolean(
+    config.readySelectors.some((selector) => isSelectorVisible(selector)) ||
+    isSelectorVisible('button.ketch-btn-save') ||
+    isSelectorVisible('button.ketch-btn-close') ||
+    (saveButton && isVisible(saveButton)) ||
+    (exitButton && isVisible(exitButton))
+  );
+}
+
+function isKetchBannerVisible(config) {
+  if (!config) return false;
+  const selectors = [
+    ...(config.bannerWatchSelectors ?? []),
+    ...(config.bannerAcceptSelectors ?? []),
+    ...(config.bannerRejectSelectors ?? []),
+    ...(config.bannerManageSelectors ?? []),
+  ];
+  return selectors.some((selector) => {
+    const el = queryElement(selector);
+    return el && isVisible(el);
+  });
+}
+
+function hasVisibleKetchPrivacyCenterEntry(config) {
+  if (!config) return false;
+  return config.entrySelectors.some((selector) => {
+    const el = queryElement(selector);
+    return el && isVisible(el);
+  });
+}
+
+function isKetchAcceptOnlyState(config) {
+  const ids = (config?.categoryRules ?? []).map((rule) => rule.id);
+  let present = 0;
+  let allChecked = true;
+  for (const rule of config?.categoryRules ?? []) {
+    const control = findKetchCategoryControl(rule);
+    if (!control) continue;
+    present += 1;
+    if (!readKetchToggleState(control)) allChecked = false;
+  }
+  if (present > 0) return allChecked;
+
+  const text = (document.body?.innerText || '').toLowerCase();
+  const alwaysActiveMatches = (text.match(/always active/g) || []).length;
+  return alwaysActiveMatches >= 3;
+}
+
+async function applyKetchPreferences(config, prefs) {
+  if (!config) return 'missing';
+  const desiredStates = Object.fromEntries(
+    (config.categoryRules ?? []).map((rule) => [rule.id, Boolean(rule.desired(prefs))]),
+  );
+  const mutableRules = (config.categoryRules ?? []).filter((rule) => {
+    const control = findKetchCategoryControl(rule);
+    return control && !isKetchToggleDisabled(control);
+  });
+  const allDesiredOn = mutableRules.length > 0 && mutableRules.every((rule) => desiredStates[rule.id] === true);
+  const allDesiredOff = mutableRules.length > 0 && mutableRules.every((rule) => desiredStates[rule.id] === false);
+
+  if (allDesiredOn && clickElement(config.bannerAcceptSelectors)) {
+    return 'applied';
+  }
+  if (allDesiredOff && clickElement(config.bannerRejectSelectors)) {
+    return 'applied';
+  }
+
+  let mutableCount = 0;
+  let presentCount = 0;
+  for (const rule of config.categoryRules ?? []) {
+    const desired = desiredStates[rule.id];
+    const control = findKetchCategoryControl(rule);
+    if (!control) continue;
+    presentCount += 1;
+    if (isKetchToggleDisabled(control)) continue;
+    mutableCount += 1;
+    await applyKetchRuleState(rule, desired);
+  }
+
+  if (presentCount > 0 && mutableCount === 0) return 'locked';
+  return presentCount > 0 ? 'applied' : 'missing';
+}
+
+async function applyKetchRuleState(rule, desired, options = {}) {
+  const trustCurrentState = options.trustCurrentState !== false;
+  const control = findKetchCategoryControl(rule);
+  if (!control) return false;
+  if (isKetchToggleDisabled(control)) return false;
+  const current = readKetchToggleState(control);
+  if (current === desired) return true;
+  forceKetchToggleState(control, desired, { trustCurrentState });
+  const settled = await waitForSingleKetchRuleState(rule, desired, 500);
+  if (settled) return true;
+  const finalControl = findKetchCategoryControl(rule);
+  return finalControl ? readKetchToggleState(finalControl) === desired : false;
+}
+
+async function waitForKetchRulesState(rules, desired, timeoutMs = 1200) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    let allMatch = true;
+    for (const rule of rules) {
+      const control = findKetchCategoryControl(rule);
+      if (!control || readKetchToggleState(control) !== desired) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) return true;
+    await waitForKetchToggleSettle(100);
+  }
+  return false;
+}
+
+async function waitForSingleKetchRuleState(rule, desired, timeoutMs = 500) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const control = findKetchCategoryControl(rule);
+    if (control && readKetchToggleState(control) === desired) return true;
+    await waitForKetchToggleSettle(100);
+  }
+  return false;
+}
+
+function findKetchCategoryControl(rule) {
+  const exact = document.getElementById(rule.id);
+  if (exact) {
+    const exactTarget = findKetchToggleInteractionTarget(exact);
+    return exactTarget ?? exact;
+  }
+
+  const labels = (rule.labels?.length ? rule.labels : [rule.id.replaceAll('_', ' ')])
+    .map((label) => label.toLowerCase());
+  const candidates = deepQuerySelectorAll('label, [role="group"], [role="listitem"], li, div, section');
+  for (const candidate of candidates) {
+    if (!isVisible(candidate)) continue;
+    const text = candidate.textContent?.trim().toLowerCase() ?? '';
+    if (!text) continue;
+    if (!labels.some((label) => text.includes(label))) continue;
+    const control = candidate.querySelector('input[type="checkbox"], button[role="switch"], [role="switch"], [aria-checked]');
+    if (control) {
+      const interactionTarget = findKetchToggleInteractionTarget(control);
+      if (interactionTarget && isVisible(interactionTarget)) return interactionTarget;
+      if (isVisible(control)) return control;
+    }
+  }
+  return null;
+}
+
+function readKetchToggleState(control) {
+  const visibleSwitchState = readKetchVisibleSwitchState(control);
+  if (visibleSwitchState != null) return visibleSwitchState;
+  if (!(control instanceof HTMLInputElement)) {
+    const labeledInput = control.matches?.('label') ? control.querySelector('input[type="checkbox"]') : null;
+    if (labeledInput instanceof HTMLInputElement) {
+      if (labeledInput.hasAttribute('aria-checked')) {
+        return labeledInput.getAttribute('aria-checked') === 'true';
+      }
+      return Boolean(labeledInput.checked);
+    }
+  }
+  if (control instanceof HTMLInputElement) {
+    if (control.hasAttribute('aria-checked')) {
+      return control.getAttribute('aria-checked') === 'true';
+    }
+    return Boolean(control.checked);
+  }
+  const nestedInput = control.querySelector?.('input[type="checkbox"]');
+  if (nestedInput instanceof HTMLInputElement) {
+    if (nestedInput.hasAttribute('aria-checked')) {
+      return nestedInput.getAttribute('aria-checked') === 'true';
+    }
+    return Boolean(nestedInput.checked);
+  }
+  const ariaChecked = control.getAttribute?.('aria-checked');
+  if (ariaChecked === 'true') return true;
+  if (ariaChecked === 'false') return false;
+  return null;
+}
+
+function readKetchVisibleSwitchState(control) {
+  const switchContainer = findKetchSwitchContainer(control);
+  if (!switchContainer) return null;
+  const id = (switchContainer.id || '').toLowerCase();
+  if (id.includes('switch-container-on')) return true;
+  if (id.includes('switch-container-off')) return false;
+  return null;
+}
+
+function isKetchToggleDisabled(control) {
+  if (!(control instanceof HTMLInputElement)) {
+    const labeledInput = control.matches?.('label') ? control.querySelector('input[type="checkbox"]') : null;
+    if (labeledInput instanceof HTMLInputElement) {
+      return Boolean(labeledInput.disabled);
+    }
+  }
+  if (control instanceof HTMLInputElement) {
+    return Boolean(control.disabled);
+  }
+  const nestedInput = control.querySelector?.('input[type="checkbox"]');
+  if (nestedInput instanceof HTMLInputElement) {
+    return Boolean(nestedInput.disabled);
+  }
+  return control.getAttribute?.('aria-disabled') === 'true' || control.hasAttribute?.('disabled');
+}
+
+function forceKetchToggleState(control, checked, options = {}) {
+  const trustCurrentState = options.trustCurrentState !== false;
+  const current = trustCurrentState ? readKetchToggleState(control) : null;
+  if (current === checked) return;
+  const interactionTarget = findKetchToggleInteractionTarget(control) ?? clickTargetFor(control);
+  dispatchSyntheticClick(interactionTarget);
+  const afterClick = readKetchToggleState(control);
+  if (afterClick === checked) return;
+  if (interactionTarget && interactionTarget !== control) {
+    return;
+  }
+  if (control instanceof HTMLInputElement) {
+    forceCheckboxState(control, checked);
+    return;
+  }
+  const nestedInput = control.querySelector?.('input[type="checkbox"]');
+  if (nestedInput instanceof HTMLInputElement) {
+    forceCheckboxState(nestedInput, checked);
+  }
+}
+
+function findKetchToggleInteractionTarget(control) {
+  if (!control) return null;
+  if (control instanceof HTMLInputElement) {
+    const switchContainer = findKetchSwitchContainer(control);
+    if (switchContainer && isVisible(switchContainer)) return switchContainer;
+    const label = control.labels?.[0] ?? control.closest?.('label');
+    if (label && isVisible(label)) return label;
+    return control;
+  }
+  if (control.matches?.('label')) {
+    const switchContainer = findKetchSwitchContainer(control);
+    if (switchContainer && isVisible(switchContainer)) return switchContainer;
+    return control;
+  }
+  const nestedInput = control.querySelector?.('input[type="checkbox"]');
+  if (nestedInput instanceof HTMLInputElement) {
+    const switchContainer = findKetchSwitchContainer(nestedInput);
+    if (switchContainer && isVisible(switchContainer)) return switchContainer;
+    const label = nestedInput.labels?.[0] ?? nestedInput.closest?.('label');
+    if (label && isVisible(label)) return label;
+  }
+  const switchContainer = findKetchSwitchContainer(control);
+  if (switchContainer && isVisible(switchContainer)) return switchContainer;
+  return control;
+}
+
+function findKetchSwitchContainer(control) {
+  if (!control) return null;
+  if (control instanceof HTMLInputElement) {
+    return control.parentElement?.querySelector('[id*="switch-container"]') ?? null;
+  }
+  if (control.matches?.('label')) {
+    return control.querySelector('[id*="switch-container"]');
+  }
+  return control.querySelector?.('[id*="switch-container"]') ?? null;
+}
+
+function waitForKetchToggleSettle(ms = 250) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function handleBloombergTermsGate(siteOverrides, prefs) {
+  if (await tryHandleBloombergCcpaModal(prefs)) {
+    return true;
+  }
+
+  const visible = await waitForSiteSelectors([
+    '#cmp-consent-modal',
+    '#cmp-consent-button',
+    'text:we\'ve updated our terms',
+    'text:we’ve updated our terms',
+  ], 5000);
+  if (!visible || !isBloombergTermsGateVisible()) return false;
+
+  const canAutoAccept = isBloombergCookieAcceptAligned(prefs) || siteOverrides.alwaysAccept;
+  if (!canAutoAccept) {
+    await chrome.runtime.sendMessage({
+      type: 'REPORT_UNSUPPORTED_SITE',
+      site,
+      reason: 'Bloomberg is showing an accept-only terms gate on this visit. Reject/custom cookie preferences are not being applied automatically here; use Always accept here if you want this site to auto-clear. Bloomberg’s separate Do Not Sell or Share choice still follows your CCPA setting independently.',
+      allowAcceptOverride: true,
+    });
+    return true;
+  }
+
+  const acceptButton = findBloombergTermsAcceptButton();
+  if (!acceptButton) return false;
+
+  dispatchSyntheticClick(clickTargetFor(acceptButton));
+  const dismissed = await waitForSelectorsToDisappear([
+    '#cmp-consent-modal',
+    '#cmp-consent-button',
+  ], 7000);
+  if (!dismissed) return false;
+
+  await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+  await reportAction(siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:accept_all', 'accept_all');
+  scheduleBloombergCcpaWatch(prefs);
+  return true;
+}
+
+function ensureBloombergCcpaBridge(prefs) {
+  scheduleBloombergCcpaWatch(prefs);
+  if (bloombergCcpaBridgeInstalled) return;
+  bloombergCcpaBridgeInstalled = true;
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target instanceof Element
+      ? event.target.closest('a, button, [role="button"]')
+      : null;
+    const text = (trigger?.textContent || '').trim().toLowerCase();
+    if (!text.includes('do not sell or share my personal information')) return;
+    if (event.isTrusted) {
+      bloombergCcpaManualOpenUntil = Date.now() + BLOOMBERG_CCPA_MANUAL_SUPPRESS_MS;
+    }
+    setTimeout(() => {
+      scheduleBloombergCcpaWatch(prefs);
+    }, 100);
+  }, true);
+}
+
+function scheduleBloombergCcpaWatch(prefsOrPromise, durationMs = 15000) {
+  const token = Date.now();
+  bloombergCcpaWatchToken = token;
+
+  const run = async () => {
+    const prefs = await prefsOrPromise;
+    const started = Date.now();
+    while (bloombergCcpaWatchToken === token && Date.now() - started < durationMs) {
+      if (await tryHandleBloombergCcpaModal(prefs)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    return false;
+  };
+
+  void run();
+}
+
+function isBloombergSourcepointIframeVisible() {
+  return Array.from(document.querySelectorAll('iframe[id^="sp_message_iframe"], iframe[title*="SP Consent Message" i]'))
+    .some((iframe) => {
+      const src = iframe.getAttribute('src') || '';
+      if (!/sourcepointcmp\.bloomberg\.com\/us_pm\//i.test(src)) {
+        return false;
+      }
+      return isVisible(iframe);
+    });
+}
+
+async function tryHandleBloombergCcpaModal(prefs) {
+  if (!prefs || prefs.ccpaDoNotSell === undefined) return false;
+  if (!isBloombergSourcepointIframeVisible()) return false;
+  if (Date.now() < bloombergCcpaManualOpenUntil) return false;
+
+  const response = await chrome.runtime.sendMessage({
+    type: 'EMC_EXECUTE_BLOOMBERG_CCPA',
+    enableOptOut: prefs.ccpaDoNotSell !== false,
+  }).catch(() => null);
+
+  if (!response?.handled) {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    if (isBloombergSourcepointIframeVisible()) return false;
+  }
+
+  await reportAction('site_specific:bloomberg:ccpa', prefs.globalPreference);
+  return true;
+}
+
+function isBloombergTermsGateVisible() {
+  const modal = document.getElementById('cmp-consent-modal');
+  if (modal && isVisible(modal)) return Boolean(findBloombergTermsAcceptButton());
+
+  const bodyText = (document.body?.innerText || '').toLowerCase();
+  const hasTermsHeading = bodyText.includes("we've updated our terms") || bodyText.includes('we’ve updated our terms');
+  return hasTermsHeading && Boolean(findBloombergTermsAcceptButton());
+}
+
+function findBloombergTermsAcceptButton() {
+  const exact = document.getElementById('cmp-consent-button');
+  if (exact && isVisible(exact)) return exact;
+
+  for (const el of deepQuerySelectorAll('button, [role="button"], a, input[type="button"], input[type="submit"]')) {
+    if (!isVisible(el)) continue;
+    const text = (el.textContent || el.value || '').trim().toLowerCase();
+    if (text === 'accept') return el;
+  }
+  return null;
+}
+
+function forceCheckboxState(input, checked) {
+  if (!(input instanceof HTMLInputElement) || input.disabled) return;
+  if (Boolean(input.checked) === checked) return;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+    descriptor?.set?.call(input, checked);
+    input.setAttribute('aria-checked', checked ? 'true' : 'false');
+    input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+  } catch (_) {}
+  if (readCheckboxLikeState(input) === checked) return;
+  try { input.click(); } catch (_) {}
+  if (readCheckboxLikeState(input) === checked) return;
+  const switchContainer = input.parentElement?.querySelector('div');
+  if (switchContainer && isVisible(switchContainer)) {
+    dispatchSyntheticClick(switchContainer);
+  }
+}
+
+function readCheckboxLikeState(input) {
+  if (!(input instanceof HTMLInputElement)) return null;
+  if (input.hasAttribute('aria-checked')) {
+    return input.getAttribute('aria-checked') === 'true';
+  }
+  return Boolean(input.checked);
+}
+
+async function exitKetchPrivacyCenter(config) {
+  if (!config || !isKetchPrivacyCenterPage(config)) return;
+
+  if (clickElement(config.exitSelectors)) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    if (!isKetchPrivacyCenterPage(config)) return;
+  }
+
+  try {
+    const referrer = document.referrer || '';
+    if (new RegExp(`^https?:\\/\\/(www\\.)?${site.replaceAll('.', '\\.')}\\/`, 'i').test(referrer) && history.length > 1) {
+      history.back();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (!isKetchPrivacyCenterPage(config)) return;
+    }
+  } catch (_) {}
+
+  try {
+    location.replace(config.homeUrl);
+  } catch (_) {
+    location.href = config.homeUrl;
+  }
 }
 
 async function retryDisneyFamilyUsNatMainWorld(prefs) {
@@ -674,7 +1607,14 @@ function waitForMainWorldResult(timeoutMs) {
 
 function resolvePrefs(settings, siteOverrides = {}) {
   if (siteOverrides.alwaysAccept) {
-    return { functional: true, analytics: true, advertising: true, ccpaDoNotSell: false, globalPreference: 'accept_all' };
+    return {
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: settings.categoryPreferences?.ccpaDoNotSell ?? false,
+      uncategorized: 'accept',
+      globalPreference: 'accept_all',
+    };
   }
   if (settings.globalPreference === 'custom') {
     return { ...settings.categoryPreferences, globalPreference: 'custom' };
@@ -718,6 +1658,16 @@ async function clickAndWaitRetry(clickSelectors, watchSelectors, timeoutMs = 500
   return false;
 }
 
+async function clickKetchBannerActionAndWait(clickSelectors, watchSelectors, settingsSelectors, timeoutMs = 5000, attempts = 2) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (!clickElement(clickSelectors)) return false;
+    const settled = await waitForKetchBannerTransition(watchSelectors, settingsSelectors, timeoutMs);
+    if (settled) return true;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+  return false;
+}
+
 function clickElement(selectors) {
   for (const selector of selectors) {
     const el = queryElement(selector);
@@ -737,6 +1687,24 @@ async function waitForSelectorsToDisappear(selectors, timeoutMs) {
       return el && isVisible(el);
     });
     if (!visible) return true;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return false;
+}
+
+async function waitForKetchBannerTransition(watchSelectors, settingsSelectors, timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const watchVisible = watchSelectors.some((selector) => {
+      const el = queryElement(selector);
+      return el && isVisible(el);
+    });
+    if (!watchVisible) return true;
+    const settingsVisible = settingsSelectors.some((selector) => {
+      const el = queryElement(selector);
+      return el && isVisible(el);
+    });
+    if (settingsVisible) return true;
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   return false;
@@ -1269,6 +2237,21 @@ function isFlowCoolingDown(scope) {
   } catch (_) {
     return false;
   }
+}
+
+function startSiteSpecificFlowLock(scope, ttlMs = 4000) {
+  siteSpecificFlowLock = {
+    scope,
+    until: Date.now() + ttlMs,
+  };
+}
+
+function isSiteSpecificFlowLocked(scope) {
+  return Boolean(
+    siteSpecificFlowLock &&
+    siteSpecificFlowLock.scope === scope &&
+    siteSpecificFlowLock.until > Date.now()
+  );
 }
 
 function persistPendingPreHandleAction(signature, method, preference) {

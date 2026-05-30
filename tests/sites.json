@@ -9,8 +9,15 @@
       "acceptLanguage": "en-GB,en;q=0.9",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11", ".sp_choice_type_13"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11",
+        ".sp_choice_type_13"
+      ]
     },
     {
       "name": "The Guardian (US/CCPA)",
@@ -22,11 +29,20 @@
       "followUpNavigation": {
         "enabled": true,
         "hrefPattern": "theguardian\\\\.com/.+/\\\\d{4}/",
-        "excludePatterns": ["/help/accessibility-help"],
+        "excludePatterns": [
+          "/help/accessibility-help"
+        ],
         "waitMs": 12000
       },
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
-      "consentSelectors": ["text:do not sell or share", "text:do not sell my personal", ".sp_choice_type_REJECT_ALL"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        "text:do not sell or share",
+        "text:do not sell my personal",
+        ".sp_choice_type_REJECT_ALL"
+      ]
     },
     {
       "name": "The Guardian (US/CCPA Accept)",
@@ -39,11 +55,20 @@
       "followUpNavigation": {
         "enabled": true,
         "hrefPattern": "theguardian\\\\.com/.+/\\\\d{4}/",
-        "excludePatterns": ["/help/accessibility-help"],
+        "excludePatterns": [
+          "/help/accessibility-help"
+        ],
         "waitMs": 12000
       },
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
-      "consentSelectors": [".sp_choice_type_11", "text:closer", ".sp_choice_type_ACCEPT_ALL"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_11",
+        "text:closer",
+        ".sp_choice_type_ACCEPT_ALL"
+      ]
     },
     {
       "name": "The Guardian Support (US/CCPA)",
@@ -53,8 +78,15 @@
       "tier": "sp-frame",
       "preference": "reject_all",
       "requireBannerDismissal": true,
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
-      "consentSelectors": ["text:do not sell or share", ".sp_choice_type_REJECT_ALL", ".sp_choice_type_13"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        "text:do not sell or share",
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_13"
+      ]
     },
     {
       "name": "The Guardian Support (US/CCPA Accept)",
@@ -64,8 +96,15 @@
       "tier": "sp-frame",
       "preference": "accept_all",
       "requireBannerDismissal": true,
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
-      "consentSelectors": [".sp_choice_type_11", "text:closer", ".sp_choice_type_ACCEPT_ALL"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_11",
+        "text:closer",
+        ".sp_choice_type_ACCEPT_ALL"
+      ]
     },
     {
       "name": "New York Times",
@@ -73,8 +112,13 @@
       "region": "US",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11"
+      ]
     },
     {
       "name": "Washington Post",
@@ -82,8 +126,12 @@
       "region": "US",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL"
+      ]
     },
     {
       "name": "BBC",
@@ -93,8 +141,14 @@
       "acceptLanguage": "en-GB,en;q=0.9",
       "cmp": "OneTrust",
       "tier": "dom",
-      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk"],
-      "consentSelectors": ["#onetrust-reject-all-handler", ".ot-pc-refuse-all-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        ".ot-pc-refuse-all-handler"
+      ]
     },
     {
       "name": "Reuters",
@@ -102,26 +156,71 @@
       "region": "US",
       "cmp": "OneTrust",
       "tier": "dom",
-      "bannerSelectors": ["#onetrust-banner-sdk"],
-      "consentSelectors": ["#onetrust-reject-all-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler"
+      ]
     },
     {
       "name": "Forbes",
       "url": "https://www.forbes.com/",
       "region": "US",
-      "cmp": "OneTrust",
-      "tier": "dom",
-      "bannerSelectors": ["#onetrust-banner-sdk"],
-      "consentSelectors": ["#onetrust-reject-all-handler"]
+      "cmp": "Ketch",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner",
+        "#ketch-banner-button-primary",
+        "#ketch-banner-button-secondary",
+        "#ketch-banner-button-tertiary",
+        "button[aria-label*='Accept All' i]",
+        "button[aria-label*='Reject All Non-Required' i]",
+        "button[aria-label*='Manage Preferences' i]"
+      ],
+      "consentSelectors": [
+        "button[aria-label*='Reject All Non-Required' i]",
+        "button[aria-label*='Manage Preferences' i]",
+        "#behavioral_advertising",
+        "#analytics",
+        "#functional"
+      ]
+    },
+    {
+      "name": "Forbes (EU/GDPR)",
+      "url": "https://www.forbes.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Ketch",
+      "tier": "site-specific",
+      "handleWaitMs": 15000,
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner",
+        "#ketch-banner-button-primary",
+        "#ketch-banner-button-secondary"
+      ],
+      "consentSelectors": [
+        "#ketch-banner-button-secondary",
+        "button[aria-label*=\"Reject All\" i]"
+      ]
     },
     {
       "name": "Bloomberg",
       "url": "https://www.bloomberg.com/",
       "region": "US",
-      "cmp": "OneTrust",
-      "tier": "dom",
-      "bannerSelectors": ["#onetrust-banner-sdk"],
-      "consentSelectors": ["#onetrust-reject-all-handler"]
+      "cmp": "Bloomberg gate / OneTrust",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "text:we've updated our terms"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "text:accept"
+      ]
     },
     {
       "name": "Le Monde",
@@ -143,7 +242,10 @@
       "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
       "cmp": "AppConsent / figconsent",
       "tier": "frame",
-      "bannerSelectors": ["#appconsent", "iframe[title='Consent window']"],
+      "bannerSelectors": [
+        "#appconsent",
+        "iframe[title='Consent window']"
+      ],
       "consentSelectors": []
     },
     {
@@ -154,7 +256,10 @@
       "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
       "consentSelectors": []
     },
     {
@@ -165,8 +270,15 @@
       "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11", ".sp_choice_type_13"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11",
+        ".sp_choice_type_13"
+      ]
     },
     {
       "name": "Frankfurter Allgemeine",
@@ -176,8 +288,15 @@
       "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11", ".sp_choice_type_13"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11",
+        ".sp_choice_type_13"
+      ]
     },
     {
       "name": "Sueddeutsche Zeitung",
@@ -187,8 +306,15 @@
       "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']", "[id^='sp_message_iframe']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL", ".sp_choice_type_11", ".sp_choice_type_13"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11",
+        ".sp_choice_type_13"
+      ]
     },
     {
       "name": "DW",
@@ -203,8 +329,19 @@
       "navigationExpectations": {
         "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/top-stories/s-9097(?:$|[?#])"
       },
-      "bannerSelectors": ["#cmpwrapper", "#cmpbox", "#cmpinlinepreferencesbox", ".cmpboxbtnrejectcustomchoices", ".cmpboxbtnyescustomchoices"],
-      "consentSelectors": [".cmpboxbtnno", ".cmpboxbtnrejectcustomchoices", ".cmpboxbtnyescustomchoices", "text:save selection"]
+      "bannerSelectors": [
+        "#cmpwrapper",
+        "#cmpbox",
+        "#cmpinlinepreferencesbox",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices"
+      ],
+      "consentSelectors": [
+        ".cmpboxbtnno",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices",
+        "text:save selection"
+      ]
     },
     {
       "name": "The Telegraph",
@@ -214,8 +351,12 @@
       "acceptLanguage": "en-GB,en;q=0.9",
       "cmp": "OneTrust",
       "tier": "dom",
-      "bannerSelectors": ["#onetrust-banner-sdk"],
-      "consentSelectors": ["#onetrust-reject-all-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler"
+      ]
     },
     {
       "name": "The Verge",
@@ -223,8 +364,12 @@
       "region": "US",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL"
+      ]
     },
     {
       "name": "Wired",
@@ -232,8 +377,12 @@
       "region": "US",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL"
+      ]
     },
     {
       "name": "Euronews",
@@ -243,8 +392,16 @@
       "acceptLanguage": "en-GB,en;q=0.9",
       "cmp": "Didomi",
       "tier": "site-specific",
-      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
-      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
     },
     {
       "name": "20 Minutes France",
@@ -254,8 +411,16 @@
       "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
       "cmp": "Didomi",
       "tier": "site-specific",
-      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
-      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
     },
     {
       "name": "Le Parisien",
@@ -265,8 +430,16 @@
       "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
       "cmp": "Didomi",
       "tier": "site-specific",
-      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
-      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
     },
     {
       "name": "Financial Times",
@@ -276,8 +449,18 @@
       "acceptLanguage": "en-GB,en;q=0.9",
       "cmp": "Sourcepoint / custom manager",
       "tier": "dom",
-      "bannerSelectors": [".message-component", "a[aria-label*='manage cookies' i]", "button[title='Save and Close']", ".pm-switch"],
-      "consentSelectors": ["button[title='Accept']", "button[title='Reject']", "button[title='Save and Close']", "text:manage cookies"]
+      "bannerSelectors": [
+        ".message-component",
+        "a[aria-label*='manage cookies' i]",
+        "button[title='Save and Close']",
+        ".pm-switch"
+      ],
+      "consentSelectors": [
+        "button[title='Accept']",
+        "button[title='Reject']",
+        "button[title='Save and Close']",
+        "text:manage cookies"
+      ]
     },
     {
       "name": "CNN",
@@ -285,8 +468,12 @@
       "region": "US",
       "cmp": "OneTrust",
       "tier": "dom",
-      "bannerSelectors": ["#onetrust-banner-sdk"],
-      "consentSelectors": ["#onetrust-reject-all-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler"
+      ]
     },
     {
       "name": "CNBC",
@@ -297,10 +484,19 @@
       "preference": "reject_all",
       "ccpaDoNotSell": true,
       "expectActivityRecorded": true,
-      "expectedOneTrustToggleStates": { "ot-group-id-OSSTA_BG": false },
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-OSSTA_BG": false
+      },
       "handleWaitMs": 12000,
-      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk"],
-      "consentSelectors": ["#onetrust-pc-btn-handler", ".save-preference-btn-handler", ".category-switch-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ]
     },
     {
       "name": "CNBC (Accept + CCPA Opt-Out)",
@@ -311,10 +507,19 @@
       "preference": "accept_all",
       "ccpaDoNotSell": true,
       "expectActivityRecorded": true,
-      "expectedOneTrustToggleStates": { "ot-group-id-OSSTA_BG": false },
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-OSSTA_BG": false
+      },
       "handleWaitMs": 12000,
-      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk"],
-      "consentSelectors": ["#onetrust-pc-btn-handler", ".save-preference-btn-handler", ".category-switch-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ]
     },
     {
       "name": "NBC News",
@@ -325,10 +530,21 @@
       "preference": "reject_all",
       "ccpaDoNotSell": true,
       "expectActivityRecorded": true,
-      "expectedOneTrustToggleStates": { "ot-group-id-SPD_BG": false },
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-SPD_BG": false
+      },
       "handleWaitMs": 12000,
-      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk", "#onetrust-pc-sdk"],
-      "consentSelectors": ["#onetrust-pc-btn-handler", ".ot-sdk-show-settings", ".save-preference-btn-handler", ".category-switch-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".ot-sdk-show-settings",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ]
     },
     {
       "name": "NBC News (Accept + CCPA Opt-Out)",
@@ -339,10 +555,21 @@
       "preference": "accept_all",
       "ccpaDoNotSell": true,
       "expectActivityRecorded": true,
-      "expectedOneTrustToggleStates": { "ot-group-id-SPD_BG": false },
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-SPD_BG": false
+      },
       "handleWaitMs": 12000,
-      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk", "#onetrust-pc-sdk"],
-      "consentSelectors": ["#onetrust-pc-btn-handler", ".ot-sdk-show-settings", ".save-preference-btn-handler", ".category-switch-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".ot-sdk-show-settings",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ]
     },
     {
       "name": "Thomson Reuters Privacy Statement",
@@ -354,8 +581,17 @@
       "ccpaDoNotSell": false,
       "expectActivityRecorded": true,
       "handleWaitMs": 12000,
-      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk", "#onetrust-pc-sdk", ".onetrust-pc-dark-filter"],
-      "consentSelectors": ["#onetrust-accept-btn-handler", ".save-preference-btn-handler", ".onetrust-close-btn-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        "#onetrust-accept-btn-handler",
+        ".save-preference-btn-handler",
+        ".onetrust-close-btn-handler"
+      ]
     },
     {
       "name": "La Repubblica",
@@ -377,8 +613,13 @@
       "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
       "cmp": "TrustArc",
       "tier": "dom",
-      "bannerSelectors": ["#truste-consent-track", ".truste_overlay"],
-      "consentSelectors": ["#truste-consent-required"]
+      "bannerSelectors": [
+        "#truste-consent-track",
+        ".truste_overlay"
+      ],
+      "consentSelectors": [
+        "#truste-consent-required"
+      ]
     },
     {
       "name": "El Mundo",
@@ -388,8 +629,16 @@
       "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
       "cmp": "Didomi",
       "tier": "site-specific",
-      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
-      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
     },
     {
       "name": "ABC España",
@@ -397,10 +646,17 @@
       "region": "EU",
       "locale": "es-ES",
       "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
-      "cmp": "Didomi",
+      "cmp": "Evolok / Didomi",
       "tier": "site-specific",
-      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
-      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+      "bannerSelectors": [
+        ".evolok-components-button",
+        "#didomi-popup"
+      ],
+      "consentSelectors": [
+        ".evolok-agree-button",
+        "#didomi-notice-agree-button"
+      ],
+      "note": "Evolok paywall. Reject requires paid subscription (€3.99+/month). Accept is the only free path. Extension handles accept_all only."
     },
     {
       "name": "La Vanguardia",
@@ -408,10 +664,17 @@
       "region": "EU",
       "locale": "es-ES",
       "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
-      "cmp": "Didomi",
+      "cmp": "Evolok / Didomi",
       "tier": "site-specific",
-      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
-      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+      "bannerSelectors": [
+        ".evolok-components-button",
+        "#didomi-popup"
+      ],
+      "consentSelectors": [
+        ".evolok-agree-button",
+        "#didomi-notice-agree-button"
+      ],
+      "note": "Evolok paywall. Reject requires paid subscription. Accept is the only free path. Extension handles accept_all only."
     },
     {
       "name": "El Confidencial",
@@ -421,8 +684,16 @@
       "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
       "cmp": "Didomi",
       "tier": "site-specific",
-      "bannerSelectors": ["#didomi-host", "#didomi-popup", ".didomi-notice-popup"],
-      "consentSelectors": [".didomi-continue-without-agreeing", "#didomi-notice-agree-button", "#didomi-notice-learn-more-button"]
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
     },
     {
       "name": "Corriere della Sera",
@@ -490,8 +761,12 @@
       "region": "US",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
-      "bannerSelectors": ["[id^='sp_message_container']"],
-      "consentSelectors": [".sp_choice_type_REJECT_ALL"]
+      "bannerSelectors": [
+        "[id^='sp_message_container']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL"
+      ]
     },
     {
       "name": "MLB",
@@ -500,8 +775,324 @@
       "cmp": "OneTrust (CCPA settings flow)",
       "tier": "dom",
       "handleWaitMs": 12000,
-      "bannerSelectors": ["#onetrust-banner-sdk", "#onetrust-consent-sdk"],
-      "consentSelectors": ["#onetrust-pc-btn-handler", ".save-preference-btn-handler", ".category-switch-handler"]
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ]
+    },
+    {
+      "name": "Pret A Manger",
+      "url": "https://www.pret.com/en-GB",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Ketch",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner"
+      ],
+      "consentSelectors": [
+        "#ketch-banner-button-secondary",
+        "#ketch-banner-button-tertiary"
+      ]
+    },
+    {
+      "name": "TAG24",
+      "url": "https://www.tag24.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11",
+        ".sp_choice_type_13"
+      ]
+    },
+    {
+      "name": "Der Standard",
+      "url": "https://www.derstandard.at/",
+      "region": "EU",
+      "locale": "de-AT",
+      "acceptLanguage": "de-AT,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11",
+        ".sp_choice_type_13"
+      ]
+    },
+    {
+      "name": "The Independent",
+      "url": "https://www.independent.co.uk/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11",
+        ".sp_choice_type_13"
+      ]
+    },
+    {
+      "name": "Daily Mail",
+      "url": "https://www.dailymail.co.uk/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_REJECT_ALL",
+        ".sp_choice_type_11",
+        ".sp_choice_type_13"
+      ]
+    },
+    {
+      "name": "ORF",
+      "url": "https://www.orf.at/",
+      "region": "EU",
+      "locale": "de-AT",
+      "acceptLanguage": "de-AT,de;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "NRC",
+      "url": "https://www.nrc.nl/",
+      "region": "EU",
+      "locale": "nl-NL",
+      "acceptLanguage": "nl-NL,nl;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "De Telegraaf",
+      "url": "https://www.telegraaf.nl/",
+      "region": "EU",
+      "locale": "nl-NL",
+      "acceptLanguage": "nl-NL,nl;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "Marca",
+      "url": "https://www.marca.com/",
+      "region": "EU",
+      "locale": "es-ES",
+      "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "Orange",
+      "url": "https://www.orange.com/en",
+      "region": "EU",
+      "locale": "fr-FR",
+      "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "Free.fr",
+      "url": "https://www.free.fr/",
+      "region": "EU",
+      "locale": "fr-FR",
+      "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "Michelin",
+      "url": "https://www.michelin.com/",
+      "region": "EU",
+      "locale": "fr-FR",
+      "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "Harrods",
+      "url": "https://www.harrods.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "note": "Didomi detected by script fingerprint but banner not found in e2e — may use a delayed or iframe-based Didomi variant. Requires --vpn to load (bot-protected). Needs human validation to confirm banner selectors.",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "Economía Digital",
+      "url": "https://www.economiadigital.es/",
+      "region": "EU",
+      "locale": "es-ES",
+      "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
+      "cmp": "Didomi",
+      "tier": "site-specific",
+      "bannerSelectors": [
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
+      ],
+      "consentSelectors": [
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
+      ]
+    },
+    {
+      "name": "Inchcape",
+      "url": "https://www.inchcape.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Cookiebot",
+      "tier": "dom",
+      "bannerSelectors": [
+        "#CybotCookiebotDialog",
+        "#CybotCookiebotDialogBody"
+      ],
+      "consentSelectors": [
+        "#CybotCookiebotDialogBodyButtonDecline"
+      ]
+    },
+    {
+      "name": "LVMH",
+      "url": "https://www.lvmh.com/",
+      "region": "EU",
+      "locale": "fr-FR",
+      "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "note": "No reject-all button — GDPR toggle-style banner with Functional/Targeting/Performance groups. Needs manage-preferences path. Requires --vpn to load (bot-protected).",
+      "bannerSelectors": [
+        "#onetrust-banner-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler"
+      ]
+    },
+    {
+      "name": "Volvo",
+      "url": "https://www.volvocars.com/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "bannerSelectors": [
+        "#onetrust-banner-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler"
+      ]
     }
   ]
 }

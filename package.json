@@ -24,7 +24,10 @@
     "test:e2e:eu": "node tests/validate.js --region=EU",
     "test:e2e:us": "node tests/validate.js --region=US",
     "test:e2e:install": "npx playwright install chromium",
-    "test:all": "npm run test:unit && npm run test:static && npm run test:e2e"
+    "test:all": "npm run test:unit && npm run test:static && npm run test:e2e",
+    "test:vpn-setup": "node tests/vpn-connect.js",
+    "test:detect-cmp": "node tests/detect-cmp.js",
+    "test:e2e:vpn": "node tests/validate.js --vpn"
   },
   "devDependencies": {
     "jsdom": "^29.1.0",

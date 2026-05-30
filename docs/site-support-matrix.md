@@ -14,11 +14,11 @@ These sites currently behave well for the tested flows and have recent human con
 
 | Site | Status | Notes |
 | --- | --- | --- |
-| `20minutes.fr` | Supported | Human-validated: Accept, Reject, and Custom behaved correctly. |
-| `leparisien.fr` | Supported | Human-validated: Accept, Reject, and Custom behaved correctly. |
+| `20minutes.fr` | Supported | Human-validated. EU VPN single-site test passes (cmp_api:Didomi). Full-run failures are timing artifacts, not real regressions. |
+| `leparisien.fr` | Supported | Human-validated. Same Didomi API path as 20minutes.fr — expected to pass. |
 | `lemonde.fr` | Supported | Human-validated: Accept, Reject, and Custom behaved correctly. |
-| `elmundo.es` | Supported | Human-validated: flows worked; reject labeling was previously generic. |
-| `elconfidencial.com` | Supported | Human-validated: Accept, Reject, and Custom behaved correctly. |
+| `elmundo.es` | Supported | EU VPN single-site test passes. |
+| `elconfidencial.com` | Supported | EU VPN single-site test passes (cmp_api:Didomi). |
 | `elpais.com` | Supported | Human-validated: Accept, Reject, and Custom behaved correctly. |
 | `ft.com` | Supported | Human-validated as working well. |
 | `www.theguardian.com` | Supported | Human-validated: homepage Accept and Reject currently work. |
@@ -29,11 +29,11 @@ These sites are in the active automated coverage inventory and should remain in 
 
 | Site | Status | Notes |
 | --- | --- | --- |
-| `dw.com` | Automation-covered | Human-validated as working. The automated suite can miss the delayed multi-step ConsentManager workflow, so e2e output here is not the final source of truth. Important nuance: extension-initiated trips through DW's privacy-settings page should return to the original content page, but a user who opens the footer privacy page intentionally should stay there. |
+| `dw.com` | Automation-covered | EU VPN single-site test passes (site_specific:deny_all). Full-run failures were timing artifacts. Important nuance: extension-initiated trips through DW's privacy-settings page should return to the original content page, but a user who opens the footer privacy page intentionally should stay there. |
 | `spiegel.de` | Automation-covered | Active e2e coverage for the current Sourcepoint/iframe flow. |
 | `nytimes.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `reuters.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
-| `forbes.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
+| `forbes.com` | Automation-covered | Ketch CMP. US region: accept/reject/custom all covered via Ketch privacy center. EU region: full banner (Accept All / Reject All Non-Required / Manage Preferences) — fixed May 2026 to respect user preference instead of forcing accept-only. EU e2e passes via VPN (`Forbes (EU/GDPR)` in sites.json). |
 | `bloomberg.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
 | `theverge.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `wired.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
@@ -58,6 +58,7 @@ These sites are usable, but the current behavior has caveats worth documenting.
 | `zoom.com` | Supported with caveats | Verified May 9, 2026 from live headed browser sessions with the extension loaded. Root cause of the old Accept All loop was not OneTrust itself: `content/cm-frame-handler.js` was misfiring on unrelated ConsentManager-like frames and recording repeated `consentmanager:frame` accepts, which redirected the page to `/en/trust/acceptable-use-guidelines/` and tripped the circuit breaker. Fixed by skipping ConsentManager frame handling on `www.zoom.com`. Zoom's homepage OneTrust UI is also unusual: `OptanonConsent` / `OnetrustActiveGroups` can already show all-accepted values while a visible collapsed OneTrust shell is still on screen, so cookie state alone is not proof that the banner is dismissed. The working Accept All path closes the visible homepage shell via `.onetrust-close-btn-handler.ot-close-icon.banner-close-button`, then records `cmp_api:OneTrust`. Reject All now dismisses the banner properly. Custom is now mapped to Zoom's real OneTrust categories: `C0004` Targeting = Advertising (forced OFF when `ccpaDoNotSell` is ON), `C0003` Functional = Functional, `C0002` Performance = Analytics. Verified cookie result for a mixed custom profile: `groups=C0004:0,C0003:1,C0002:0,C0001:1`. **Remaining caveat:** the footer `Your Privacy Choices` / settings reopen path has been inconsistent during manual testing, so CCPA verification should still be treated as provisional until that reopen flow is validated more directly. |
 | `nike.com` | Supported with caveats | Dedicated MAIN-world handler (`cmp-api-handler.js`) detects `/guest/settings/do-not-share-my-data`, waits for `#a11y-do-not-share`, and clicks the checkbox to trigger Nike's React `onChange`, which sets `ni_c=1PA=0` client-side. E2E-validated May 2026 (`reject_all` direction). **Caveat:** opt-in reversal (`accept_all` → uncheck box) cannot be reliably automated — Nike's React component does not propagate the `ni_c` cookie update for programmatic unchecks. Users who previously opted out via the extension and switch to `accept_all` will need to visit the Nike settings page and uncheck manually. |
 | `nbcnews.com` | Supported with caveats | Validated May 13, 2026 in headed Chromium e2e for both `reject_all + ccpaDoNotSell=true` and `accept_all + ccpaDoNotSell=true`, with the real OneTrust `ot-group-id-SPD_BG` toggle verified OFF after handling. Important caveat: NBC News is a CNBC sibling in the Versant / OneTrust family, but it should not use CNBC's reload-on-save special case; the working path is the visible `Your Privacy Choices` opener into the privacy center. |
+| `client.schwab.com`, `www.schwab.com` | Supported with caveats | Validated May 28, 2026 in live manual browser sessions. `client.schwab.com/app/accounts/summary/` should no longer be redirected into the agreements page by the extension; the root cause was overly broad ConsentManager-frame detection on non-CMP surfaces. `www.schwab.com/resource/amendment-to-account-agreements#` uses a OneTrust CCPA privacy-choice modal with `ot-group-id-SPD_BG`, and the extension now applies `ccpaDoNotSell` through the visible `Your Privacy Choices` / `Confirm My Choice` path there. **Validation caveat:** Schwab coverage is currently human-validated rather than part of the automated inventory. |
 
 ## Site-Specific Choice / Paywall-Or-Accept
 
@@ -67,7 +68,8 @@ The extension should guide users honestly instead of pretending reject/custom tr
 | Site | Status | Notes |
 | --- | --- | --- |
 | `abc.es` | Site-specific choice | Reject path leads to a subscription-style wall after initial handling. |
-| `lavanguardia.com` | Site-specific choice | Accept works; reject should be treated as paid-or-accept. |
+| `lavanguardia.com` | Site-specific choice | Evolok paywall. Reject = "Rechazar y suscribirse" — requires paid subscription. Accept is the only free path. Confirmed via EU VPN (NL) manual test. |
+| `abc.es` | Site-specific choice | Evolok paywall. Reject leads to a subscription page (€3.99+/month for cookie-free browsing). Accept is the only free path. Confirmed via EU VPN (NL) manual test. |
 | `corriere.it` | Site-specific choice | RCS flow behaves like paid-or-accept / consentless-subscription. |
 | `lastampa.it` | Site-specific choice | Accept works; reject loops back into a paid-style banner. |
 
@@ -77,6 +79,7 @@ These sites have observed problems but the root cause is not fully understood ye
 
 | Site | Status | Notes |
 | --- | --- | --- |
+| `euronews.com` | Automation-covered | EU VPN single-site test passes (site_specific:didomi:reject_all). Full-run failures are timing artifacts from a 42-site sequential run, not real regressions. |
 
 ## Needs Implementation
 
@@ -88,6 +91,57 @@ These sites still need direct handling work.
 | `faz.net` | Needs implementation | Current flow did not work for any tested preference. |
 | `sueddeutsche.de` | Needs implementation | Current flow did not work for any tested preference. |
 | `washingtonpost.com` | Needs implementation | Not supported for now. Current behavior appears site-buggy and inconsistent: reject can land on the cookie policy page, and accept-all may redirect users unexpectedly. |
+
+## Newly Added — Pending Human Validation
+
+Detected via automated VPN scan (Browsec → Germany/Lithuania EU IP) on 2026-05-29. CMP family confirmed by script fingerprinting; consent flows have **not** been human-validated yet.
+
+### Ketch — Needs Implementation
+
+| Site | URL | CMP | Validation result |
+| --- | --- | --- | --- |
+| Pret A Manger | [pret.com/en-GB](https://www.pret.com/en-GB) | Ketch | 🇬🇧 UK. Banner visible from EU IP but **extension does not yet handle Ketch**. Needs Ketch tier implementation. |
+
+### Sourcepoint — Needs Human Validation
+
+| Site | URL | CMP | Validation result |
+| --- | --- | --- | --- |
+| TAG24 | [tag24.de](https://www.tag24.de/) | Sourcepoint | 🇩🇪 Germany. Passes in batch run. |
+| Der Standard | [derstandard.at](https://www.derstandard.at/) | Sourcepoint | 🇦🇹 Austria. Passes in batch run. |
+| The Independent | [independent.co.uk](https://www.independent.co.uk/) | Sourcepoint | 🇬🇧 UK. Passes in batch run. |
+| Daily Mail | [dailymail.co.uk](https://www.dailymail.co.uk/) | Sourcepoint | 🇬🇧 UK. CMP detected. Human validation needed (banner skipped in automated run — session cookie). |
+
+### Didomi — EU VPN validated ✅
+
+| Site | URL | CMP | Validation result |
+| --- | --- | --- | --- |
+| ORF | [orf.at](https://www.orf.at/) | Didomi | 🇦🇹 Austria. ✅ Passes single-site VPN test (cmp_api:Didomi). |
+| NRC | [nrc.nl](https://www.nrc.nl/) | Didomi | 🇳🇱 Netherlands. ✅ Passes single-site VPN test (cmp_api:Didomi). |
+| Orange | [orange.com/en](https://www.orange.com/en) | Didomi | 🇫🇷 France. ✅ Passes single-site VPN test (cmp_api:Didomi). |
+| Free.fr | [free.fr](https://www.free.fr/) | Didomi | 🇫🇷 France. ✅ Passes single-site VPN test (cmp_api:Didomi). |
+| Michelin | [michelin.com](https://www.michelin.com/) | Didomi | 🇫🇷 France. ✅ Passes single-site VPN test (cmp_api:Didomi). |
+| Economía Digital | [economiadigital.es](https://www.economiadigital.es/) | Didomi | 🇪🇸 Spain. Banner not shown in automated run — session cookie. Human validation needed. |
+| Marca | [marca.com](https://www.marca.com/) | Didomi | 🇪🇸 Spain. Banner not shown in automated run — session cookie. Human validation needed. |
+
+### Bot-blocked — not automatable
+
+| Site | URL | CMP | Notes |
+| --- | --- | --- | --- |
+| De Telegraaf | [telegraaf.nl](https://www.telegraaf.nl/) | Didomi | 🇳🇱 Anti-bot challenge blocks automation even with VPN. Human validation only. |
+| Harrods | [harrods.com](https://www.harrods.com/) | Didomi | 🇬🇧 `ERR_HTTP2_PROTOCOL_ERROR` even with VPN. Human validation only. |
+
+### Cookiebot — Needs Human Validation (new CMP)
+
+| Site | URL | CMP | Validation result |
+| --- | --- | --- | --- |
+| Inchcape | [inchcape.com](https://www.inchcape.com/) | Cookiebot | 🇬🇧 UK. First Cookiebot site in the matrix. No banner shown in automated run. Human validation needed. |
+
+### OneTrust — EU VPN validated ✅
+
+| Site | URL | CMP | Validation result |
+| --- | --- | --- | --- |
+| LVMH | [lvmh.com](https://www.lvmh.com/) | OneTrust | 🇫🇷 France. ✅ Passes single-site VPN test. GDPR toggle-style banner (no reject-all button) handled via manage-preferences path. |
+| Volvo | [volvocars.com/en](https://www.volvocars.com/en/) | OneTrust | 🇸🇪 Sweden. No banner shown in automated run. Human validation needed. |
 
 ## Proposed US / CCPA Coverage Targets
 

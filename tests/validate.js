@@ -12,6 +12,8 @@
  *   npm run test:e2e -- --cmp=Sourcepoint
  *   npm run test:e2e -- --site="BBC"
  *   npm run test:e2e -- --headed            # show the browser window
+ *   npm run test:e2e -- --vpn --vpn-ext=<path>   # load an unpacked VPN extension (headed); see CONTRIBUTING.md
+ *   EMC_VPN_EXT=<path> npm run test:e2e -- --vpn  # same, via env var
  */
 
 const { chromium } = require('playwright');
@@ -30,9 +32,30 @@ const ACCESSIBILITY_HELP_PATH = '/help/accessibility-help';
 // ── Argument parsing ──────────────────────────────────────────────────────────
 const args     = process.argv.slice(2);
 const headed   = args.includes('--headed');
+const useVpn   = args.includes('--vpn');
 const region   = argVal(args, '--region');
 const cmpFilter= argVal(args, '--cmp');
 const siteName = argVal(args, '--site');
+
+// Path to an unpacked VPN extension (only used with --vpn flag).
+// Resolved from (in priority order):
+//   1. --vpn-ext=<path> CLI argument
+//   2. EMC_VPN_EXT environment variable
+// See CONTRIBUTING.md → "Testing with a VPN" for setup instructions.
+const vpnExtArg = argVal(args, '--vpn-ext');
+const VPN_EXT_DIR = vpnExtArg
+  ? path.resolve(vpnExtArg)
+  : process.env.EMC_VPN_EXT
+    ? path.resolve(process.env.EMC_VPN_EXT)
+    : null;
+
+// Profile dir for VPN session persistence — project-local so it works on any machine.
+const vpnProfileArg = argVal(args, '--vpn-profile');
+const VPN_PROFILE_DIR = vpnProfileArg
+  ? path.resolve(vpnProfileArg)
+  : process.env.EMC_VPN_PROFILE
+    ? path.resolve(process.env.EMC_VPN_PROFILE)
+    : path.resolve(__dirname, '..', '.tmp-vpn-profile');
 
 function argVal(args, key) {
   const match = args.find(a => a.startsWith(key + '='));
@@ -126,6 +149,9 @@ async function testSite(page, site) {
 
   // Wait for the banner to appear
   const bannerFound = await waitForAny(page, site.bannerSelectors, BANNER_WAIT);
+  if (await isChallengePage(page)) {
+    return { status: 'SKIP', detail: 'Blocked by anti-bot challenge during banner detection' };
+  }
   if (!bannerFound) {
     await page.waitForTimeout(handleWaitMs);
     const afterStats = await readStatsSnapshot(page.context());
@@ -322,11 +348,11 @@ function extractNewActivityForSite(beforeStats, afterStats, site) {
 
 async function isChallengePage(page) {
   const title = await page.title().catch(() => '');
-  if (/just a moment|security verification/i.test(title)) return true;
+  if (/just a moment|security verification|unusual activity/i.test(title)) return true;
 
   return page.evaluate(() => {
     const text = document.body?.innerText ?? '';
-    return /security verification|request id|cloudflare|just a moment/i.test(text);
+    return /security verification|request id|reference id|cloudflare|just a moment|unusual activity|not a robot/i.test(text);
   }).catch(() => false);
 }
 
@@ -516,7 +542,11 @@ async function writePreferences(browser, preference, site = null) {
     milestonesShown: [],
   };
 
-  const [sw] = browser.serviceWorkers();
+  // When --vpn is active, multiple service workers may be registered (one per extension).
+  // Find ours by excluding the VPN extension's ID, or fall back to the first available.
+  const allSws = browser.serviceWorkers();
+  const vpnExtId = VPN_EXT_DIR ? path.basename(path.dirname(VPN_EXT_DIR)) : null;
+  const sw = allSws.find(w => !vpnExtId || !w.url().includes(vpnExtId)) ?? allSws[0];
   if (sw) {
     await sw.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload);
     return null;
@@ -540,7 +570,9 @@ async function readStatsSnapshot(browser) {
     },
   };
 
-  const [sw] = browser.serviceWorkers();
+  const allSws = browser.serviceWorkers();
+  const vpnExtId = VPN_EXT_DIR ? path.basename(path.dirname(VPN_EXT_DIR)) : null;
+  const sw = allSws.find(w => !vpnExtId || !w.url().includes(vpnExtId)) ?? allSws[0];
   if (sw) {
     try {
       const result = await sw.evaluate((defaults) => new Promise((resolve) => chrome.storage.local.get(defaults, resolve)), payload);
@@ -566,17 +598,48 @@ async function readStatsSnapshot(browser) {
 (async () => {
   console.log(`\nEat My Cookies — validation suite`);
   console.log(`Extension: ${EXT_DIR}`);
-  console.log(`Sites: ${sites.length}  |  Headed: ${headed}`);
+  console.log(`Sites: ${sites.length}  |  Headed: ${headed || useVpn}  |  VPN: ${useVpn}`);
 
-  const browser = await chromium.launchPersistentContext('', {
-    headless: !headed,
+  if (useVpn && !VPN_EXT_DIR) {
+    console.error([
+      '',
+      '  --vpn requires a path to an unpacked VPN extension.',
+      '  Provide it via one of:',
+      '    --vpn-ext=<path>     e.g. --vpn-ext=~/Downloads/browsec/3.93.2_0',
+      '    EMC_VPN_EXT=<path>   environment variable (add to .env or shell profile)',
+      '',
+      '  To get the extension path:',
+      '    1. Install Browsec from the Chrome Web Store (ID: omghfjlpggmjjaagoclmmobgdodcjboh)',
+      '    2. In Chrome, go to chrome://extensions → enable "Developer mode"',
+      '    3. Find Browsec → click the extension ID link → note the "Path" shown',
+      '    4. Pass that path here, or export it as EMC_VPN_EXT in your shell.',
+      '',
+    ].join('\n'));
+    process.exit(1);
+  }
+
+  const extPaths    = useVpn ? [EXT_DIR, VPN_EXT_DIR] : [EXT_DIR];
+  const userDataDir = useVpn ? VPN_PROFILE_DIR : '';
+
+  if (useVpn) {
+    fs.mkdirSync(VPN_PROFILE_DIR, { recursive: true });
+  }
+
+  const browser = await chromium.launchPersistentContext(userDataDir, {
+    headless: !headed && !useVpn,   // --vpn always forces headed
     args: [
-      `--disable-extensions-except=${EXT_DIR}`,
-      `--load-extension=${EXT_DIR}`,
+      `--disable-extensions-except=${extPaths.join(',')}`,
+      `--load-extension=${extPaths.join(',')}`,
       '--no-sandbox',
     ],
     viewport: { width: 1280, height: 800 },
   });
+
+  if (useVpn) {
+    console.log(`VPN mode: using profile at ${VPN_PROFILE_DIR}`);
+    console.log('Waiting 4s for VPN extension to reconnect...');
+    await new Promise(r => setTimeout(r, 4000));
+  }
 
   // Complete onboarding via the service worker so chrome.storage.sync is accessible
   let swPage = null;

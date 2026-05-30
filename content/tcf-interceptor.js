@@ -11,6 +11,7 @@
   // causes SP's callback queue to hang (no __emc_prefs__ event since main.js
   // skips Guardian), which triggers a fallback redirect to /help/accessibility-help.
   if (window.location.hostname === 'www.theguardian.com') return;
+
   if (window.__tcfapi) return; // another extension or CMP already defined it
 
   let _prefs = null;

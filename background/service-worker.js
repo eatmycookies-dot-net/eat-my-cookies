@@ -118,6 +118,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeGuardianTopAction(sender, message.action).then(sendResponse);
     return true;
   }
+  if (message.type === 'EMC_EXECUTE_BLOOMBERG_CCPA') {
+    executeBloombergCcpaAction(sender, Boolean(message.enableOptOut)).then(sendResponse);
+    return true;
+  }
   if (message.type === 'SET_SITE_DISABLED') {
     setSiteDisabled(message.domain, Boolean(message.disabled)).then(() => sendResponse({ ok: true }));
     return true;
@@ -131,7 +135,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.type === 'CLEAR_UNSUPPORTED_SITE') {
-    clearUnsupportedSite(message.domain).then(() => sendResponse({ ok: true }));
+    clearUnsupportedSiteAndRefresh(message.domain, sender).then(() => sendResponse({ ok: true }));
     return true;
   }
   if (message.type === 'REMOVE_SITE_OVERRIDE') {
@@ -178,7 +182,7 @@ async function handleActionFired({ site, method, preference, actionToken }, send
     return { ok: true, autoDisabled: true, loopDetected: true };
   }
 
-  const dedupKey = duplicateActionKey({ site, preference }, sender);
+  const dedupKey = duplicateActionKey({ site, preference, method }, sender);
   if (checkDuplicateAction(dedupKey)) {
     return { ok: true, deduped: true };
   }
@@ -332,6 +336,133 @@ async function executeGuardianTopAction(sender, action) {
   }
 }
 
+async function executeBloombergCcpaAction(sender, enableOptOut) {
+  const tabId = sender.tab?.id;
+  if (!tabId) {
+    return { ok: false, handled: false };
+  }
+
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      world: 'MAIN',
+      args: [enableOptOut],
+      func: async (shouldOptOut) => {
+        const host = window.location.hostname;
+        if (!/sourcepointcmp\.|sourcepoint\.com|sp-prod\.net|privacy-mgmt\.com/.test(host)) {
+          return false;
+        }
+
+        const href = window.location.href || '';
+        const bodyText = (document.body?.innerText || '').toLowerCase();
+        const isBloombergUsPrivacyManager =
+          /sourcepointcmp\.bloomberg\.com\/us_pm\//i.test(href) ||
+          (document.querySelector('.pm-us') != null && /do not sell|do not share|opt out of sale/i.test(bodyText));
+        if (!isBloombergUsPrivacyManager) {
+          return false;
+        }
+
+        const isVisible = (el) => {
+          if (!el) return false;
+          const rect = el.getBoundingClientRect();
+          const style = getComputedStyle(el);
+          return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+
+        const dispatchSyntheticClick = (el) => {
+          if (!el) return false;
+          try { el.focus?.({ preventScroll: true }); } catch (_) {}
+          const rect = el.getBoundingClientRect();
+          const clientX = rect.left + Math.max(1, rect.width / 2);
+          const clientY = rect.top + Math.max(1, rect.height / 2);
+          const options = {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            view: window,
+            button: 0,
+            buttons: 1,
+            clientX,
+            clientY,
+          };
+          for (const name of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+            const EventCtor = name.startsWith('pointer') && typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+            el.dispatchEvent(new EventCtor(name, options));
+          }
+          el.click?.();
+          return true;
+        };
+
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+        const isPrivacyManagerVisible = () => [
+          '.message-component',
+          '.sp_choice_type_SE',
+          '.sp_choice_type_SAVE_AND_EXIT',
+          'button[title*="Save and close" i]',
+          'button[aria-label*="Save and close" i]',
+          'button.pm-toggle',
+          '.pm-switch[aria-checked]',
+        ].some((selector) => {
+          const el = document.querySelector(selector);
+          return el && isVisible(el);
+        });
+
+        const clickSaveAndClose = () => {
+          const saveButton = document.querySelector('.sp_choice_type_SE, .sp_choice_type_SAVE_AND_EXIT, button[title*="Save and close" i], button[aria-label*="Save and close" i]');
+          if (!saveButton || !isVisible(saveButton)) return false;
+          return dispatchSyntheticClick(saveButton);
+        };
+
+        const waitForPrivacyManagerDismissal = async (timeoutMs = 5000) => {
+          const started = Date.now();
+          while (Date.now() - started < timeoutMs) {
+            if (!isPrivacyManagerVisible()) return true;
+            await sleep(200);
+          }
+          return !isPrivacyManagerVisible();
+        };
+
+        const toggle = document.querySelector('button.pm-toggle[role="switch"], .pm-us button.pm-toggle, button.pm-toggle');
+        if (!toggle || !isVisible(toggle) || !isPrivacyManagerVisible()) {
+          return false;
+        }
+
+        const readState = () => toggle.getAttribute('aria-checked') === 'true';
+        const current = readState();
+        const desired = Boolean(shouldOptOut);
+        if (current !== desired) {
+          const target = desired
+            ? document.querySelector('.pm-us button.pm-toggle span.on, button.pm-toggle span.on, .pm-toggle span.on')
+            : document.querySelector('.pm-us button.pm-toggle span.off, button.pm-toggle span.off, .pm-toggle span.off');
+          if (target && isVisible(target)) {
+            dispatchSyntheticClick(target);
+          } else {
+            dispatchSyntheticClick(toggle);
+          }
+          await sleep(300);
+        }
+
+        if (readState() !== desired) return false;
+
+        if (!clickSaveAndClose()) return false;
+        if (await waitForPrivacyManagerDismissal(3000)) return true;
+
+        // Bloomberg's EU/GDPR-style privacy manager can occasionally persist even
+        // after the switch state is saved. Re-try the close action once more now
+        // that the desired toggle state has been applied.
+        await sleep(300);
+        if (!clickSaveAndClose()) return false;
+        return waitForPrivacyManagerDismissal(3000);
+      },
+    });
+
+    return { ok: true, handled: results.some((result) => Boolean(result?.result)) };
+  } catch (_) {
+    return { ok: false, handled: false };
+  }
+}
+
 async function addHiddenSelector(domain, selector) {
   const overrides = await getSiteOverrides();
   const current = overrides[domain] ?? {};
@@ -380,9 +511,18 @@ async function reportUnsupportedSite({ site, reason, allowAcceptOverride }, send
   return { ok: true };
 }
 
+async function clearUnsupportedSiteAndRefresh(domain, sender) {
+  await clearUnsupportedSite(domain);
+  const [{ stats }, settings] = await Promise.all([
+    chrome.storage.local.get({ stats: { totalActionsCount: 0 } }),
+    getSettings(),
+  ]);
+  await updateBadge(stats.totalActionsCount ?? 0, settings.showBadgeCount, sender.tab?.id);
+}
+
 async function updateBadge(count, showBadgeCount, tabId) {
   const text = showBadgeCount ? formatBadgeCount(count) : '';
-  await chrome.action.setBadgeText({ text });
+  await chrome.action.setBadgeText({ text, tabId: tabId ?? undefined });
   await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR, tabId: tabId ?? undefined });
 }
 
@@ -457,13 +597,13 @@ function pageUrlFor(sender, site) {
   return sender.url?.split('#')[0] ?? site;
 }
 
-function duplicateActionKey({ site, preference }, sender) {
+function duplicateActionKey({ site, preference, method }, sender) {
   const pageUrl = pageUrlFor(sender, site);
   const documentId = sender.documentId;
-  if (documentId) return `${site}:${preference}:${documentId}`;
+  if (documentId) return `${site}:${preference}:${method}:${documentId}`;
   const tabId = sender.tab?.id ?? 'na';
   const frameId = sender.frameId ?? 'na';
-  return `${tabId}:${frameId}:${site}:${preference}:${pageUrl}`;
+  return `${tabId}:${frameId}:${site}:${preference}:${method}:${pageUrl}`;
 }
 
 function triggerMilestoneAnimation(tabId) {

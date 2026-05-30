@@ -182,6 +182,163 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('if (DOCUMENT_START_ONLY_SITES.has(site)) return;');
   });
 
+  it('has a Bloomberg terms-gate handler that keys off cookie acceptance only, not the CCPA toggle', () => {
+    expect(source).toContain("if (site === 'www.bloomberg.com')");
+    expect(source).toContain('handleBloombergTermsGate');
+    expect(source).toContain("#cmp-consent-modal");
+    expect(source).toContain("#cmp-consent-button");
+    expect(source).toContain("text:we’ve updated our terms");
+    expect(source).toContain("document.getElementById('cmp-consent-modal')");
+    expect(source).toContain("document.getElementById('cmp-consent-button')");
+    expect(source).toContain("text === 'accept'");
+    expect(source).toContain("'#cmp-consent-modal'");
+    expect(source).toContain("'#cmp-consent-button'");
+    expect(source).toContain("const canAutoAccept = isBloombergCookieAcceptAligned(prefs) || siteOverrides.alwaysAccept;");
+    expect(source).toContain('isBloombergCookieAcceptAligned');
+    expect(source).toContain('accept-only terms gate');
+    expect(source).toContain('Bloomberg’s separate Do Not Sell or Share choice still follows your CCPA setting independently.');
+  });
+
+  it('preserves the standalone CCPA preference when a site override forces accept_all', () => {
+    expect(source).toContain("ccpaDoNotSell: settings.categoryPreferences?.ccpaDoNotSell ?? false");
+    expect(source).toContain("uncategorized: 'accept'");
+  });
+
+  it('stands down when the user intentionally opens Bloomberg’s footer CCPA flow', () => {
+    expect(source).toContain('BLOOMBERG_CCPA_MANUAL_SUPPRESS_MS');
+    expect(source).toContain("text.includes('do not sell or share my personal information')");
+    expect(source).toContain('if (event.isTrusted) {');
+    expect(source).toContain('bloombergCcpaManualOpenUntil = Date.now() + BLOOMBERG_CCPA_MANUAL_SUPPRESS_MS;');
+    expect(source).toContain('if (Date.now() < bloombergCcpaManualOpenUntil) return false;');
+  });
+
+  it('only treats Bloomberg Sourcepoint iframes with the US privacy-manager path as CCPA surfaces', () => {
+    expect(source).toContain("if (!/sourcepointcmp\\.bloomberg\\.com\\/us_pm\\//i.test(src)) {");
+    expect(source).not.toContain("|SP Consent Message");
+  });
+
+  it('has a reusable Ketch privacy-center handler wired for Forbes', () => {
+    expect(source).toContain('const ketchConfig = getKetchSiteConfig(site);');
+    expect(source).toContain('if (ketchConfig) {');
+    expect(source).toContain('return handleKetchPrivacyCenter(siteOverrides, prefs, ketchConfig);');
+    expect(source).toContain('handleForbesPrivacyCenter');
+    expect(source).toContain("return handleKetchPrivacyCenter(siteOverrides, prefs, getKetchSiteConfig('www.forbes.com'));");
+    expect(source).toContain('const KETCH_SITE_CONFIGS = {');
+    expect(source).toContain("'forbes.com'");
+    expect(source).toContain("'www.forbes.com'");
+    expect(source).toContain("'www.ketch.com'");
+    expect(source).toContain("'ketch.com'");
+    expect(source).toContain("siteLabel: 'Forbes'");
+    expect(source).toContain("siteLabel: 'Ketch'");
+    expect(source).toContain("privacyCenterTitle: 'forbes privacy center'");
+    expect(source).toContain("privacyCenterTitle: 'your privacy'");
+    expect(source).toContain('getKetchSiteConfig');
+    expect(source).toContain('handleKetchPrivacyCenter');
+    expect(source).toContain('const prefersAcceptAll = isEffectivelyAcceptAllPrefs(prefs);');
+    expect(source).toContain('const onPrivacyCenterPage = isKetchPrivacyCenterPage(config);');
+    expect(source).toContain('if (!onPrivacyCenterPage) {');
+    expect(source).toContain('isKetchBannerVisible(config)');
+    expect(source).toContain('...(config.bannerAcceptSelectors ?? []),');
+    expect(source).toContain('...(config.bannerRejectSelectors ?? []),');
+    expect(source).toContain('...(config.bannerManageSelectors ?? []),');
+    expect(source).toContain('hasVisibleKetchPrivacyCenterEntry(config)');
+    expect(source).toContain('config.bannerAcceptSelectors');
+    expect(source).toContain('config.bannerRejectSelectors');
+    expect(source).toContain('config.bannerManageSelectors');
+    expect(source).toContain("type: 'CLEAR_UNSUPPORTED_SITE'");
+    expect(source).toContain('config.readySelectors');
+    expect(source).toContain('config.settingsSelectors');
+    expect(source).toContain('config.purposeTabSelectors');
+    expect(source).toContain('clickKetchBannerActionAndWait(');
+    expect(source).toContain('waitForKetchBannerTransition(');
+    expect(source).toContain('config.saveSelectors');
+    expect(source).toContain('config.exitSelectors');
+    expect(source).toContain('config.categoryRules');
+    expect(source).toContain('siteOverrides.alwaysAccept');
+    expect(source).toContain('isEffectivelyAcceptAllPrefs');
+    expect(source).toContain("const interactionLockScope = `ketch:${config.cooldownScope}:${prefs.globalPreference}`;");
+    expect(source).toContain('const { bypassLock = false } = options;');
+    expect(source).toContain('if (!bypassLock && isSiteSpecificFlowLocked(interactionLockScope)) return true;');
+    expect(source).toContain('startSiteSpecificFlowLock(interactionLockScope);');
+    expect(source).toContain('return handleKetchPrivacyCenter(siteOverrides, prefs, config, { bypassLock: true });');
+    expect(source).toContain('isKetchAcceptOnlyState(config)');
+    expect(source).toContain('await applyKetchPreferences(config, prefs)');
+    expect(source).toContain('async function applyKetchPreferences(config, prefs)');
+    expect(source).toContain('findKetchCategoryControl(rule)');
+    expect(source).toContain("candidate.querySelector('input[type=\"checkbox\"], button[role=\"switch\"], [role=\"switch\"], [aria-checked]')");
+    expect(source).toContain('readKetchToggleState(control)');
+    expect(source).toContain('const visibleSwitchState = readKetchVisibleSwitchState(control);');
+    expect(source).toContain('function readKetchVisibleSwitchState(control) {');
+    expect(source).toContain("if (id.includes('switch-container-on')) return true;");
+    expect(source).toContain("if (id.includes('switch-container-off')) return false;");
+    expect(source).toContain('isKetchToggleDisabled(control)');
+    expect(source).toContain('forceKetchToggleState(control, desired, { trustCurrentState });');
+    expect(source).toContain('const exactTarget = findKetchToggleInteractionTarget(exact);');
+    expect(source).toContain('const interactionTarget = findKetchToggleInteractionTarget(control);');
+    expect(source).toContain('function findKetchToggleInteractionTarget(control) {');
+    expect(source).toContain('function findKetchSwitchContainer(control) {');
+    expect(source).toContain("return control.parentElement?.querySelector('[id*=\"switch-container\"]') ?? null;");
+    expect(source).toContain('const label = control.labels?.[0] ?? control.closest?.(\'label\');');
+    expect(source).toContain("if (control.matches?.('label')) {");
+    expect(source).toContain('function waitForKetchToggleSettle(ms = 250) {');
+    expect(source).toContain('async function applyKetchRuleState(rule, desired, options = {}) {');
+    expect(source).not.toContain('for (let attempt = 0; attempt < 2; attempt += 1) {');
+    expect(source).toContain('forceKetchToggleState(control, desired, { trustCurrentState });');
+    expect(source).toContain('const finalControl = findKetchCategoryControl(rule);');
+    expect(source).toContain('const settled = await waitForSingleKetchRuleState(rule, desired, 500);');
+    expect(source).toContain('async function waitForKetchRulesState(rules, desired, timeoutMs = 1200) {');
+    expect(source).toContain('async function waitForSingleKetchRuleState(rule, desired, timeoutMs = 500) {');
+    expect(source).toContain('async function clickKetchBannerActionAndWait(clickSelectors, watchSelectors, settingsSelectors, timeoutMs = 5000, attempts = 2) {');
+    expect(source).toContain('async function waitForKetchBannerTransition(watchSelectors, settingsSelectors, timeoutMs) {');
+    expect(source).toContain("if (labeledInput.hasAttribute('aria-checked')) {");
+    expect(source).toContain("if (control.hasAttribute('aria-checked')) {");
+    expect(source).toContain("const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');");
+    expect(source).toContain("input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));");
+    expect(source).toContain("input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));");
+    expect(source).toContain('function readCheckboxLikeState(input) {');
+    expect(source).toContain('const mutableRules = (config.categoryRules ?? []).filter((rule) => {');
+    expect(source).toContain('const allDesiredOn = mutableRules.length > 0 && mutableRules.every((rule) => desiredStates[rule.id] === true);');
+    expect(source).toContain('const allDesiredOff = mutableRules.length > 0 && mutableRules.every((rule) => desiredStates[rule.id] === false);');
+    expect(source).toContain('if (allDesiredOn && clickElement(config.bannerAcceptSelectors)) {');
+    expect(source).toContain('if (allDesiredOff && clickElement(config.bannerRejectSelectors)) {');
+    expect(source).not.toContain('let usedRejectBaseline = false;');
+    expect(source).not.toContain('await waitForKetchRulesState(mutableRules, false, 1200);');
+    expect(source).not.toContain('if (mutableRules.length > 0 && clickElement(config.bannerRejectSelectors)) {');
+    expect(source).not.toContain('if (usedRejectBaseline && !desired) continue;');
+    expect(source).toContain('await applyKetchRuleState(rule, desired);');
+    expect(source).toContain('const trustCurrentState = options.trustCurrentState !== false;');
+    expect(source).toContain('if (interactionTarget && interactionTarget !== control) {');
+    expect(source).toContain("{ id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising'], desired: (prefs) => Boolean(prefs.advertising) }");
+    expect(source).toContain("{ id: 'personalization', labels: ['personalization'], desired: (prefs) => Boolean(prefs.functional) || prefs.uncategorized === 'accept' }");
+    expect(source).toContain("(config.categoryRules ?? []).map((rule) => [rule.id, Boolean(rule.desired(prefs))])");
+    expect(source).not.toContain('behavioral_advertising: Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false');
+    expect(source).toContain('site_override:accept_all');
+    expect(source).toContain('exitKetchPrivacyCenter(config)');
+    expect(source).toContain("siteOverrides.alwaysAccept ? 'accept_all' : prefs.globalPreference");
+  });
+
+  it('watches late-rendering Bloomberg and Forbes site-specific flows', () => {
+    expect(source).toContain('DYNAMIC_SITE_SPECIFIC_HOSTS');
+    expect(source).toContain("'forbes.com'");
+    expect(source).toContain("'www.bloomberg.com'");
+    expect(source).toContain("'www.forbes.com'");
+    expect(source).toContain("'www.ketch.com'");
+    expect(source).toContain("'ketch.com'");
+    expect(source).toContain('scheduleDynamicSiteSpecificWatch()');
+    expect(source).toContain('new MutationObserver(() => {');
+    expect(source).toContain("const settings = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });");
+    expect(source).toContain("const siteOverrides = await chrome.runtime.sendMessage({ type: 'GET_SITE_OVERRIDES', domain: site }) ?? {};");
+    expect(source).toContain('const prefs = resolvePrefs(settings, siteOverrides);');
+    expect(source).toContain('document.documentElement.dataset.emcPref = prefs.globalPreference;');
+    expect(source).toContain("const keepWatchingAfterHandle = site === 'forbes.com' || site === 'www.forbes.com' || site === 'www.ketch.com' || site === 'ketch.com';");
+    expect(source).toContain('const watchDurationMs = keepWatchingAfterHandle ? 120000 : 15000;');
+    expect(source).toContain('if (handled && !keepWatchingAfterHandle) stop();');
+    expect(source).toContain('}, watchDurationMs);');
+    expect(source).toContain('let siteSpecificFlowLock = null;');
+    expect(source).toContain('function startSiteSpecificFlowLock(scope, ttlMs = 4000) {');
+    expect(source).toContain('function isSiteSpecificFlowLocked(scope) {');
+  });
+
   it('can pre-mark reload-on-save flows before navigation interrupts reporting', () => {
     expect(source).toContain("document.addEventListener('__emc_pre_handle__'");
     expect(source).toContain('document.documentElement.dataset.emcRunSignature = currentRunSignature;');
@@ -194,6 +351,41 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('await flushPendingPreHandleAction(currentRunSignature);');
     expect(source).toContain('if (!force && hadPendingPreHandleAction) return;');
     expect(source).toContain('if (!force && isFlowCoolingDown(runCooldownScope(currentRunSignature))) return;');
+  });
+});
+
+describe('service-worker.js — unsupported-site badge clearing', () => {
+  const source = readSource('background/service-worker.js');
+
+  it('refreshes the tab badge when unsupported-site state is cleared', () => {
+    expect(source).toContain('clearUnsupportedSiteAndRefresh');
+    expect(source).toContain("if (message.type === 'CLEAR_UNSUPPORTED_SITE')");
+    expect(source).toContain('await updateBadge(stats.totalActionsCount ?? 0, settings.showBadgeCount, sender.tab?.id);');
+  });
+
+  it('dedupes actions by method so accept and CCPA actions on the same page can both count', () => {
+    expect(source).toContain('const dedupKey = duplicateActionKey({ site, preference, method }, sender);');
+    expect(source).toContain('return `${site}:${preference}:${method}:${documentId}`;');
+    expect(source).toContain('return `${tabId}:${frameId}:${site}:${preference}:${method}:${pageUrl}`;');
+  });
+
+  it('keeps Bloomberg CCPA handling open until the Sourcepoint privacy manager actually dismisses', () => {
+    expect(source).toContain('const isPrivacyManagerVisible = () => [');
+    expect(source).toContain('const clickSaveAndClose = () => {');
+    expect(source).toContain('const waitForPrivacyManagerDismissal = async (timeoutMs = 5000) => {');
+    expect(source).toContain("'.sp_choice_type_SE'");
+    expect(source).toContain("'.sp_choice_type_SAVE_AND_EXIT'");
+    expect(source).toContain('if (!clickSaveAndClose()) return false;');
+    expect(source).toContain('if (await waitForPrivacyManagerDismissal(3000)) return true;');
+    expect(source).toContain('return waitForPrivacyManagerDismissal(3000);');
+  });
+
+  it('keeps Bloomberg CCPA execution scoped to the US privacy-manager frame', () => {
+    expect(source).toContain('const isBloombergUsPrivacyManager =');
+    expect(source).toContain('/sourcepointcmp\\.bloomberg\\.com\\/us_pm\\//i.test(href)');
+    expect(source).toContain("document.querySelector('.pm-us') != null");
+    expect(source).toContain('/do not sell|do not share|opt out of sale/i.test(bodyText)');
+    expect(source).toContain('if (!isBloombergUsPrivacyManager) {');
   });
 });
 
@@ -244,10 +436,15 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
   });
 
   it('uses CNBC and NBC News for CCPA privacy-center routing, but only CNBC for reload-on-save pre-marking', () => {
-    expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com'])");
+    expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com', 'www.schwab.com', 'schwab.com'])");
     expect(source).toContain("ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set(['www.cnbc.com'])");
     expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {");
     expect(source).toContain("method: 'cmp_api:OneTrust:ccpa'");
+  });
+
+  it('includes Schwab in the OneTrust privacy-choice host allowlists', () => {
+    expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com', 'www.schwab.com', 'schwab.com'])");
+    expect(source).toContain("ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com', 'www.schwab.com', 'schwab.com'])");
   });
 
   it('treats an already-open OneTrust settings modal as actionable without requiring an opener click', () => {
@@ -273,7 +470,7 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
   });
 
   it('has a dedicated OneTrust privacy-center accept path for Thomson Reuters-style pages', () => {
-    expect(source).toContain("ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com'])");
+    expect(source).toContain("ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com', 'www.schwab.com', 'schwab.com'])");
     expect(source).toContain("if (prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(window.location.hostname))");
     expect(source).toContain('handleOneTrustPrivacyCenterAccept');
     expect(source).toContain('enableVisibleOneTrustToggles();');
@@ -293,6 +490,8 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
   it('uses CNBC and NBC News for DOM CCPA privacy-center routing, but only CNBC for reload-on-save pre-marking', () => {
     expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set([");
     expect(source).toContain("'www.nbcnews.com'");
+    expect(source).toContain("'www.schwab.com'");
+    expect(source).toContain("'schwab.com'");
     expect(source).toContain("ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set([");
     expect(source).toContain("'www.cnbc.com'");
     expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {");
@@ -328,6 +527,11 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
     expect(source).toContain('executeOneTrustPrivacyCenterAccept');
     expect(source).toContain('enableVisibleOneTrustToggles();');
   });
+
+  it('includes Schwab in the DOM OneTrust privacy-choice accept allowlist', () => {
+    expect(source).toContain("'www.schwab.com'");
+    expect(source).toContain("'schwab.com'");
+  });
 });
 
 describe('frame handlers — temporary skip guards', () => {
@@ -342,6 +546,92 @@ describe('frame handlers — temporary skip guards', () => {
     expect(spSource).toContain('TEMPORARILY_UNSUPPORTED_TOP_SITES.has(site)');
   });
 
+  it('sourcepoint USNat privacy-manager flow follows the standalone CCPA choice even when cookies are accepted', () => {
+    expect(spSource).toContain('function isSourcepointHost');
+    expect(spSource).toContain('sourcepointcmp\\.');
+    expect(spSource).toContain('if (isPrivacyManagerFrame()) {');
+    expect(spSource).toContain('if (isUSNat) {');
+    expect(spSource).toContain('await applySourcepointUsNatPrivacyChoice(wantsUsNatOptOut, site, settings.globalPreference)');
+    expect(spSource).toContain('const wantsUsNatOptOut = effectiveUsNatOptOut(settings);');
+    expect(spSource).toContain('sourcepointUsNatSwitchTargetSelectors');
+    expect(spSource).toContain("button.pm-toggle span.on");
+    expect(spSource).toContain("button.pm-toggle span.off");
+    expect(spSource).toContain('if (!hasConsentSignals() && !isFTShell && !isSourcepointHost(window.location.hostname)) return;');
+  });
+
+  it('generic Sourcepoint privacy-manager reject path clicks Reject All before Save and Close', () => {
+    expect(spSource).toContain('async function rejectFromPrivacyManager()');
+    expect(spSource).toContain("'.sp_choice_type_REJECT_ALL'");
+    expect(spSource).toContain("'.sp_choice_type_13'");
+    expect(spSource).toContain("'button[data-sp-action=\"REJECT_ALL\"]'");
+    expect(spSource).toContain("'text:reject all'");
+    expect(spSource).toContain("'text:decline all'");
+    expect(spSource).toContain("'text:refuse all'");
+    expect(spSource).toContain("'button[title*=\"Do Not Accept\" i]'");
+    expect(spSource).toContain("'button[aria-label*=\"Do Not Accept\" i]'");
+    expect(spSource).toContain("'text:no, i do not accept'");
+    expect(spSource).toContain("'text:i do not accept'");
+    expect(spSource).toContain("'text:reject'");
+    expect(spSource).toContain("const saveButton = document.querySelector('.sp_choice_type_SAVE_AND_EXIT');");
+  });
+
+  it('keeps Sourcepoint class .sp_choice_type_13 out of the generic GDPR accept list', () => {
+    expect(spSource).toContain("const GDPR_ACCEPT = [");
+    expect(spSource).toContain("'.sp_choice_type_11'");
+    const acceptBlock = spSource.slice(
+      spSource.indexOf('const GDPR_ACCEPT = ['),
+      spSource.indexOf('];', spSource.indexOf('const GDPR_ACCEPT = [')) + 2,
+    );
+    expect(acceptBlock).not.toContain("'.sp_choice_type_13'");
+  });
+
+  it('prefers Sourcepoint structural selectors first for generic accept and manage flows', () => {
+    const gdprAcceptBlock = spSource.slice(
+      spSource.indexOf('const GDPR_ACCEPT = ['),
+      spSource.indexOf('];', spSource.indexOf('const GDPR_ACCEPT = [')) + 2,
+    );
+    expect(gdprAcceptBlock.indexOf("'.sp_choice_type_11'")).toBeLessThan(
+      gdprAcceptBlock.indexOf("'button[data-sp-action=\"ACCEPT_ALL\"]'"),
+    );
+
+    const ftNoticeAcceptBlock = spSource.slice(
+      spSource.indexOf('const FT_NOTICE_ACCEPT = ['),
+      spSource.indexOf('];', spSource.indexOf('const FT_NOTICE_ACCEPT = [')) + 2,
+    );
+    expect(ftNoticeAcceptBlock.indexOf("'.sp_choice_type_11'")).toBeLessThan(
+      ftNoticeAcceptBlock.indexOf("'button[title=\"Accept\"]'"),
+    );
+
+    const ftNoticeManageBlock = spSource.slice(
+      spSource.indexOf('const FT_NOTICE_MANAGE = ['),
+      spSource.indexOf('];', spSource.indexOf('const FT_NOTICE_MANAGE = [')) + 2,
+    );
+    expect(ftNoticeManageBlock.indexOf("'.sp_choice_type_12'")).toBeLessThan(
+      ftNoticeManageBlock.indexOf("'button[title*=\"Manage Cookies\" i]'"),
+    );
+  });
+
+  it('Bloomberg immediate-dismiss GDPR flow pre-reports before the Sourcepoint frame tears down', () => {
+    expect(spSource).toContain("const bloombergImmediateDismissSelectors = [");
+    expect(spSource).toContain("site === 'www.bloomberg.com'");
+    expect(spSource).toContain("hasVisibleSelector(bloombergImmediateDismissSelectors)");
+    expect(spSource).toContain("void report(site, `sourcepoint:${framework}:frame`, settings.globalPreference);");
+  });
+
+  it('Bloomberg immediate accept flow reports even when the Sourcepoint frame dismisses immediately', () => {
+    expect(spSource).toContain("const bloombergImmediateAcceptSelectors = [");
+    expect(spSource).toContain("'.sp_choice_type_11'");
+    expect(spSource).toContain("'text:yes, i accept'");
+    expect(spSource).toContain('shouldReportBloombergImmediateAccept');
+    expect(spSource).toContain('shouldReportDeferredBloombergImmediateAccept');
+  });
+
+  it('generic Sourcepoint still routes custom GDPR flows through the non-accept branch', () => {
+    expect(spSource).toContain("const accept = settings.globalPreference === 'accept_all';");
+    expect(spSource).toContain("selectors = accept ? GDPR_ACCEPT : GDPR_REJECT;");
+    expect(spSource).toContain("if (!accept && openPrivacyManager()) return;");
+  });
+
   it('consentmanager frame handler skips BBC and LA Times', () => {
     expect(cmSource).toContain('CM_FRAME_EXCLUDED_SITES');
     expect(cmSource).toContain("'www.bbc.com'");
@@ -354,6 +644,15 @@ describe('frame handlers — temporary skip guards', () => {
     expect(cmSource).toContain("'www.zoom.com'");
     expect(cmSource).toContain('CM_FRAME_EXCLUDED_SITES.has(topSite)');
     expect(cmSource).toContain('returnFromDWPrivacyPage');
+  });
+
+  it('consentmanager frame handler requires strong CM signals before acting on non-CM pages', () => {
+    expect(cmSource).toContain('CM_STRONG_SELECTORS');
+    expect(cmSource).toContain('hasStrongConsentManagerSignals');
+    expect(cmSource).toContain('window.cmpmngr?.eventwrapper');
+    expect(cmSource).toContain('return /consentmanager\\.net|consensu\\.org/.test(host) ||');
+    expect(cmSource).not.toContain("REJECT_SELS.concat(ACCEPT_SELS, SETTINGS_SELS, SAVE_SELS).some");
+    expect(cmSource).not.toContain("/only necessary|necessary cookies|cmpbox|consentmanager/i");
   });
 
   it('heuristic fallback skips BBC and LA Times', () => {

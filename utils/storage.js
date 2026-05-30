@@ -76,15 +76,30 @@ export async function getUnsupportedSites() {
   return result.unsupportedSites;
 }
 
+function domainAliases(domain) {
+  if (!domain) return [];
+  const aliases = new Set([domain]);
+  if (domain.startsWith('www.')) {
+    aliases.add(domain.slice(4));
+  } else {
+    aliases.add(`www.${domain}`);
+  }
+  return Array.from(aliases);
+}
+
 export async function setUnsupportedSite(domain, value) {
   const unsupportedSites = await getUnsupportedSites();
-  unsupportedSites[domain] = value;
+  for (const alias of domainAliases(domain)) {
+    unsupportedSites[alias] = { ...value, site: alias };
+  }
   await chrome.storage.local.set({ unsupportedSites });
 }
 
 export async function clearUnsupportedSite(domain) {
   const unsupportedSites = await getUnsupportedSites();
-  delete unsupportedSites[domain];
+  for (const alias of domainAliases(domain)) {
+    delete unsupportedSites[alias];
+  }
   await chrome.storage.local.set({ unsupportedSites });
 }
 

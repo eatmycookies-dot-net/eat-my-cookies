@@ -61,6 +61,7 @@ Use this to understand which sites share the same code path and will behave simi
 | `bloomberg.com` | US/global | GDPR + USNat | Automation-covered |
 | `cnbc.com` | US | CCPA settings flow | Validated May 12, 2026 in headed Chromium e2e for `reject_all` and `accept_all + ccpaDoNotSell=true`. Important behavioral note: the top-level banner often shows `Continue`, but that button only dismisses the shell. The real opt-out path is the visible `Your Privacy Choices` opener into the OneTrust privacy center. |
 | `nbcnews.com` | US | CCPA settings flow | Validated May 13, 2026 in headed Chromium e2e for `reject_all + ccpaDoNotSell=true` and `accept_all + ccpaDoNotSell=true`. Important behavioral note: unlike CNBC, NBC News should use the visible `Your Privacy Choices` entry into the OneTrust privacy center without the CNBC-specific reload-on-save path. |
+| `schwab.com`, `client.schwab.com` | US | CCPA settings flow + logged-in client surfaces | Validated May 28, 2026 in live manual browser sessions. `www.schwab.com` resource pages use a OneTrust privacy-choice modal with the `SPD_BG` toggle. `client.schwab.com` also matters to OneTrust/ConsentManager changes because false-positive generic automation previously redirected the logged-in account summary page into `/secured/agreements*`. |
 | `disney.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. USNat handler: `RejectAll()`/`Accept()` commits consent to cookie, then tries Submit click, falls back to DOM removal if modal persists (isTrusted check confirmed as root cause). Human-validated May 2026. |
 | `espn.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. Same Disney-family modal and handler path. Human-validated May 2026. |
 | `nike.com` | US | USNat/CCPA only | In `MAIN_WORLD_ONLY_SITES`. Dedicated MAIN-world handler in `cmp-api-handler.js` handles `/guest/settings/do-not-share-my-data`: waits for `#a11y-do-not-share`, clicks the checkbox (triggers React `onChange` → sets `ni_c=1PA=0` client-side). E2E-validated May 2026 for `reject_all`. Opt-in reversal not automatable (Nike's React component does not propagate the cookie update for programmatic unchecks). |
@@ -85,6 +86,16 @@ What matters:
 - the correct routing condition is `ccpaDoNotSell !== false`, even when `globalPreference === 'accept_all'`
 - already-open settings state must be treated as actionable without requiring another opener click
 - live validation for this family should use headed Chromium, because headless shell produced false negatives where the extension coordinator never bootstrapped on the page (`emcPref` stayed unset)
+
+**Separate Schwab note (added May 28, 2026):**
+Schwab exposes two distinct risk surfaces that should be kept in mind when changing generic handlers:
+- `client.schwab.com/app/accounts/summary/` is not a consent flow, but broad generic frame heuristics can still break it by auto-clicking footer/legal UI and sending the user into `/secured/agreements*`
+- `www.schwab.com/resource/amendment-to-account-agreements#` does expose a real OneTrust `Your Privacy Choices` CCPA modal, and that modal uses the `ot-group-id-SPD_BG` toggle plus `Confirm My Choice`
+
+What matters:
+- Schwab's public privacy-choice flow belongs in the dedicated OneTrust CCPA privacy-center path, alongside other `ccpaDoNotSell`-aware settings flows
+- Schwab's logged-in client pages should not be treated as generic CMP surfaces just because footer/legal links mention agreements or privacy
+- changes to `cm-frame-handler.js`, `cmp-api-handler.js`, `dom-handler.js`, or other generic click fallbacks should be spot-checked on both `client.schwab.com` and `www.schwab.com`
 
 **Sites also likely using OneTrust (from Priority 1 CCPA targets, not yet validated):**
 `walmart.com`, `target.com`, `foxnews.com`, `homedepot.com`
@@ -114,6 +125,29 @@ What matters:
 | Site | Region | Special notes |
 |------|--------|--------------|
 | `dw.com` | EU | Dedicated handler; automation-covered. Extension-driven privacy-page detours should return to content, but manual/footer-opened visits to `data-privacy-settings` must remain on that page. |
+
+### Ketch
+**Handler files:** `main.js` (reusable Ketch privacy-center path)
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `forbes.com` | US/global | Ketch-backed privacy center with both banner and full settings surfaces; current handling is routed through the reusable Ketch helpers in `main.js`. |
+| `ketch.com` | Demo/global | Useful live fixture for Ketch behavior because it exposes visible category toggles (`Analytics`, `Behavioral Advertising`, `Personalization`, etc.) without the rest of a publisher stack. |
+
+**Future legislation coverage review note (observed May 29, 2026):**
+Ketch appears to map geos into multiple privacy-law buckets beyond the currently tested US/EU paths. During manual inspection, the visible legislation mapping included:
+- `gdpreea` for many EU / EEA / UK territories
+- `ccpaus` for `US-CA`
+- `us_privacy_law_states` for states such as `US-CO`, `US-CT`, `US-DE`, `US-IA`, `US-IN`, `US-KY`, `US-MD`, `US-MN`, `US-MT`, `US-NE`, `US-NH`, `US-NJ`, `US-OR`, `US-RI`, `US-TN`, `US-TX`, `US-UT`, `US-VA`
+- `canada_quebec` for `CA-QC`
+- `Brazil`
+- `Australia`
+- `IND`
+
+What matters:
+- current validation has focused mostly on GDPR-like EU behavior and US flows
+- Ketch may present materially different toggle sets, defaults, or legal choices for Quebec, Brazil, Australia, India, and newer US state-law buckets
+- future Ketch work should include a legislation-coverage pass, not just per-site DOM validation
 
 ### Cookiebot
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
@@ -160,14 +194,14 @@ Sites marked 🔵 are lower risk but worth a spot-check if time allows.
 
 | Changed file | Must test | Spot-check |
 |-------------|-----------|------------|
-| `cmp-api-handler.js` | reuters.com, cnbc.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
-| `dom-handler.js` | reuters.com, bloomberg.com, forbes.com, cnbc.com | euronews.com, dw.com |
-| `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, forbes.com, disney.com | ft.com |
+| `cmp-api-handler.js` | reuters.com, cnbc.com, schwab.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
+| `dom-handler.js` | reuters.com, bloomberg.com, forbes.com, cnbc.com, schwab.com | euronews.com, dw.com |
+| `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, disney.com | ft.com |
 | `rules/cmps.json` (Sourcepoint entry) | nytimes.com, theverge.com | spiegel.de |
 | `rules/cmps.json` (Didomi entry) | euronews.com | — |
 | `rules/cmps.json` (ConsentManager entry) | dw.com | — |
 | `sp-frame-handler.js` | nytimes.com, theverge.com, theguardian.com, ft.com | wired.com, spiegel.de |
-| `main.js` (coordinator logic) | reuters.com, cnbc.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, euronews.com |
+| `main.js` (coordinator logic) | reuters.com, cnbc.com, schwab.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, euronews.com |
 | `main.js` (site-specific handler) | Only the one site that handler covers | — |
 | `heuristic.js` | Any site where other tiers fail | — |
 | `tcf-interceptor.js` | nytimes.com (GDPR), spiegel.de | reuters.com |

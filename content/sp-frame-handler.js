@@ -16,13 +16,17 @@
   const GUARDIAN_HOSTS = new Set(['www.theguardian.com', 'support.theguardian.com']);
   const TEMPORARILY_UNSUPPORTED_TOP_SITES = new Set(['www.bbc.com', 'latimes.com', 'www.latimes.com', 'membership.latimes.com']);
 
+  function isSourcepointHost(host = window.location.hostname) {
+    return /sourcepoint\.com|sourcepointcmp\.|sp-prod\.net|privacy-mgmt\.com/.test(host);
+  }
+
   // ── Detection ───────────────────────────────────────────────────────────────
   // SP iframes always include at least one of these signals.
   function isSPFrame() {
     // Hostname check covers USNat iframes that load on Sourcepoint-owned domains
     const host = window.location.hostname;
     const docEl = document.documentElement;
-    if (/sourcepoint\.com|sp-prod\.net|privacy-mgmt\.com/.test(host)) return true;
+    if (isSourcepointHost(host)) return true;
     return (
       document.querySelector('[class*="sp_choice_type"]') !== null ||
       document.querySelector('[data-sp-action]')          !== null ||
@@ -37,37 +41,41 @@
   // ── GDPR selectors ──────────────────────────────────────────────────────────
   const GDPR_REJECT = [
     '.sp_choice_type_REJECT_ALL',
+    '.sp_choice_type_13',
     'button[data-sp-action="REJECT_ALL"]',
     '[aria-label*="Reject All" i]',
     'button[title*="Reject All" i]',
     'button[title*="Decline All" i]',
     'button[title*="Refuse All" i]',
     '[aria-label*="Refuse All" i]',
+    'button[title*="Do Not Accept" i]',
+    'button[aria-label*="Do Not Accept" i]',
+    'text:no, i do not accept',
+    'text:i do not accept',
   ];
 
   const GDPR_ACCEPT = [
     '.sp_choice_type_ACCEPT_ALL',
+    '.sp_choice_type_11',
     'button[data-sp-action="ACCEPT_ALL"]',
     '[aria-label*="Accept All" i]',
     'button[title*="Accept All" i]',
-    '.sp_choice_type_13',
-    '.sp_choice_type_11',
   ];
 
   const FT_NOTICE_ACCEPT = [
+    '.sp_choice_type_11',
     'button[title="Accept"]',
     'button[aria-label="Accept"]',
     'button[data-sp-action="ACCEPT_ALL"]',
-    '.sp_choice_type_11',
     'text:accept',
   ];
 
   const FT_NOTICE_MANAGE = [
+    '.sp_choice_type_12',
     'button[title*="Manage Cookies" i]',
     'button[aria-label*="Manage Cookies" i]',
     'a[title*="Manage Cookies" i]',
     'a[aria-label*="Manage Cookies" i]',
-    '.sp_choice_type_12',
     'text:manage cookies',
   ];
 
@@ -154,7 +162,7 @@
 
     const isFTShell = isPotentialFTShell(site);
     if (!isSPFrame() && !isFTShell) return;
-    if (!hasConsentSignals() && !isFTShell) return;
+    if (!hasConsentSignals() && !isFTShell && !isSourcepointHost(window.location.hostname)) return;
     if (await isDisabledForTopSite()) return;
 
     // Determine which framework this banner is — USNat banners contain "sell" text.
@@ -197,19 +205,51 @@
     }
 
     const framework = isUSNat ? 'usnat' : 'gdpr';
+    const bloombergImmediateDismissSelectors = [
+      '.sp_choice_type_13',
+      'button[title*="Do Not Accept" i]',
+      'button[aria-label*="Do Not Accept" i]',
+      'text:no, i do not accept',
+    ];
+    const bloombergImmediateAcceptSelectors = [
+      '.sp_choice_type_11',
+      'button[title*="Yes, I Accept" i]',
+      'button[aria-label*="Yes, I Accept" i]',
+      'button[title*="Accept All" i]',
+      'button[aria-label*="Accept All" i]',
+      'text:yes, i accept',
+    ];
 
-    if (!accept && isPrivacyManagerFrame()) {
-      if (isUSNat && wantsUsNatOptOut) {
-        if (await applySourcepointUsNatPrivacyChoice(true, site, settings.globalPreference)) {
+    if (isPrivacyManagerFrame()) {
+      if (isUSNat) {
+        if (await applySourcepointUsNatPrivacyChoice(wantsUsNatOptOut, site, settings.globalPreference)) {
           return;
         }
-      } else if (await rejectFromPrivacyManager()) {
+      } else if (!accept && await rejectFromPrivacyManager()) {
         await report(site, `sourcepoint:${framework}:privacy-manager`, settings.globalPreference);
+        return;
       }
       return;
     }
 
+    const shouldReportBloombergImmediateDismiss =
+      site === 'www.bloomberg.com' &&
+      !isUSNat &&
+      !accept &&
+      hasVisibleSelector(bloombergImmediateDismissSelectors);
+    const shouldReportBloombergImmediateAccept =
+      site === 'www.bloomberg.com' &&
+      !isUSNat &&
+      accept &&
+      hasVisibleSelector(bloombergImmediateAcceptSelectors);
+
     if (tryClick(selectors)) {
+      if (shouldReportBloombergImmediateDismiss) {
+        void report(site, `sourcepoint:${framework}:frame`, settings.globalPreference);
+      }
+      if (shouldReportBloombergImmediateAccept) {
+        void report(site, `sourcepoint:${framework}:frame`, settings.globalPreference);
+      }
       if (isUSNat && !accept && wantsUsNatOptOut) {
         const outcome = await waitForUsNatTransition(6000);
         if (outcome === 'dismissed') {
@@ -231,7 +271,24 @@
 
     // Buttons hydrate asynchronously in some SP builds — watch the DOM.
     const observer = new MutationObserver(async () => {
+      const shouldReportDeferredBloombergImmediateDismiss =
+        site === 'www.bloomberg.com' &&
+        !isUSNat &&
+        !accept &&
+        hasVisibleSelector(bloombergImmediateDismissSelectors);
+      const shouldReportDeferredBloombergImmediateAccept =
+        site === 'www.bloomberg.com' &&
+        !isUSNat &&
+        accept &&
+        hasVisibleSelector(bloombergImmediateAcceptSelectors);
+
       if (tryClick(selectors)) {
+        if (shouldReportDeferredBloombergImmediateDismiss) {
+          void report(site, `sourcepoint:${framework}:frame:deferred`, settings.globalPreference);
+        }
+        if (shouldReportDeferredBloombergImmediateAccept) {
+          void report(site, `sourcepoint:${framework}:frame:deferred`, settings.globalPreference);
+        }
         if (isUSNat && !accept && wantsUsNatOptOut) {
           const outcome = await waitForUsNatTransition(6000);
           if (outcome === 'dismissed') {
@@ -379,6 +436,13 @@
     return false;
   }
 
+  function hasVisibleSelector(selectors) {
+    return selectors.some((sel) => {
+      const el = sel.startsWith('text:') ? findByText(sel.slice(5)) : document.querySelector(sel);
+      return el && isVisible(el);
+    });
+  }
+
   function isPrivacyManagerFrame() {
     return /privacy-manager/.test(window.location.href) ||
       document.querySelector('.sp_choice_type_SAVE_AND_EXIT, button[title*="Save and Close" i], button[aria-label*="Save and Close" i], [role="switch"][aria-checked], button.pm-toggle, .pm-switch[aria-checked]') !== null;
@@ -519,6 +583,21 @@
     ];
   }
 
+  function sourcepointUsNatSwitchTargetSelectors(enabled) {
+    if (enabled) {
+      return [
+        '.pm-us button.pm-toggle span.on',
+        'button.pm-toggle span.on',
+        '.pm-toggle span.on',
+      ];
+    }
+    return [
+      '.pm-us button.pm-toggle span.off',
+      'button.pm-toggle span.off',
+      '.pm-toggle span.off',
+    ];
+  }
+
   function sourcepointUsNatSaveSelectors() {
     return [
       '.sp_choice_type_SE',
@@ -558,6 +637,18 @@
     const current = getSourcepointUsNatSwitchState();
     if (current === null) return { applied: false, changed: false };
     if (current === enabled) return { applied: true, changed: false };
+
+    const target = sourcepointUsNatSwitchTargetSelectors(enabled)
+      .map((selector) => document.querySelector(selector))
+      .find((el) => el && isVisible(el));
+    if (target) {
+      dispatchSyntheticClick(target);
+      await sleep(250);
+      return {
+        applied: getSourcepointUsNatSwitchState() === enabled,
+        changed: true,
+      };
+    }
 
     const toggle = sourcepointUsNatSwitchSelectors()
       .map((selector) => document.querySelector(selector))
@@ -865,12 +956,16 @@
   }
 
   async function rejectFromPrivacyManager() {
-    const rejectButtons = Array.from(document.querySelectorAll('button, [role="button"], a'))
-      .filter((el) => isVisible(el) && /^reject$/i.test(el.textContent.trim()));
-
-    for (const button of rejectButtons) {
-      dispatchSyntheticClick(button);
-      await new Promise((resolve) => setTimeout(resolve, 60));
+    const rejectClicked = tryClick([
+      '.sp_choice_type_REJECT_ALL',
+      'button[data-sp-action="REJECT_ALL"]',
+      'text:reject all',
+      'text:decline all',
+      'text:refuse all',
+      'text:reject',
+    ]);
+    if (rejectClicked) {
+      await new Promise((resolve) => setTimeout(resolve, 120));
     }
 
     const saveButton = document.querySelector('.sp_choice_type_SAVE_AND_EXIT');

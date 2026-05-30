@@ -109,7 +109,7 @@ async function init() {
   renderActivity(stats.recentActivity);
   renderBadges(settings.milestonesShown);
   renderSiteOverrides(siteOverrides);
-  renderSiteWarning(currentDomain, unsupportedSites[currentDomain], siteOverrides[currentDomain]);
+  renderSiteWarning(currentDomain, findDomainRecord(unsupportedSites, currentDomain), siteOverrides[currentDomain]);
   renderSiteToggle(currentDomain, siteOverrides[currentDomain]);
   renderLanguageShortcut(settings);
   await renderVersionMeta(currentDomain);
@@ -284,6 +284,13 @@ function renderSiteWarning(currentDomain, warning, siteOverride) {
       : i18n.t('popupDismiss');
 }
 
+function findDomainRecord(records, domain) {
+  if (!records || !domain) return null;
+  if (records[domain]) return records[domain];
+  if (domain.startsWith('www.')) return records[domain.slice(4)] ?? null;
+  return records[`www.${domain}`] ?? null;
+}
+
 function renderSiteToggle(currentDomain, siteOverride) {
   const row = document.getElementById('site-toggle-row');
   if (!currentDomain || siteOverride?.disabled) {
@@ -363,7 +370,7 @@ function bindSettingsPanel(settings, currentDomain) {
         getUnsupportedSites(),
       ]);
       renderSiteOverrides(updatedOverrides);
-      renderSiteWarning(currentDomain, unsupportedSites[currentDomain], updatedOverrides[currentDomain]);
+      renderSiteWarning(currentDomain, findDomainRecord(unsupportedSites, currentDomain), updatedOverrides[currentDomain]);
       renderSiteToggle(currentDomain, updatedOverrides[currentDomain]);
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) await chrome.tabs.reload(tab.id);
@@ -377,7 +384,7 @@ function bindSettingsPanel(settings, currentDomain) {
         getUnsupportedSites(),
       ]);
       renderSiteOverrides(updatedOverrides);
-      renderSiteWarning(currentDomain, unsupportedSites[currentDomain], updatedOverrides[currentDomain]);
+      renderSiteWarning(currentDomain, findDomainRecord(unsupportedSites, currentDomain), updatedOverrides[currentDomain]);
       renderSiteToggle(currentDomain, updatedOverrides[currentDomain]);
       return;
     }
@@ -389,8 +396,7 @@ function bindSettingsPanel(settings, currentDomain) {
     if (!currentDomain) return;
     await setSiteOverride(currentDomain, { alwaysAccept: true, disabled: false });
     await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: currentDomain });
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) await chrome.tabs.reload(tab.id);
+    await reloadActiveTab();
     window.close();
   });
   document.getElementById('site-toggle-btn').addEventListener('click', async () => {
@@ -403,7 +409,7 @@ function bindSettingsPanel(settings, currentDomain) {
       chrome.tabs.query({ active: true, currentWindow: true }),
     ]);
     renderSiteOverrides(updatedOverrides);
-    renderSiteWarning(currentDomain, unsupportedSites[currentDomain], updatedOverrides[currentDomain]);
+    renderSiteWarning(currentDomain, findDomainRecord(unsupportedSites, currentDomain), updatedOverrides[currentDomain]);
     renderSiteToggle(currentDomain, updatedOverrides[currentDomain]);
     if (tab?.id) await chrome.tabs.reload(tab.id);
     window.close();
@@ -490,7 +496,7 @@ function bindSettingsPanel(settings, currentDomain) {
     await chrome.runtime.sendMessage({ type: 'CLEAR_ALL_SITE_OVERRIDES' });
     renderSiteOverrides({});
     const unsupportedSites = await getUnsupportedSites();
-    renderSiteWarning(currentDomain, unsupportedSites[currentDomain], null);
+    renderSiteWarning(currentDomain, findDomainRecord(unsupportedSites, currentDomain), null);
     renderSiteToggle(currentDomain, null);
   });
   document.getElementById('site-overrides-list').addEventListener('click', async (e) => {
@@ -503,7 +509,7 @@ function bindSettingsPanel(settings, currentDomain) {
     renderSiteOverrides(updated);
     if (domain === currentDomain) {
       const unsupportedSites = await getUnsupportedSites();
-      renderSiteWarning(currentDomain, unsupportedSites[currentDomain], updated[currentDomain]);
+      renderSiteWarning(currentDomain, findDomainRecord(unsupportedSites, currentDomain), updated[currentDomain]);
       renderSiteToggle(currentDomain, updated[currentDomain]);
     }
   });
@@ -652,7 +658,10 @@ function buildIssueUrl({ releaseVersion, issueVersion, currentDomain, buildMeta 
 }
 
 async function reloadActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !tab.url) {
+    [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  }
   if (!tab?.id || !tab.url) return;
 
   try {

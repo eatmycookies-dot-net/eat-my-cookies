@@ -75,15 +75,34 @@
     'text:auswahl speichern',
   ];
 
+  const CM_STRONG_SELECTORS = [
+    '#cmpbox',
+    '#cmpwrapper',
+    '#cmpinlinepreferencesbox',
+    '.cmpbox',
+    '.cmpboxbtns',
+    '.cmpboxbtnno',
+    '.cmpboxbtnyes',
+    '.cmpboxbtnreject',
+    '.cmpboxbtnaccept',
+    '.cmpboxbtnsave',
+    '#cmpbntnotxt',
+    '#cmpbntyestxt',
+    '.cmptogglelink',
+    '.cmptogglelinkspan',
+    '[data-cmp-action]',
+    '[data-cmp-purpose]',
+  ];
+
+  function hasStrongConsentManagerSignals() {
+    if (Boolean(window.cmpmngr?.eventwrapper)) return true;
+    return CM_STRONG_SELECTORS.some((sel) => deepQuerySelector(sel) !== null);
+  }
+
   function isConsentManagerFrame() {
     return /consentmanager\.net|consensu\.org/.test(host) ||
-      REJECT_SELS.concat(ACCEPT_SELS, SETTINGS_SELS, SAVE_SELS).some((sel) => {
-        if (sel.startsWith('text:')) {
-          return findByText(sel.slice(5)) !== null;
-        }
-        return deepQuerySelector(sel) !== null;
-      }) ||
-      /only necessary|necessary cookies|cmpbox|consentmanager/i.test(document.body?.innerText ?? '');
+      hasStrongConsentManagerSignals() ||
+      /only necessary|necessary cookies|consentmanager/i.test(document.body?.innerText ?? '');
   }
 
   function tryClick(sels) {

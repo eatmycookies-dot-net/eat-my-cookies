@@ -9,6 +9,8 @@ const EXPLICIT_ONETRUST_CONTROL_HOSTS = new Set([
 const ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set([
   'www.cnbc.com',
   'www.nbcnews.com',
+  'www.schwab.com',
+  'schwab.com',
 ]);
 const ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set([
   'www.cnbc.com',
@@ -26,6 +28,8 @@ const ONETRUST_CLEANUP_WATCH_MS = 15000;
 const ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set([
   'www.thomsonreuters.com',
   'thomsonreuters.com',
+  'www.schwab.com',
+  'schwab.com',
 ]);
 const ZOOM_ONETRUST_HOSTS = new Set([
   'www.zoom.com',

@@ -6,13 +6,13 @@
   const GUARDIAN_HOSTS = new Set(['www.theguardian.com', 'support.theguardian.com']);
   const GUARDIAN_REJECT_API_HOSTS = new Set(['www.theguardian.com', 'support.theguardian.com']);
   const EXPLICIT_ONETRUST_CONTROL_HOSTS = new Set(['www.bbc.com']);
-  const ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com']);
+  const ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com', 'www.schwab.com', 'schwab.com']);
   // CNBC exposes a visible top-level OneTrust banner that reloads on save.
   // NBC News does not consistently expose the same surface, and forcing this
   // path there can route users away from the homepage on reject.
   const ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set(['www.cnbc.com']);
   const ONETRUST_FORCE_CLEANUP_HOSTS = new Set(['www.zoom.com', 'www.thomsonreuters.com', 'thomsonreuters.com']);
-  const ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com']);
+  const ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com', 'www.schwab.com', 'schwab.com']);
   const ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com']);
   const ONETRUST_CLEANUP_WATCH_MS = 15000;
   const DISNEY_FAMILY_USNAT_HOSTS = new Set(['www.disney.com', 'www.espn.com', 'www.hulu.com']);
