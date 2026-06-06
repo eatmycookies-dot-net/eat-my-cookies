@@ -182,7 +182,7 @@ async function handleActionFired({ site, method, preference, actionToken }, send
     return { ok: true, autoDisabled: true, loopDetected: true };
   }
 
-  const dedupKey = duplicateActionKey({ site, preference, method }, sender);
+  const dedupKey = duplicateActionKey({ site, preference }, sender);
   if (checkDuplicateAction(dedupKey)) {
     return { ok: true, deduped: true };
   }
@@ -597,13 +597,13 @@ function pageUrlFor(sender, site) {
   return sender.url?.split('#')[0] ?? site;
 }
 
-function duplicateActionKey({ site, preference, method }, sender) {
+function duplicateActionKey({ site, preference }, sender) {
   const pageUrl = pageUrlFor(sender, site);
   const documentId = sender.documentId;
-  if (documentId) return `${site}:${preference}:${method}:${documentId}`;
+  if (documentId) return `${site}:${preference}:${documentId}`;
   const tabId = sender.tab?.id ?? 'na';
   const frameId = sender.frameId ?? 'na';
-  return `${tabId}:${frameId}:${site}:${preference}:${method}:${pageUrl}`;
+  return `${tabId}:${frameId}:${site}:${preference}:${pageUrl}`;
 }
 
 function triggerMilestoneAnimation(tabId) {

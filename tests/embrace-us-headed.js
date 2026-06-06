@@ -174,6 +174,11 @@ async function launchBrowser() {
   });
 }
 
+function findExtensionWorker(browser) {
+  const vpnExtId = USE_VPN ? path.basename(path.dirname(VPN_EXT_DIR)) : null;
+  return browser.serviceWorkers().find((worker) => !vpnExtId || !worker.url().includes(vpnExtId)) ?? null;
+}
+
 async function writePreferences(browser, scenario) {
   const payload = {
     globalPreference: scenario.preference,
@@ -183,9 +188,7 @@ async function writePreferences(browser, scenario) {
     milestonesShown: [],
   };
 
-  const allSws = browser.serviceWorkers();
-  const vpnExtId = USE_VPN ? path.basename(path.dirname(VPN_EXT_DIR)) : null;
-  const sw = allSws.find((worker) => !vpnExtId || !worker.url().includes(vpnExtId)) ?? allSws[0];
+  const sw = findExtensionWorker(browser) ?? browser.serviceWorkers()[0];
   if (sw) {
     await sw.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload);
     return;
@@ -200,6 +203,19 @@ async function writePreferences(browser, scenario) {
   } finally {
     await page.close().catch(() => {});
   }
+}
+
+async function readStats(browser) {
+  const sw = findExtensionWorker(browser) ?? browser.serviceWorkers()[0];
+  if (!sw) return null;
+  return sw.evaluate(() => new Promise((resolve) => {
+    chrome.storage.local.get({
+      stats: {
+        totalActionsCount: 0,
+        recentActivity: [],
+      },
+    }, resolve);
+  }));
 }
 
 async function clearOriginState(page) {
@@ -445,6 +461,7 @@ async function runScenario(browser, scenario) {
   try {
     await clearOriginState(page);
     await writePreferences(browser, scenario);
+    const beforeStats = await readStats(browser);
     await page.goto(SITE_URL, { waitUntil: 'domcontentloaded', timeout: USE_VPN ? 90000 : 30000 });
     await delay(USE_VPN ? 12000 : 9000);
 
@@ -463,10 +480,17 @@ async function runScenario(browser, scenario) {
       if (state[key] !== expected) failures.push(`${key} expected=${expected} actual=${state[key]}`);
     }
 
+    const afterStats = await readStats(browser);
+    const beforeCount = beforeStats?.stats?.totalActionsCount ?? 0;
+    const afterCount = afterStats?.stats?.totalActionsCount ?? 0;
+    const statsDelta = afterCount - beforeCount;
+    if (statsDelta !== 1) failures.push(`stats delta expected=1 actual=${statsDelta}`);
+
     return {
       name: scenario.name,
       ok: failures.length === 0,
       state,
+      statsDelta,
       reopened,
       artifacts: failures.length === 0 ? { cookies: [], localStorage: {}, sessionStorage: {} } : await readConsentArtifacts(page),
       controls: failures.length === 0 ? [] : await dumpVisibleControls(page),

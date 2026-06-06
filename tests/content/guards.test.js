@@ -266,7 +266,11 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('await applyKetchPreferences(config, prefs)');
     expect(source).toContain('async function applyKetchPreferences(config, prefs)');
     expect(source).toContain('findKetchCategoryControl(rule)');
-    expect(source).toContain("candidate.querySelector('input[type=\"checkbox\"], button[role=\"switch\"], [role=\"switch\"], [aria-checked]')");
+    // Picks the most-specific container (fewest nested toggles) so a parent wrapper
+    // that contains ALL category rows doesn't shadow per-category row controls.
+    expect(source).toContain('let bestToggleCount = Infinity;');
+    expect(source).toContain('if (toggleCount < bestToggleCount)');
+    expect(source).toContain('return bestControl;');
     expect(source).toContain('readKetchToggleState(control)');
     expect(source).toContain('const visibleSwitchState = readKetchVisibleSwitchState(control);');
     expect(source).toContain('function readKetchVisibleSwitchState(control) {');
@@ -430,10 +434,10 @@ describe('service-worker.js — unsupported-site badge clearing', () => {
     expect(source).toContain('await updateBadge(stats.totalActionsCount ?? 0, settings.showBadgeCount, sender.tab?.id);');
   });
 
-  it('dedupes actions by method so accept and CCPA actions on the same page can both count', () => {
-    expect(source).toContain('const dedupKey = duplicateActionKey({ site, preference, method }, sender);');
-    expect(source).toContain('return `${site}:${preference}:${method}:${documentId}`;');
-    expect(source).toContain('return `${tabId}:${frameId}:${site}:${preference}:${method}:${pageUrl}`;');
+  it('dedupes repeated actions by page and preference even if different handlers report success', () => {
+    expect(source).toContain('const dedupKey = duplicateActionKey({ site, preference }, sender);');
+    expect(source).toContain('return `${site}:${preference}:${documentId}`;');
+    expect(source).toContain('return `${tabId}:${frameId}:${site}:${preference}:${pageUrl}`;');
   });
 
   it('keeps Bloomberg CCPA handling open until the Sourcepoint privacy manager actually dismisses', () => {

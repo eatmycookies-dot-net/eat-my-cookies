@@ -1390,20 +1390,35 @@ function findKetchCategoryControl(rule) {
 
   const labels = (rule.labels?.length ? rule.labels : [rule.id.replaceAll('_', ' ')])
     .map((label) => label.toLowerCase());
+  const toggleSelector = 'input[type="checkbox"], button[role="switch"], [role="switch"], [aria-checked]';
   const candidates = deepQuerySelectorAll('label, [role="group"], [role="listitem"], li, div, section');
+
+  // Prefer the most specific container: the one that matches a category label but
+  // contains the fewest toggle controls. A parent wrapper contains ALL category rows
+  // and its text includes every label — so it always matches first in DOM order but
+  // always returns the same first toggle. Picking the candidate with the minimum
+  // toggle count selects the per-category row rather than the outer wrapper.
+  let bestControl = null;
+  let bestToggleCount = Infinity;
+
   for (const candidate of candidates) {
     if (!isVisible(candidate)) continue;
     const text = candidate.textContent?.trim().toLowerCase() ?? '';
     if (!text) continue;
     if (!labels.some((label) => text.includes(label))) continue;
-    const control = candidate.querySelector('input[type="checkbox"], button[role="switch"], [role="switch"], [aria-checked]');
-    if (control) {
-      const interactionTarget = findKetchToggleInteractionTarget(control);
-      if (interactionTarget && isVisible(interactionTarget)) return interactionTarget;
-      if (isVisible(control)) return control;
+    const control = candidate.querySelector(toggleSelector);
+    if (!control) continue;
+    const interactionTarget = findKetchToggleInteractionTarget(control);
+    const target = (interactionTarget && isVisible(interactionTarget)) ? interactionTarget
+      : isVisible(control) ? control : null;
+    if (!target) continue;
+    const toggleCount = candidate.querySelectorAll(toggleSelector).length;
+    if (toggleCount < bestToggleCount) {
+      bestToggleCount = toggleCount;
+      bestControl = target;
     }
   }
-  return null;
+  return bestControl;
 }
 
 function readKetchToggleState(control) {
