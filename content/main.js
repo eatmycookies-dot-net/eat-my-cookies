@@ -205,7 +205,7 @@ const KETCH_SITE_CONFIGS = {
       'text:manage preferences',
     ],
     customRejectBaseline: true,
-    saveSelectors: ['text:save your choices'],
+    saveSelectors: ['data-nav-action:confirm', 'text:save your choices'],
     exitSelectors: ['text:exit'],
   },
   'www.forbes.com': {
@@ -267,7 +267,7 @@ const KETCH_SITE_CONFIGS = {
       'text:manage preferences',
     ],
     customRejectBaseline: true,
-    saveSelectors: ['text:save your choices'],
+    saveSelectors: ['data-nav-action:confirm', 'text:save your choices'],
     exitSelectors: ['text:exit'],
   },
   'www.ketch.com': {
@@ -319,7 +319,7 @@ const KETCH_SITE_CONFIGS = {
     bannerManageSelectors: [
       'text:your privacy',
     ],
-    saveSelectors: ['text:save choices'],
+    saveSelectors: ['data-nav-action:confirm', 'text:save choices'],
     exitSelectors: [],
   },
   'ketch.com': {
@@ -371,7 +371,7 @@ const KETCH_SITE_CONFIGS = {
     bannerManageSelectors: [
       'text:your privacy',
     ],
-    saveSelectors: ['text:save choices'],
+    saveSelectors: ['data-nav-action:confirm', 'text:save choices'],
     exitSelectors: [],
   },
   'www.therealreal.com': {
@@ -414,7 +414,7 @@ const KETCH_SITE_CONFIGS = {
     bannerAcceptSelectors: [],
     bannerRejectSelectors: [],
     bannerManageSelectors: [],
-    saveSelectors: ['text:save choices', 'text:save your choices', 'text:confirm', 'text:save', 'button.ketch-btn-save', 'button[type="submit"]'],
+    saveSelectors: ['data-nav-action:confirm', 'text:save choices', 'text:save your choices', 'text:confirm', 'text:save', 'button.ketch-btn-save', 'button[type="submit"]'],
     exitSelectors: [],
   },
   'therealreal.com': {
@@ -453,7 +453,7 @@ const KETCH_SITE_CONFIGS = {
     bannerAcceptSelectors: [],
     bannerRejectSelectors: [],
     bannerManageSelectors: [],
-    saveSelectors: ['text:save choices', 'text:save your choices', 'text:confirm', 'text:save', 'button.ketch-btn-save', 'button[type="submit"]'],
+    saveSelectors: ['data-nav-action:confirm', 'text:save choices', 'text:save your choices', 'text:confirm', 'text:save', 'button.ketch-btn-save', 'button[type="submit"]'],
     exitSelectors: [],
   },
   'www.pret.com': {
@@ -500,7 +500,7 @@ const KETCH_SITE_CONFIGS = {
     bannerManageSelectors: [
       '#ketch-banner-button-secondary',
     ],
-    saveSelectors: ['button[type="submit"]', 'text:save choices', 'text:confirm'],
+    saveSelectors: ['data-nav-action:confirm', 'button[type="submit"]', 'text:save choices', 'text:confirm'],
     exitSelectors: [],
   },
 };
