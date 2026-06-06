@@ -8,6 +8,20 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Upcoming (unreleased)
 
+### Ketch CMP — Generic Support
+
+- Added `KETCH_GENERIC_CONFIG` fallback so any Ketch-powered site now works without a dedicated site entry. Previously only `forbes.com`, `ketch.com`, `therealreal.com`, and `pret.com` were covered.
+- New US sites validated: `olly.com`, `dollarshaveclub.com`, `cleareyes.com`. All pass headless e2e for `Accept All`, `Reject All`, and banner detection.
+- USNat banner semantics handled: `I Understand` (accept), `Do Not Sell`, and `Opt Out` are all recognized as valid accept/reject signals across the generic config.
+- Added `data-nav-action:confirm` as the primary save selector for all Ketch configs (generic and all site-specific entries). The newer Ketch SDK encodes a base64 JSON payload in each button's `data-nav` attribute; the `action: "confirm"` field is language-agnostic and works regardless of button label language. Text-based selectors (`text:save choices`, etc.) remain as fallbacks for older SDK deployments.
+- Added `bannerWatchSelectors` coverage for `#ketch-banner-button-tertiary` — the tertiary button position is used for Accept on some Ketch deployments and Reject on others, so watching it is necessary for reliable banner detection regardless of semantic role.
+
+### Ketch — Custom Preferences Fix
+
+- Fixed `findKetchCategoryControl` incorrectly returning the same toggle for every category rule. Root cause: parent container elements (whose `textContent` includes all category labels) were being matched first in DOM order, and `querySelector` on those containers always returned the first toggle in the whole group. Fixed by preferring the most specific container — the matching element with the fewest nested toggle controls — which selects the per-category row rather than the outer wrapper.
+- As a result, `Custom` preferences on Ketch sites (The RealReal, OLLY, and any generic Ketch site) now correctly apply the right toggle per category. Previously, selecting `Functional=ON / Analytics=OFF / Advertising=OFF` could result in Analytics being toggled ON instead.
+- Fixed all site-specific Ketch configs (`forbes.com`, `ketch.com`, `therealreal.com`, `pret.com`) missing `data-nav-action:confirm` in their `saveSelectors`. On sites using the new Ketch SDK, `clickElement(saveSelectors)` was silently failing — the extension applied the correct toggles but returned before `reportAction`, so custom preferences "worked" (Ketch auto-saves toggle state changes) but the action was never counted.
+
 ### Ketch / Pret A Manger
 
 - Added site-specific Ketch support for `pret.com/en-GB`.
@@ -16,6 +30,21 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 - Uses the `DYNAMIC_SITE_SPECIFIC_HOSTS` retry loop because Pret's Ketch banner loads asynchronously (~5s after page load).
 - Selectors are language-agnostic where possible: Ketch CSS variable class patterns (`[class*="rejectAllButton"]`, `[class*="acceptAllButton"]`) and `button[type="submit"]` for save, with text fallbacks for "Save choices" and "Confirm".
 - Fixed `readKetchVisibleSwitchState` to correctly read toggle state when the control element itself is the switch container — needed for Pret's sibling checkbox/toggle DOM layout, which was causing custom preference to toggle blindly.
+
+### Osano CMP
+
+- Added full Osano CMP support covering `Accept All`, `Reject All`, and `Custom` preference flows.
+- Detection uses Osano's CSS class namespace (`.osano-cm-dialog`, `.osano-cm-window`, `.osano-cm-widget`, and related selectors from `rules/cmps.json`).
+- `Accept All` clicks `button.osano-cm-accept-all`; `Reject All` clicks `button.osano-cm-denyAll`; `Custom` opens the preference drawer via `.osano-cm-link--type_manage`, sets per-category toggles, and saves via `button.osano-cm-save`.
+- Handled via a `MutationObserver`-based watcher (`scheduleOsanoWatch`) with polling fallback at 300 ms / 800 ms / 1.6 s / 3 s / 5 s / 8 s / 12 s / 20 s / 30 s — needed because Osano can inject its dialog asynchronously after initial page load.
+- Fixed a deduplication bug where Osano actions fired by the watcher could be counted multiple times. The `duplicateActionKey` in the service worker previously included `method` in the key, so the same site+preference combination with slightly different method strings was not recognized as a duplicate. Removed `method` from the dedup key so rapid repeated firings on the same document are correctly collapsed.
+
+### Headless US Validation Fix
+
+- Fixed US headless e2e tests (`OLLY US`, `Dollar Shave Club US`, `Clear Eyes US`) all failing with `emcPref=n/a`. Root cause: Playwright's bundled Chromium does not expose extension service workers via `browser.serviceWorkers()` in headless mode, so `writePreferences` never found the SW and the extension bootstrap exited early at `onboardingComplete` check.
+- Fix: `validate.js` now attempts to launch with `channel: 'chromium'` (system-installed Chromium at `/Applications/Chromium.app`) in headless mode, which does expose the service worker. Falls back to bundled Chromium silently if system Chromium is not available.
+- Added a warmup navigation to `example.com` immediately after launch so the extension SW activates and becomes visible to `browser.serviceWorkers()`.
+- Added 4-second SW polling in `writePreferences` so the write always lands before the first site navigation, even on cold starts.
 
 ---
 
