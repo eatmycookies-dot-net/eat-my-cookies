@@ -44,6 +44,7 @@ const DOCUMENT_START_ONLY_SITES = new Set([
 let siteSpecificWatchStarted = false;
 let siteSpecificFlowLock = null;
 let shopifyWatchStarted = false;
+let osanoWatchStarted = false;
 let bloombergCcpaBridgeInstalled = false;
 let bloombergCcpaWatchToken = 0;
 let bloombergCcpaManualOpenUntil = 0;
@@ -373,6 +374,88 @@ const KETCH_SITE_CONFIGS = {
     saveSelectors: ['text:save choices'],
     exitSelectors: [],
   },
+  'www.therealreal.com': {
+    siteLabel: 'The RealReal',
+    // No banner — Ketch is embedded inline on /customer-privacy only.
+    // The config ensures the handler is invoked by hostname lookup without
+    // needing isKetchSite() to return true (it won't on the main site).
+    privacyCenterTitle: '',
+    homeUrl: 'https://www.therealreal.com/',
+    cooldownScope: 'therealreal',
+    purposeTabSelectors: ['text:purposes', 'text:your preferences', 'text:cookie preferences'],
+    readySelectors: [
+      '#ketch-modal',
+      '#ketch-purposes-modal',
+      '#ketch-preferences',
+      '#ketch-preference-panel',
+      '[id*="purpose-list-switch-container"]',
+      '[class*="purposeList"]',
+    ],
+    settingsSelectors: [
+      '#ketch-modal',
+      '#ketch-purposes-modal',
+      '#ketch-preferences',
+      '#ketch-preference-panel',
+      '[id*="purpose-list-switch-container"]',
+    ],
+    entrySelectors: [
+      'text:your privacy choices',
+      'text:do not sell or share my personal information',
+      'text:do not sell my personal information',
+      'text:privacy preferences',
+    ],
+    categoryRules: [
+      { id: 'analytics', labels: ['analytics', 'performance', 'measurement'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising', 'targeting', 'behavioral ads'], desired: (prefs) => Boolean(prefs.advertising) },
+      { id: 'functionality', labels: ['functionality', 'functional', 'personalization'], desired: (prefs) => Boolean(prefs.functional) },
+    ],
+    // No banner — any banner selectors would cause false positives on main-site pages.
+    bannerWatchSelectors: [],
+    bannerAcceptSelectors: [],
+    bannerRejectSelectors: [],
+    bannerManageSelectors: [],
+    saveSelectors: ['text:save choices', 'text:save your choices', 'text:confirm', 'text:save', 'button.ketch-btn-save', 'button[type="submit"]'],
+    exitSelectors: [],
+  },
+  'therealreal.com': {
+    siteLabel: 'The RealReal',
+    privacyCenterTitle: '',
+    homeUrl: 'https://www.therealreal.com/',
+    cooldownScope: 'therealreal',
+    purposeTabSelectors: ['text:purposes', 'text:your preferences', 'text:cookie preferences'],
+    readySelectors: [
+      '#ketch-modal',
+      '#ketch-purposes-modal',
+      '#ketch-preferences',
+      '#ketch-preference-panel',
+      '[id*="purpose-list-switch-container"]',
+      '[class*="purposeList"]',
+    ],
+    settingsSelectors: [
+      '#ketch-modal',
+      '#ketch-purposes-modal',
+      '#ketch-preferences',
+      '#ketch-preference-panel',
+      '[id*="purpose-list-switch-container"]',
+    ],
+    entrySelectors: [
+      'text:your privacy choices',
+      'text:do not sell or share my personal information',
+      'text:do not sell my personal information',
+      'text:privacy preferences',
+    ],
+    categoryRules: [
+      { id: 'analytics', labels: ['analytics', 'performance', 'measurement'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising', 'targeting', 'behavioral ads'], desired: (prefs) => Boolean(prefs.advertising) },
+      { id: 'functionality', labels: ['functionality', 'functional', 'personalization'], desired: (prefs) => Boolean(prefs.functional) },
+    ],
+    bannerWatchSelectors: [],
+    bannerAcceptSelectors: [],
+    bannerRejectSelectors: [],
+    bannerManageSelectors: [],
+    saveSelectors: ['text:save choices', 'text:save your choices', 'text:confirm', 'text:save', 'button.ketch-btn-save', 'button[type="submit"]'],
+    exitSelectors: [],
+  },
   'www.pret.com': {
     siteLabel: 'Pret A Manger',
     privacyCenterTitle: 'privacy preference center',
@@ -422,6 +505,90 @@ const KETCH_SITE_CONFIGS = {
   },
 };
 
+// Fallback config for any Ketch site not listed in KETCH_SITE_CONFIGS.
+// privacyCenterTitle is empty so isKetchPrivacyCenterPage skips the text check
+// and relies purely on DOM selectors.
+const KETCH_GENERIC_CONFIG = {
+  siteLabel: 'Ketch',
+  privacyCenterTitle: '',
+  homeUrl: null,
+  cooldownScope: site,
+  purposeTabSelectors: ['text:purposes'],
+  // Ketch deployments use different IDs for their privacy center.
+  // Pret uses #ketch-modal; Clear Eyes uses #ketch-preferences.
+  // [id*="purpose-list-switch-container"] covers both patterns.
+  readySelectors: [
+    '#ketch-modal',
+    '#ketch-purposes-modal',
+    '#ketch-preferences',
+    '#ketch-preference-panel',
+    '[id*="purpose-list-switch-container"]',
+    '[class*="purposeList"]',
+  ],
+  settingsSelectors: [
+    '#ketch-modal',
+    '#ketch-purposes-modal',
+    '#ketch-preferences',
+    '#ketch-preference-panel',
+    '[id*="purpose-list-switch-container"]',
+  ],
+  entrySelectors: [
+    'text:your privacy choices',
+    'text:cookie preferences',
+    'text:manage preferences',
+    'text:customize settings',
+  ],
+  categoryRules: [
+    { id: 'analytics', labels: ['analytics', 'performance', 'measurement', 'research'], desired: (prefs) => Boolean(prefs.analytics) },
+    { id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising', 'targeting', 'behavioral ads', 'ad personalization'], desired: (prefs) => Boolean(prefs.advertising) },
+    { id: 'functionality', labels: ['functionality', 'functional', 'personalization'], desired: (prefs) => Boolean(prefs.functional) },
+  ],
+  bannerWatchSelectors: [
+    '#ketch-banner',
+    '#ketch-consent-banner',
+    '#ketch-banner-button-primary',
+    '#ketch-banner-button-secondary',
+    '#ketch-banner-button-tertiary',
+  ],
+  // Ketch publishers configure button order independently — e.g. Clear Eyes puts
+  // "Manage Preferences" in primary and "Accept All" in tertiary, while OLLY puts
+  // "Accept All" in primary and "Reject All" in tertiary. Positional IDs therefore
+  // cannot reliably identify semantic intent across deployments. Class-based selectors
+  // (acceptAllButton / rejectAllButton) work for older Ketch SDK builds; text-based
+  // selectors are the only reliable cross-site signal for the newer Tailwind SDK.
+  bannerAcceptSelectors: [
+    '[class*="acceptAllButton"]',
+    'text:accept all',
+    'text:i understand',  // Ketch USNat "I Understand" = accept/acknowledge
+  ],
+  bannerRejectSelectors: [
+    '[class*="rejectAllButton"]',
+    'text:reject all',        // also matches "Reject All Non-Essential" via includes()
+    'text:do not sell',       // also matches "Do Not Sell or Share My Personal Information"
+    'text:opt out',           // some Ketch USNat deployments use "Opt Out"
+  ],
+  bannerManageSelectors: [
+    '[class*="managePreferencesButton"]',
+    'text:manage preferences',
+    'text:customize settings',
+    'text:customize',
+  ],
+  // data-nav-action:confirm is a language-agnostic structural selector: Ketch SDK
+  // encodes {"action":"confirm"} in the save button's data-nav attribute (base64 JSON).
+  // Older Ketch SDK builds use button.ketch-btn-save or text-based button labels.
+  // button[type="submit"] is last — other modal buttons may also carry that type.
+  saveSelectors: [
+    'data-nav-action:confirm',
+    'button.ketch-btn-save',
+    'text:save choices',
+    'text:save your choices',
+    'text:confirm',
+    'text:save',
+    'button[type="submit"]',
+  ],
+  exitSelectors: [],
+};
+
 const MAIN_WORLD_ONLY_SITES = new Set([
   'www.theguardian.com',
   'support.theguardian.com',
@@ -469,6 +636,7 @@ async function bootstrap(force = false) {
   currentRunSignature = prefsRunSignature(prefs);
   document.documentElement.dataset.emcRunSignature = currentRunSignature;
   scheduleShopifyWatch(prefs);
+  scheduleOsanoWatch(prefs);
   const hadPendingPreHandleAction = hasPendingPreHandleAction(currentRunSignature);
   await flushPendingPreHandleAction(currentRunSignature);
   if (!force && hadPendingPreHandleAction) return;
@@ -515,6 +683,9 @@ async function bootstrap(force = false) {
   }
 
   const domResult = await runDOMHandler(prefs);
+  if (domResult?.preHandled) {
+    return;
+  }
   if (domResult) {
     return reportAction(domResult.method, prefs.globalPreference);
   }
@@ -540,7 +711,18 @@ function shouldSkipCurrentUrl() {
 }
 
 function scheduleDynamicSiteSpecificWatch() {
-  if (!DYNAMIC_SITE_SPECIFIC_HOSTS.has(site) || siteSpecificWatchStarted) return;
+  if (siteSpecificWatchStarted) return;
+  if (!DYNAMIC_SITE_SPECIFIC_HOSTS.has(site) && !isKetchSite()) {
+    // Ketch banners often render 1–3 s after document_idle (lazy JS evaluation).
+    // Schedule cheap DOM-only retries so the watcher starts before the
+    // extension's handling window closes — isKetchSite() is sync/free.
+    for (const ms of [1000, 2500, 5000]) {
+      setTimeout(() => {
+        if (!siteSpecificWatchStarted && isKetchSite()) scheduleDynamicSiteSpecificWatch();
+      }, ms);
+    }
+    return;
+  }
   siteSpecificWatchStarted = true;
   const keepWatchingAfterHandle = site === 'forbes.com' || site === 'www.forbes.com' || site === 'www.ketch.com' || site === 'ketch.com';
   const watchDurationMs = keepWatchingAfterHandle ? 120000 : 15000;
@@ -795,6 +977,87 @@ function scheduleShopifyWatch(prefs) {
   setTimeout(() => stop(), 15000);
 }
 
+function scheduleOsanoWatch(prefs) {
+  if (osanoWatchStarted) return;
+  osanoWatchStarted = true;
+  let stopped = false;
+  let running = false;
+
+  const stop = () => {
+    stopped = true;
+    try { observer?.disconnect(); } catch (_) {}
+  };
+
+  const tryHandle = async () => {
+    if (stopped || running) return;
+    if (currentRunSignature && wasHandledForCurrentPage(currentRunSignature)) {
+      stop();
+      return;
+    }
+    if (!hasVisibleOsanoSurface()) return;
+
+    running = true;
+    try {
+      const result = await runDOMHandler(prefs);
+      if (!result) return;
+      if (result.preHandled) {
+        stop();
+        return;
+      }
+      await reportAction(result.method, prefs.globalPreference);
+      stop();
+    } finally {
+      running = false;
+    }
+  };
+
+  const observer = new MutationObserver(() => {
+    void tryHandle();
+  });
+
+  try {
+    observer.observe(document.body ?? document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
+  } catch (_) {
+    osanoWatchStarted = false;
+    return;
+  }
+
+  for (const ms of [300, 800, 1600, 3000, 5000, 8000, 12000, 20000, 30000]) {
+    setTimeout(() => { void tryHandle(); }, ms);
+  }
+  setTimeout(() => stop(), 45000);
+}
+
+function hasVisibleOsanoSurface() {
+  return [
+    '.osano-cm-dialog',
+    '.osano-cm-window',
+    '.osano-cm-widget',
+    '.osano-cm-info-dialog',
+    '.osano-cm-info-views',
+    '.osano-cm-view',
+    '.osano-cm-buttons',
+    'button.osano-cm-save',
+    'button.osano-cm-denyAll',
+    'button.osano-cm-accept-all',
+    '.osano-cm-link--type_manage',
+  ].some((selector) => hasVisibleSelectorOnPage(selector));
+}
+
+function hasVisibleSelectorOnPage(selector) {
+  return Array.from(document.querySelectorAll(selector)).some((el) => isVisibleForWatch(el));
+}
+
+function isVisibleForWatch(el) {
+  const rect = el.getBoundingClientRect();
+  const style = getComputedStyle(el);
+  return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+}
+
 async function handleForbesPrivacyCenter(siteOverrides, prefs) {
   return handleKetchPrivacyCenter(siteOverrides, prefs, getKetchSiteConfig('www.forbes.com'));
 }
@@ -820,7 +1083,13 @@ function isBloombergCookieAcceptAligned(prefs) {
 }
 
 function getKetchSiteConfig(host = site) {
-  return KETCH_SITE_CONFIGS[host] ?? null;
+  return KETCH_SITE_CONFIGS[host] ?? (isKetchSite() ? KETCH_GENERIC_CONFIG : null);
+}
+
+function isKetchSite() {
+  if (document.querySelector('#ketch-banner, #ketch-consent-banner, #ketch-modal, #ketch-purposes-modal, #ketch-preferences, #ketch-preference-panel, [id^="ketch-banner-button"]')) return true;
+  if (Array.isArray(window.semaphore) && document.querySelector('script[src*="ketch"]')) return true;
+  return false;
 }
 
 async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = {}) {
@@ -967,8 +1236,10 @@ async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = 
 
 function isKetchPrivacyCenterPage(config) {
   if (!config) return false;
-  const bodyText = (document.body?.innerText || '').toLowerCase();
-  if (!bodyText.includes(config.privacyCenterTitle)) return false;
+  if (config.privacyCenterTitle) {
+    const bodyText = (document.body?.innerText || '').toLowerCase();
+    if (!bodyText.includes(config.privacyCenterTitle)) return false;
+  }
   const saveButton = queryElement(config.saveSelectors[0]);
   const exitButton = queryElement(config.exitSelectors[0]);
 
@@ -2086,7 +2357,24 @@ function queryElement(selector) {
   if (selector.startsWith('text:')) {
     return findButtonByText([selector.slice(5)]);
   }
+  // Ketch SDK embeds a base64 JSON in data-nav; "action" field is language-agnostic.
+  // Example: data-nav-action:confirm matches the Confirm/Save button in the preferences modal.
+  if (selector.startsWith('data-nav-action:')) {
+    return findButtonByNavAction(selector.slice(16));
+  }
   return deepQuerySelector(selector);
+}
+
+function findButtonByNavAction(action) {
+  for (const el of deepQuerySelectorAll('button, [role="button"], a')) {
+    const raw = el.getAttribute?.('data-nav');
+    if (!raw) continue;
+    try {
+      const decoded = JSON.parse(atob(raw));
+      if (decoded?.action === action && isVisible(el)) return el;
+    } catch (_) {}
+  }
+  return null;
 }
 
 function clickTargetFor(el) {
@@ -2766,15 +3054,16 @@ function isFreshPendingPreHandleAction(payload) {
 }
 
 function firePreHandleAction(method, preference, actionToken) {
-  if (!method || !actionToken) return;
+  if (!method) return;
   try {
-    void chrome.runtime.sendMessage({
+    const payload = {
       type: 'ACTION_FIRED',
       site,
       method,
       preference,
-      actionToken,
-    });
+    };
+    if (actionToken) payload.actionToken = actionToken;
+    void chrome.runtime.sendMessage(payload);
   } catch (_) {}
 }
 

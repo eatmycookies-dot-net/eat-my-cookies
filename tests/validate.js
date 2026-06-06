@@ -584,9 +584,21 @@ async function writePreferences(browser, preference, site = null) {
 
   // When --vpn is active, multiple service workers may be registered (one per extension).
   // Find ours by excluding the VPN extension's ID, or fall back to the first available.
-  const allSws = browser.serviceWorkers();
+  // In headless mode the SW may not be registered yet right after launchPersistentContext;
+  // poll for up to 4 s so the write always lands before the first site navigation.
   const vpnExtId = VPN_EXT_DIR ? path.basename(path.dirname(VPN_EXT_DIR)) : null;
-  const sw = allSws.find(w => !vpnExtId || !w.url().includes(vpnExtId)) ?? allSws[0];
+  const findOurSw = () => {
+    const all = browser.serviceWorkers();
+    return all.find(w => !vpnExtId || !w.url().includes(vpnExtId)) ?? all[0] ?? null;
+  };
+  let sw = findOurSw();
+  if (!sw) {
+    const deadline = Date.now() + 4000;
+    while (!sw && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 100));
+      sw = findOurSw();
+    }
+  }
   if (sw) {
     await sw.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload);
     return null;
@@ -666,8 +678,9 @@ async function readStatsSnapshot(browser) {
   }
   fs.mkdirSync(BROWSER_HOME_DIR, { recursive: true });
 
-  const browser = await chromium.launchPersistentContext(userDataDir, {
-    headless: !headed && !useVpn,   // --vpn always forces headed
+  const headless = !headed && !useVpn;
+  const launchOptions = {
+    headless,
     args: [
       `--disable-extensions-except=${extPaths.join(',')}`,
       `--load-extension=${extPaths.join(',')}`,
@@ -678,12 +691,34 @@ async function readStatsSnapshot(browser) {
       HOME: BROWSER_HOME_DIR,
     },
     viewport: { width: 1280, height: 800 },
-  });
+  };
+
+  // Playwright's bundled Chromium does not expose extension service workers in
+  // headless mode, which prevents writePreferences from finding the SW. System
+  // Chromium (at /Applications/Chromium.app on macOS) does expose them.
+  // Try system Chromium first; fall back to the bundled build silently.
+  let browser;
+  if (headless) {
+    try {
+      browser = await chromium.launchPersistentContext(userDataDir, { ...launchOptions, channel: 'chromium' });
+    } catch (_) {
+      browser = await chromium.launchPersistentContext(userDataDir, launchOptions);
+    }
+  } else {
+    browser = await chromium.launchPersistentContext(userDataDir, launchOptions);
+  }
 
   if (useVpn) {
     console.log(`VPN mode: using profile at ${VPN_PROFILE_DIR}`);
     console.log('Waiting 4s for VPN extension to reconnect...');
     await new Promise(r => setTimeout(r, 4000));
+  } else if (headless) {
+    // Navigate a warmup page so the extension's service worker activates and
+    // becomes visible to Playwright's browser.serviceWorkers() API. Without this,
+    // writePreferences cannot find the SW and onboardingComplete is never set.
+    const warmupPage = await browser.newPage();
+    await warmupPage.goto('https://example.com', { waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => {});
+    await warmupPage.close();
   }
 
   // Complete onboarding via the service worker so chrome.storage.sync is accessible

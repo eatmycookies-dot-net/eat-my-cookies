@@ -318,6 +318,49 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain("siteOverrides.alwaysAccept ? 'accept_all' : prefs.globalPreference");
   });
 
+  it('detects Ketch sites that open a preferences panel directly (no banner)', () => {
+    // isKetchSite() must cover the full set of modal/panel IDs — not just #ketch-banner —
+    // so generic handler fires on sites that show the preference panel before any banner.
+    expect(source).toContain("'#ketch-banner, #ketch-consent-banner, #ketch-modal, #ketch-purposes-modal, #ketch-preferences, #ketch-preference-panel, [id^=\"ketch-banner-button\"]'");
+  });
+
+  it('retries isKetchSite() after document_idle for lazy-loading Ketch banners', () => {
+    // OLLY, Dollar Shave Club, and Clear Eyes render their Ketch banner 1–3 s after
+    // document_idle.  scheduleDynamicSiteSpecificWatch must schedule cheap DOM retries
+    // so the watcher starts before the extension's handling window closes.
+    expect(source).toContain("for (const ms of [1000, 2500, 5000]) {");
+    expect(source).toContain("if (!siteSpecificWatchStarted && isKetchSite()) scheduleDynamicSiteSpecificWatch();");
+  });
+
+  it('has a dedicated config for The RealReal (privacy-page-only Ketch, no banner)', () => {
+    expect(source).toContain("'www.therealreal.com'");
+    expect(source).toContain("'therealreal.com'");
+    expect(source).toContain("siteLabel: 'The RealReal'");
+    expect(source).toContain("cooldownScope: 'therealreal'");
+    // No banner selectors — avoids false positives on their main site pages.
+    expect(source).toContain("bannerWatchSelectors: [],\n    bannerAcceptSelectors: [],\n    bannerRejectSelectors: [],\n    bannerManageSelectors: [],");
+    // Entry selectors cover CCPA/USNat footer links.
+    expect(source).toContain("'text:your privacy choices'");
+    expect(source).toContain("'text:do not sell or share my personal information'");
+  });
+
+  it('handles Ketch USNat banner semantics (I UNDERSTAND / DO NOT SELL / MANAGE PREFERENCES)', () => {
+    // Dollar Shave Club and similar USNat-only Ketch deployments use different button text.
+    expect(source).toContain("'text:i understand'");
+    expect(source).toContain("'text:do not sell'");
+    expect(source).toContain("'text:opt out'");
+  });
+
+  it('uses data-nav-action:confirm as a language-agnostic save selector for the new Ketch SDK', () => {
+    // Ketch SDK (Tailwind/React build) encodes {"action":"confirm"} in the save button's
+    // data-nav attribute (base64 JSON). This avoids relying on translated button text.
+    expect(source).toContain("'data-nav-action:confirm'");
+    expect(source).toContain("selector.startsWith('data-nav-action:')");
+    expect(source).toContain('function findButtonByNavAction(action)');
+    expect(source).toContain("JSON.parse(atob(raw))");
+    expect(source).toContain("decoded?.action === action");
+  });
+
   it('watches late-rendering Bloomberg and Forbes site-specific flows', () => {
     expect(source).toContain('DYNAMIC_SITE_SPECIFIC_HOSTS');
     expect(source).toContain("'forbes.com'");

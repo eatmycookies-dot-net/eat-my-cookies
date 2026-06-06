@@ -359,6 +359,23 @@
       ]
     },
     {
+      "name": "Embrace Pet Insurance",
+      "url": "https://www.embracepetinsurance.com/",
+      "region": "US",
+      "cmp": "Osano",
+      "tier": "dom",
+      "bannerSelectors": [
+        ".osano-cm-dialog",
+        ".osano-cm-window",
+        ".osano-cm-widget"
+      ],
+      "consentSelectors": [
+        "button.osano-cm-denyAll",
+        "button.osano-cm-save",
+        ".osano-cm-link--type_manage"
+      ]
+    },
+    {
       "name": "The Verge",
       "url": "https://www.theverge.com/",
       "region": "US",
@@ -801,6 +818,120 @@
         "#ketch-banner-button-secondary"
       ],
       "handleWaitMs": 15000
+    },
+    {
+      "name": "OLLY (EU/GDPR)",
+      "url": "https://www.olly.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Ketch",
+      "tier": "generic",
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner",
+        "#ketch-banner-button-primary",
+        "#ketch-banner-button-secondary",
+        "#ketch-banner-button-tertiary"
+      ],
+      "consentSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner"
+      ]
+    },
+    {
+      "name": "OLLY (US)",
+      "url": "https://www.olly.com/",
+      "region": "US",
+      "cmp": "Ketch",
+      "tier": "generic",
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner",
+        "#ketch-banner-button-primary",
+        "#ketch-banner-button-secondary"
+      ],
+      "consentSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner"
+      ]
+    },
+    {
+      "name": "The RealReal",
+      "url": "https://www.therealreal.com/customer-privacy",
+      "region": "US",
+      "cmp": "Ketch",
+      "tier": "site-specific",
+      "handleWaitMs": 10000,
+      "bannerSelectors": [
+        "#ketch-modal",
+        "#ketch-purposes-modal",
+        "#ketch-preferences",
+        "#ketch-preference-panel",
+        "[id*='purpose-list-switch-container']",
+        "[class*='purposeList']"
+      ],
+      "consentSelectors": [
+        "#ketch-modal",
+        "#ketch-purposes-modal",
+        "#ketch-preferences",
+        "#ketch-preference-panel",
+        "[id*='purpose-list-switch-container']"
+      ]
+    },
+    {
+      "name": "Dollar Shave Club (US)",
+      "url": "https://www.dollarshaveclub.com/",
+      "region": "US",
+      "cmp": "Ketch",
+      "tier": "generic",
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner",
+        "#ketch-banner-button-primary",
+        "#ketch-banner-button-secondary"
+      ],
+      "consentSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner"
+      ]
+    },
+    {
+      "name": "Dollar Shave Club (EU/GDPR)",
+      "url": "https://www.dollarshaveclub.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Ketch",
+      "tier": "generic",
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner",
+        "#ketch-banner-button-primary",
+        "#ketch-banner-button-secondary"
+      ],
+      "consentSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner"
+      ]
+    },
+    {
+      "name": "Clear Eyes (US)",
+      "url": "https://www.cleareyes.com/",
+      "region": "US",
+      "cmp": "Ketch",
+      "tier": "generic",
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner",
+        "#ketch-banner-button-primary",
+        "#ketch-banner-button-secondary",
+        "#ketch-banner-button-tertiary"
+      ],
+      "consentSelectors": [
+        "#ketch-banner",
+        "#ketch-consent-banner"
+      ]
     },
     {
       "name": "TAG24",

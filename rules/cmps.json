@@ -240,6 +240,33 @@
       }
     },
     {
+      "id": "osano",
+      "name": "Osano",
+      "note": "Osano can render either a simple banner or an expanded preference drawer with category toggles and a Save action.",
+      "detectors": [
+        { "type": "css_selector", "value": ".osano-cm-dialog" },
+        { "type": "css_selector", "value": ".osano-cm-window" },
+        { "type": "css_selector", "value": ".osano-cm-widget" },
+        { "type": "css_selector", "value": "button.osano-cm-save" },
+        { "type": "css_selector", "value": "button.osano-cm-denyAll" },
+        { "type": "css_selector", "value": "button.osano-cm-accept-all" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "button.osano-cm-denyAll" },
+          { "type": "click", "selector": ".osano-cm-denyAll" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "button.osano-cm-accept-all" },
+          { "type": "click", "selector": ".osano-cm-accept-all" }
+        ],
+        "customize": {
+          "open": { "type": "click", "selector": ".osano-cm-link--type_manage" },
+          "save": { "type": "click", "selector": "button.osano-cm-save" }
+        }
+      }
+    },
+    {
       "id": "consentmanager",
       "name": "ConsentManager",
       "note": "Used by DW. Banner injects into #cmpwrapper in the main frame.",

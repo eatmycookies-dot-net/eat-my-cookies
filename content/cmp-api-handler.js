@@ -35,6 +35,38 @@
     '.category-switch-handler',
     "input[id^='ot-group-id-']",
   ];
+  const OSANO_VISIBLE_SELECTORS = [
+    '.osano-cm-dialog',
+    '.osano-cm-window',
+    '.osano-cm-widget',
+    '.osano-cm-info-dialog',
+    '.osano-cm-info-views',
+    '.osano-cm-view',
+    '.osano-cm-buttons',
+    'button.osano-cm-save',
+    'button.osano-cm-denyAll',
+    'button.osano-cm-accept-all',
+    '.osano-cm-link--type_manage',
+  ];
+  const OSANO_ROOT_SELECTORS = [
+    '.osano-cm-dialog',
+    '.osano-cm-window',
+    '.osano-cm-widget',
+    '.osano-cm-info-dialog',
+    '.osano-cm-info-views',
+    '.osano-cm-view',
+  ];
+  const OSANO_SAVE_SELECTORS = [
+    'button.osano-cm-save',
+    '.osano-cm-save',
+  ];
+  const OSANO_PREF_SELECTORS = [
+    ...OSANO_SAVE_SELECTORS,
+    '[class*="osano-cm-toggle"]',
+    '[class*="osano-cm-switch"]',
+    'input[aria-labelledby*="osano-cm" i]',
+    '[role="switch"][aria-labelledby*="osano-cm" i]',
+  ];
   let _guardianRetryTimer = null;
 
   // Sourcepoint: intercept window._sp_queue before their SDK processes it.
@@ -370,6 +402,54 @@
       }));
       return false;
     },
+    Osano: async (w, prefs) => {
+      const cm = w.Osano?.cm;
+      if (!cm) return false;
+      if (!hasVisibleSelector(OSANO_VISIBLE_SELECTORS)) return false;
+
+      const desiredConsent = {
+        marketing: Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false,
+        personalization: Boolean(prefs.functional) || prefs.uncategorized === 'accept',
+        analytics: Boolean(prefs.analytics),
+        optOut: prefs.ccpaDoNotSell !== false,
+      };
+
+      if (!await openOsanoDrawer(cm)) return false;
+      if (!(await waitForAnyVisible(OSANO_PREF_SELECTORS, 4000))) return false;
+      if (!(await waitForOsanoControls(4000))) return false;
+
+      const applyResults = [
+        await setOsanoConsentControl(['MARKETING'], [/\btarget(?:ed|ing)? advertising\b/i, /\badvertising\b/i, /\bmarketing\b/i], desiredConsent.marketing),
+        await setOsanoConsentControl(['PERSONALIZATION'], [/\bpersonali[sz]ation\b/i, /\bpreferences?\b/i, /\bfunctional\b/i], desiredConsent.personalization),
+        await setOsanoConsentControl(['ANALYTICS'], [/\banalytics?\b/i, /\bmeasurement\b/i, /\bperformance\b/i], desiredConsent.analytics),
+      ];
+
+      let optOutResult = await setOsanoConsentControl(['OPT_OUT', 'CCPA'], [/\bdo not sell\b/i, /\bdo not sell or share\b/i, /\bccpa\b/i, /\bopt[\s-]?out\b/i], desiredConsent.optOut);
+      if (optOutResult === null) {
+        optOutResult = await openAndApplyOsanoDoNotSell(cm, desiredConsent.optOut);
+      }
+      applyResults.push(optOutResult);
+
+      const appliedCount = applyResults.filter((value) => value !== null).length;
+      if (appliedCount === 0 || applyResults.includes(false)) return false;
+
+      if (!clickFirstVisible(OSANO_SAVE_SELECTORS)) return false;
+
+      const verified = await waitForOsanoConsentState(cm, desiredConsent, 4000);
+      if (!verified) return false;
+
+      _handled = true;
+      document.dispatchEvent(new CustomEvent('__emc_handled__', {
+        detail: {
+          method: prefs.globalPreference === 'custom'
+            ? 'cmp_api:Osano:custom'
+            : prefs.globalPreference === 'accept_all'
+              ? 'cmp_api:Osano:accept_all'
+              : 'cmp_api:Osano:reject_all',
+        },
+      }));
+      return false;
+    },
     Nike: async (w, prefs) => {
       if (!NIKE_CCPA_HOSTS.has(w.location.hostname)) return false;
       if (!/^\/(?:guest|member)\/settings\/do-not-share-my-data/.test(w.location.pathname)) return false;
@@ -426,6 +506,7 @@
       '#cookiescript_reject',
       '#cookiescript_save',
     ],
+    Osano: OSANO_VISIBLE_SELECTORS,
     privacyBanner: [
       '#shopify-pc__banner',
       '.shopify-pc__banner__dialog',
@@ -677,6 +758,196 @@
       '#shopify-pc__prefs__marketing-input',
       '#shopify-pc__prefs__analytics-input',
     ];
+  }
+
+  function activeOsanoRoot() {
+    const seen = new Set();
+    const candidates = [];
+    for (const selector of OSANO_ROOT_SELECTORS) {
+      for (const root of document.querySelectorAll(selector)) {
+        if (seen.has(root) || !isVisible(root)) continue;
+        seen.add(root);
+        const toggleCount = root.querySelectorAll('input[type="checkbox"], [role="switch"], button[aria-checked], [aria-checked][tabindex]').length;
+        const saveCount = root.querySelectorAll(OSANO_SAVE_SELECTORS.join(', ')).length;
+        candidates.push({ root, score: toggleCount * 10 + saveCount * 3 });
+      }
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0]?.root ?? null;
+  }
+
+  async function openOsanoDrawer(cm) {
+    if (hasVisibleSelector(OSANO_PREF_SELECTORS)) return true;
+    for (const method of ['showDrawer', 'showDialog', 'showWidget']) {
+      if (typeof cm?.[method] !== 'function') continue;
+      try {
+        cm[method]();
+      } catch (_) {
+        continue;
+      }
+      if (await waitForAnyVisible(OSANO_PREF_SELECTORS, 1500)) return true;
+    }
+    return clickFirstVisible([
+      '.osano-cm-link--type_manage',
+      'a.osano-cm-link--type_manage',
+      'button.osano-cm-link--type_manage',
+      'button[aria-label*="Cookie Preferences" i]',
+      'button[title*="Cookie Preferences" i]',
+    ]) && (await waitForAnyVisible(OSANO_PREF_SELECTORS, 1500));
+  }
+
+  async function openAndApplyOsanoDoNotSell(cm, checked) {
+    for (const method of ['showDoNotSell', 'showOptOutWidget']) {
+      if (typeof cm?.[method] !== 'function') continue;
+      try {
+        cm[method]();
+      } catch (_) {
+        continue;
+      }
+      if (!(await waitForAnyVisible(OSANO_PREF_SELECTORS, 1500))) continue;
+      const result = await setOsanoConsentControl(['OPT_OUT', 'CCPA'], [/\bdo not sell\b/i, /\bdo not sell or share\b/i, /\bccpa\b/i, /\bopt[\s-]?out\b/i], checked);
+      if (result === false || result === null) continue;
+      if (!clickFirstVisible(OSANO_SAVE_SELECTORS)) return false;
+      return waitForOsanoConsentState(cm, {
+        marketing: cm.marketing ?? false,
+        personalization: cm.personalization ?? false,
+        analytics: cm.analytics ?? false,
+        optOut: checked,
+      }, 3000);
+    }
+    return null;
+  }
+
+  async function waitForOsanoControls(timeoutMs = 4000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const root = activeOsanoRoot();
+      const visibleControls = Array.from(
+        (root ?? document).querySelectorAll('input[type="checkbox"], [role="switch"], button[aria-checked], [aria-checked][tabindex]')
+      ).filter((control) => isVisible(control) || hasVisibleOsanoLabel(control));
+      if (visibleControls.length >= 2) return true;
+      await delay(50);
+    }
+    return false;
+  }
+
+  function hasVisibleOsanoLabel(control) {
+    for (const label of Array.from(control?.labels ?? [])) {
+      if (isVisible(label)) return true;
+    }
+    const closestLabel = control?.closest?.('label');
+    return Boolean(closestLabel && isVisible(closestLabel));
+  }
+
+  async function setOsanoConsentControl(categoryKeys, labelPatterns, checked) {
+    const control = findOsanoConsentControl(categoryKeys, labelPatterns);
+    if (!control) return null;
+    const current = readOsanoConsentControl(control);
+    if (current === null) return false;
+    if (current === checked) return true;
+
+    const target = findOsanoInteractionTarget(control);
+    if (target && activateVisibleElement(target) && (await waitForOsanoControlState(control, checked, 700))) {
+      return true;
+    }
+
+    if (!forceOsanoConsentControl(control, checked)) return false;
+    return waitForOsanoControlState(control, checked, 700);
+  }
+
+  function findOsanoConsentControl(categoryKeys, labelPatterns) {
+    const root = activeOsanoRoot() ?? document;
+    const controls = root.querySelectorAll('input[type="checkbox"], [role="switch"], button[aria-checked], [aria-checked][tabindex]');
+    for (const control of controls) {
+      if (!isVisible(control) && !hasVisibleOsanoLabel(control)) continue;
+      const identity = [
+        control.id ?? '',
+        control.getAttribute?.('name') ?? '',
+        control.getAttribute?.('data-category') ?? '',
+        control.getAttribute?.('aria-describedby') ?? '',
+        control.getAttribute?.('aria-labelledby') ?? '',
+      ].join(' ').toUpperCase();
+      const label = [
+        control.getAttribute?.('aria-label') ?? '',
+        ...(control.labels ? Array.from(control.labels).map((label) => label.textContent ?? '') : []),
+        control.closest?.('label')?.textContent ?? '',
+        control.parentElement?.textContent ?? '',
+      ].join(' ').replace(/\s+/g, ' ').trim();
+      if (categoryKeys.some((key) => identity.includes(key))) return control;
+      if (labelPatterns.some((pattern) => pattern.test(label))) return control;
+    }
+    return null;
+  }
+
+  function readOsanoConsentControl(control) {
+    if (control instanceof HTMLInputElement) return Boolean(control.checked);
+    if (control.getAttribute?.('aria-checked') != null) return control.getAttribute('aria-checked') === 'true';
+    return null;
+  }
+
+  function findOsanoInteractionTarget(control) {
+    const explicitLabel = control.labels?.[0];
+    if (explicitLabel && isVisible(explicitLabel)) return explicitLabel;
+    const closestLabel = control.closest?.('label');
+    if (closestLabel && isVisible(closestLabel)) return closestLabel;
+    if (isVisible(control)) return control;
+    return explicitLabel || closestLabel || control;
+  }
+
+  async function waitForOsanoControlState(control, checked, timeoutMs = 700) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (readOsanoConsentControl(control) === checked) return true;
+      await delay(50);
+    }
+    return readOsanoConsentControl(control) === checked;
+  }
+
+  function forceOsanoConsentControl(control, checked) {
+    if (control instanceof HTMLInputElement) {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+      if (nativeSetter) nativeSetter.call(control, checked);
+      else control.checked = checked;
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    if (control.getAttribute?.('aria-checked') != null) {
+      control.setAttribute('aria-checked', checked ? 'true' : 'false');
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    return false;
+  }
+
+  async function waitForOsanoConsentState(cm, desiredConsent, timeoutMs = 4000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const consent = typeof cm.getConsent === 'function' ? cm.getConsent() : {};
+      const current = {
+        marketing: normalizeOsanoConsentValue(cm.marketing ?? consent.MARKETING),
+        personalization: normalizeOsanoConsentValue(cm.personalization ?? consent.PERSONALIZATION),
+        analytics: normalizeOsanoConsentValue(cm.analytics ?? consent.ANALYTICS),
+        optOut: normalizeOsanoConsentValue(cm.optOut ?? consent.OPT_OUT),
+      };
+      if (
+        current.marketing === desiredConsent.marketing &&
+        current.personalization === desiredConsent.personalization &&
+        current.analytics === desiredConsent.analytics &&
+        current.optOut === desiredConsent.optOut
+      ) {
+        return true;
+      }
+      await delay(100);
+    }
+    return false;
+  }
+
+  function normalizeOsanoConsentValue(value) {
+    if (value === true || value === 'ACCEPT') return true;
+    if (value === false || value === 'DENY') return false;
+    return null;
   }
 
   function hasVisibleSourcepointSelector() {
