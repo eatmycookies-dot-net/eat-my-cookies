@@ -8,6 +8,10 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Upcoming (unreleased)
 
+---
+
+## v1.2.0
+
 ### OneTrust Follow-Ups
 
 - Generalized OneTrust custom preference handling so category-mapped sites can use the CMP's real group IDs instead of relying on brittle label-only matching.
