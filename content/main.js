@@ -53,6 +53,9 @@ let bloombergCcpaBridgeInstalled = false;
 let bloombergCcpaWatchToken = 0;
 let bloombergCcpaManualOpenUntil = 0;
 const BLOOMBERG_CCPA_MANUAL_SUPPRESS_MS = 15000;
+let ketchManualOpenGuardInstalled = false;
+let ketchManualOpenUntil = 0;
+const KETCH_MANUAL_SUPPRESS_MS = 120000;
 
 const ACCEPT_OR_WARN_SITES = {
   'www.repubblica.it': {
@@ -311,21 +314,37 @@ const KETCH_SITE_CONFIGS = {
     privacyCenterTitle: 'your privacy',
     homeUrl: 'https://www.ketch.com/',
     cooldownScope: 'ketch',
-    purposeTabSelectors: ['text:purposes'],
+    // Prefer Ketch SDK navigation IDs; text fallbacks only fire inside the overlay
+    // (the overlay sits on top of marketing content, which won't be "visible").
+    purposeTabSelectors: [
+      '#ketch-preferences-navigation-consents-tab',
+      '#ketch-preferences-navigation-purposes-tab',
+      'text:consents',
+      'text:purposes',
+    ],
+    // IMPORTANT: do NOT use bare CSS ID selectors like #analytics here.
+    // ketch.com's marketing homepage has <section id="analytics"> etc. that would
+    // make isKetchPrivacyCenterPage() fire a false positive, sending the handler
+    // into the privacy-center path and causing clickElement(purposeTabSelectors)
+    // to navigate via a marketing-page link.
+    // Also exclude #ketch-consent-banner: it's in bannerWatchSelectors for banner
+    // detection, but including it here would make isKetchPrivacyCenterPage() return
+    // true whenever the banner is up (body text also contains "your privacy" from
+    // the banner title), short-circuiting the banner-click path entirely.
     readySelectors: [
-      'text:your privacy',
+      '#ketch-modal',
+      '#ketch-preferences',
+      '#ketch-preference-panel',
       'text:save choices',
-      '#analytics',
-      '#behavioral_advertising',
-      '#personalization',
     ],
     settingsSelectors: [
+      'data-nav-action:confirm',
       'text:save choices',
-      '#analytics',
-      '#behavioral_advertising',
-      '#personalization',
+      '#ketch-modal',
+      '#ketch-preferences',
     ],
     entrySelectors: [
+      'text:consents',
       'text:your privacy',
       'text:save choices',
       'text:analytics',
@@ -338,46 +357,66 @@ const KETCH_SITE_CONFIGS = {
       { id: 'personalization', labels: ['personalization'], desired: (prefs) => Boolean(prefs.functional) || prefs.uncategorized === 'accept' },
     ],
     bannerWatchSelectors: [
-      'text:your privacy',
-      'text:save choices',
-      '#analytics',
-      '#behavioral_advertising',
-      '#personalization',
+      'text:i understand',
+      'text:your preferences',
       'text:reject all',
       'text:accept all',
+      'text:save choices',
+      '#ketch-consent-banner',
     ],
     bannerAcceptSelectors: [
+      'text:i understand',
       'text:accept all',
     ],
     bannerRejectSelectors: [
       'text:reject all',
     ],
-    bannerManageSelectors: [
-      'text:your privacy',
-    ],
+    // ketch.com uses its own Ketch banner as a live product demo.
+    // "Your preferences" navigates to a product page, so we leave bannerManageSelectors
+    // empty. "I understand" and "Reject All" fire the Ketch SDK consent/reject events
+    // and dismiss the banner in-place; the false-positive readySelectors that used to
+    // trigger the privacy-center path (and its location.reload() fallback) have been
+    // fixed (SDK container IDs only), so banner clicks are safe again.
+    bannerManageSelectors: [],
     saveSelectors: ['data-nav-action:confirm', 'text:save choices'],
+    // exitSelectors intentionally empty — use only generic SDK close buttons
+    // (button.ketch-btn-close, data-nav-action:close). 'text:exit' on ketch.com
+    // is a navigation link to /platform/dsr-automation, not a close button.
     exitSelectors: [],
+    // After saving, skip the explicit exit call — let Ketch's SDK auto-dismiss.
+    // exitKetchPrivacyCenter falls back to location.reload() when the exit button
+    // navigates away; that reload chain is what causes the /platform/dsr-automation redirect.
+    skipExitAfterSave: true,
+    // Give the Ketch SDK time to auto-close the overlay after Save.
+    postSaveWaitMs: 5000,
   },
   'ketch.com': {
     siteLabel: 'Ketch',
     privacyCenterTitle: 'your privacy',
     homeUrl: 'https://www.ketch.com/',
     cooldownScope: 'ketch',
-    purposeTabSelectors: ['text:purposes'],
+    purposeTabSelectors: [
+      '#ketch-preferences-navigation-consents-tab',
+      '#ketch-preferences-navigation-purposes-tab',
+      'text:consents',
+      'text:purposes',
+    ],
+    // See www.ketch.com comment — #ketch-consent-banner excluded from readySelectors
+    // (same false-positive risk; it belongs in bannerWatchSelectors only).
     readySelectors: [
-      'text:your privacy',
+      '#ketch-modal',
+      '#ketch-preferences',
+      '#ketch-preference-panel',
       'text:save choices',
-      '#analytics',
-      '#behavioral_advertising',
-      '#personalization',
     ],
     settingsSelectors: [
+      'data-nav-action:confirm',
       'text:save choices',
-      '#analytics',
-      '#behavioral_advertising',
-      '#personalization',
+      '#ketch-modal',
+      '#ketch-preferences',
     ],
     entrySelectors: [
+      'text:consents',
       'text:your privacy',
       'text:save choices',
       'text:analytics',
@@ -390,25 +429,27 @@ const KETCH_SITE_CONFIGS = {
       { id: 'personalization', labels: ['personalization'], desired: (prefs) => Boolean(prefs.functional) || prefs.uncategorized === 'accept' },
     ],
     bannerWatchSelectors: [
-      'text:your privacy',
-      'text:save choices',
-      '#analytics',
-      '#behavioral_advertising',
-      '#personalization',
+      'text:i understand',
+      'text:your preferences',
       'text:reject all',
       'text:accept all',
+      'text:save choices',
+      '#ketch-consent-banner',
     ],
     bannerAcceptSelectors: [
+      'text:i understand',
       'text:accept all',
     ],
     bannerRejectSelectors: [
       'text:reject all',
     ],
-    bannerManageSelectors: [
-      'text:your privacy',
-    ],
+    // Same as www.ketch.com — "Your preferences" navigates, so bannerManageSelectors is
+    // empty. "I understand" / "Reject All" dismiss the banner via Ketch SDK events.
+    bannerManageSelectors: [],
     saveSelectors: ['data-nav-action:confirm', 'text:save choices'],
     exitSelectors: [],
+    skipExitAfterSave: true,
+    postSaveWaitMs: 5000,
   },
   'www.therealreal.com': {
     siteLabel: 'The RealReal',
@@ -914,6 +955,7 @@ function scheduleDynamicSiteSpecificWatch() {
       const prefs = resolvePrefs(settings, siteOverrides);
       document.documentElement.dataset.emcPref = prefs.globalPreference;
       document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: prefs }));
+      if (wasHandledForCurrentPage(prefsRunSignature(prefs))) return;
       const handled = await handleSiteSpecificFlow(siteOverrides, prefs);
       if (handled && !keepWatchingAfterHandle) stop();
     } finally {
@@ -1324,6 +1366,8 @@ function isKetchSite() {
 async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = {}) {
   if (!config) return false;
 
+  ensureKetchManualOpenGuard(config);
+
   const prefersAcceptAll = isEffectivelyAcceptAllPrefs(prefs);
   const interactionLockScope = `ketch:${config.cooldownScope}:${prefs.globalPreference}`;
   const { bypassLock = false } = options;
@@ -1336,6 +1380,11 @@ async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = 
   const onPrivacyCenterPage = isKetchPrivacyCenterPage(config);
   if (!onPrivacyCenterPage) {
     if (isKetchBannerVisible(config)) {
+      // Some sites (e.g. ketch.com itself) use their Ketch banner as a product demo
+      // where every banner button navigates to a product page rather than dismissing
+      // in-place. For these sites we skip all banner interaction and only handle the
+      // full privacy center overlay when it is directly visible on the page.
+      if (config.skipBannerInteraction) return false;
       startSiteSpecificFlowLock(interactionLockScope);
       if (siteOverrides.alwaysAccept || prefs.globalPreference === 'accept_all') {
         const accepted = await clickAndWaitRetry(
@@ -1430,6 +1479,9 @@ async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = 
     }
   }
 
+  // User manually opened the privacy center via a footer link — don't auto-apply or close it.
+  // bypassLock means the extension itself opened the panel (from banner flow); don't suppress that.
+  if (!bypassLock && Date.now() < ketchManualOpenUntil) return true;
   const visible = await waitForSiteSelectors(config.readySelectors, 4000);
   if (!visible) return false;
   if (siteOverrides.alwaysAccept && isFlowCoolingDown(config.cooldownScope)) return true;
@@ -1452,6 +1504,17 @@ async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = 
       reason: `${config.siteLabel} opened its Ketch privacy center, but the available cookie controls are locked on this visit and could not be changed safely.`,
       allowAcceptOverride: true,
     });
+    return true;
+  }
+  // No configurable controls found (e.g. essential-services-only panel). Save current
+  // state to confirm consent with the SDK, then exit — do not warn the user.
+  if (outcome === 'missing') {
+    startFlowCooldown(config.cooldownScope);
+    clickElement(config.saveSelectors);
+    await new Promise((resolve) => setTimeout(resolve, config.postSaveWaitMs ?? 2000));
+    if (!config.skipExitAfterSave) await exitKetchPrivacyCenter(config);
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+    await reportAction('site_specific:ketch:essential_only', prefs.globalPreference);
     return true;
   }
   if (outcome !== 'applied') return false;
@@ -1928,6 +1991,23 @@ async function handleBloombergTermsGate(siteOverrides, prefs) {
   await reportAction(siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:accept_all', 'accept_all');
   scheduleBloombergCcpaWatch(prefs);
   return true;
+}
+
+function ensureKetchManualOpenGuard(config) {
+  if (ketchManualOpenGuardInstalled || !config?.entrySelectors?.length) return;
+  ketchManualOpenGuardInstalled = true;
+  document.addEventListener('click', (event) => {
+    if (!event.isTrusted) return;
+    const target = event.target instanceof Element
+      ? event.target.closest('a, button, [role="button"]')
+      : null;
+    const text = (target?.textContent || '').trim().toLowerCase();
+    if (!text) return;
+    const matched = config.entrySelectors.some((sel) =>
+      sel.startsWith('text:') && text.includes(sel.slice(5).toLowerCase()),
+    );
+    if (matched) ketchManualOpenUntil = Date.now() + KETCH_MANUAL_SUPPRESS_MS;
+  }, true);
 }
 
 function ensureBloombergCcpaBridge(prefs) {

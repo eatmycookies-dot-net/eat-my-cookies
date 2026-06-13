@@ -779,7 +779,7 @@ async function applySiteLocale(page, site) {
   }
 }
 
-async function writePreferences(browser, preference, site = null) {
+async function writePreferences(browser, preference, site = null, profileDir = '') {
   const payload = {
     globalPreference: preference,
     onboardingComplete: true,
@@ -791,33 +791,86 @@ async function writePreferences(browser, preference, site = null) {
   };
 
   // When --vpn is active, multiple service workers may be registered (one per extension).
-  // Find ours by excluding the VPN extension's ID, or fall back to the first available.
-  // In headless mode the SW may not be registered yet right after launchPersistentContext;
-  // poll for up to 4 s so the write always lands before the first site navigation.
+  // Find ours by excluding the VPN extension's ID, and requiring chrome-extension:// URL
+  // so page-level service workers (e.g. from ketch.com SDK) are never picked up by mistake.
   const vpnExtId = VPN_EXT_DIR ? path.basename(path.dirname(VPN_EXT_DIR)) : null;
   const findOurSw = () => {
-    const all = browser.serviceWorkers();
+    const all = browser.serviceWorkers().filter(w => w.url().startsWith('chrome-extension://'));
     return all.find(w => !vpnExtId || !w.url().includes(vpnExtId)) ?? all[0] ?? null;
   };
+
+  // Poll for up to 8 s; also listen for the 'serviceworker' event so we catch the
+  // first registration even before the poll loop ticks (mirrors bloomberg-ccpa.js).
   let sw = findOurSw();
   if (!sw) {
-    const deadline = Date.now() + 4000;
+    const swEventPromise = browser.waitForEvent('serviceworker', { timeout: 8000 }).catch(() => null);
+    const deadline = Date.now() + 8000;
     while (!sw && Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 100));
       sw = findOurSw();
     }
-  }
-  if (sw) {
-    await sw.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload);
-    return null;
+    if (!sw) sw = await swEventPromise;
+    if (sw && !sw.url().startsWith('chrome-extension://')) sw = null; // reject page SWs
   }
 
-  const swPage = await browser.newPage();
-  const pages = browser.pages();
-  const extPage = pages.find((p) => p.url().startsWith('chrome-extension://'));
-  if (extPage) {
-    await extPage.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload).catch(() => {});
+  if (sw) {
+    try {
+      await sw.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload);
+      return null;
+    } catch (_) {
+      // SW found but evaluate failed (chrome API not ready) — fall through to page approach
+    }
   }
+
+  // Fallback: write via the extension popup page so chrome.storage is available in page context.
+  // When using system Chrome via executablePath, extension SWs are not exposed via Playwright's
+  // serviceWorkers() API. We resolve the extension ID from the browser profile instead.
+  const swPage = await browser.newPage();
+  try {
+    // 1. Try to get ID from any already-visible chrome-extension:// SW or page.
+    let extId =
+      browser.serviceWorkers().find(w => w.url().startsWith('chrome-extension://'))?.url().match(/^chrome-extension:\/\/([^/]+)/)?.[1]
+      ?? browser.pages().find(p => p.url().startsWith('chrome-extension://'))?.url().match(/^chrome-extension:\/\/([^/]+)/)?.[1];
+
+    // 2. If not found, read the extension ID from the browser profile's Secure Preferences.
+    //    Chrome assigns a deterministic ID to each unpacked extension based on its path.
+    //    The ID is stored in {profile}/Default/Secure Preferences under extensions.settings.
+    if (!extId) {
+      const profileDirs = [profileDir, VPN_PROFILE_DIR].filter(Boolean);
+      for (const profileDir of profileDirs) {
+        const secPrefsPath = path.join(profileDir, 'Default', 'Secure Preferences');
+        try {
+          const secPrefs = JSON.parse(fs.readFileSync(secPrefsPath, 'utf8'));
+          const extSettings = secPrefs?.extensions?.settings ?? {};
+          const knownVpnIds = new Set([
+            vpnExtId,
+            VPN_EXT_DIR ? path.basename(VPN_EXT_DIR) : null,
+          ].filter(Boolean));
+          const knownBrowserExtIds = new Set(['ghbmnnjooekpmoecnnnilnnbdlolhkhi', 'nmmhkkegccagdldgiimedpiccmgmieda', 'mhjfbmdgcfjbbpaeojofohoefgiehjai']);
+          for (const [id, extData] of Object.entries(extSettings)) {
+            if (knownVpnIds.has(id) || knownBrowserExtIds.has(id)) continue;
+            const extPath = extData?.path ?? '';
+            // Our extension is loaded from EXT_DIR (possibly via symlink); either path matches
+            if (extPath === EXT_DIR || extPath === EXT_LAUNCH_DIR ||
+                extPath.includes('emc-extension') || extPath.includes('Eat My Cookies') ||
+                extPath.includes('eat-my-cookies')) {
+              extId = id;
+              break;
+            }
+          }
+        } catch (_) {}
+        if (extId) break;
+      }
+    }
+
+    if (extId) {
+      await swPage.goto(`chrome-extension://${extId}/popup/popup.html`, {
+        waitUntil: 'domcontentloaded', timeout: 8000,
+      }).catch(() => {});
+      await swPage.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload).catch(() => {});
+      return swPage;
+    }
+  } catch (_) {}
   return swPage;
 }
 
@@ -917,10 +970,15 @@ async function readStatsSnapshot(browser) {
       browser = await chromium.launchPersistentContext(userDataDir, launchOptions);
     }
   } else if (useVpn) {
+    // NOTE: Playwright's bundled Chromium (channel:'chromium') is tried FIRST for VPN mode.
+    // System Chrome (executablePath) does not expose extension service workers via
+    // Playwright's serviceWorkers() API, which causes writePreferences to fail silently.
+    // Playwright's bundled Chromium exposes SWs correctly even in headed mode, and
+    // the Browsec VPN extension/profile works fine with any Chromium build.
     const vpnCandidates = [
-      getSystemChromeExecutable() ? { executablePath: getSystemChromeExecutable() } : null,
-      { channel: 'chrome' },
       { channel: 'chromium' },
+      { channel: 'chrome' },
+      getSystemChromeExecutable() ? { executablePath: getSystemChromeExecutable() } : null,
       {},
     ].filter(Boolean);
     for (const candidate of vpnCandidates) {
@@ -954,10 +1012,12 @@ async function readStatsSnapshot(browser) {
     console.log(`VPN mode: active profile ${userDataDir}`);
     console.log('Waiting 4s for VPN extension to reconnect...');
     await new Promise(r => setTimeout(r, 4000));
-  } else if (headless) {
+  } else {
     // Navigate a warmup page so the extension's service worker activates and
     // becomes visible to Playwright's browser.serviceWorkers() API. Without this,
     // writePreferences cannot find the SW and onboardingComplete is never set.
+    // This applies to both headless and headed mode — in headed mode a single-site
+    // run has no prior navigation to warm up the SW.
     const warmupPage = await browser.newPage();
     await warmupPage.goto('https://example.com', { waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => {});
     await warmupPage.close();
@@ -967,7 +1027,7 @@ async function readStatsSnapshot(browser) {
   let swPage = null;
   try {
     const defaultPreference = sites[0]?.preference ?? 'reject_all';
-    swPage = await writePreferences(browser, defaultPreference, sites[0] ?? null);
+    swPage = await writePreferences(browser, defaultPreference, sites[0] ?? null, userDataDir);
   } catch (_) {}
   if (swPage) await swPage.close();
 
@@ -977,7 +1037,7 @@ async function readStatsSnapshot(browser) {
     const page = await browser.newPage();
     try {
       const preference = site.preference ?? 'reject_all';
-      const tmpPage = await writePreferences(browser, preference, site).catch(() => null);
+      const tmpPage = await writePreferences(browser, preference, site, userDataDir).catch(() => null);
       if (tmpPage) await tmpPage.close();
       const { status, detail } = await testSite(page, site);
       printRow(site, status, detail);
