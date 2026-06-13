@@ -23,6 +23,7 @@ const DYNAMIC_SITE_SPECIFIC_HOSTS = new Set([
   'www.pret.com',
   'liveramp.com',
   'www.liveramp.com',
+  'github.com',
 ]);
 const CONSENTMANAGER_TOP_LEVEL_EXCLUDED_SITES = new Set([
   'www.bbc.com',
@@ -971,6 +972,9 @@ async function handleSiteSpecificFlow(siteOverrides, prefs) {
   if (site === 'privacy.thewaltdisneycompany.com') {
     return handleDisneyPrivacyCenter(prefs);
   }
+  if (site === 'github.com') {
+    return handleGitHub(prefs, siteOverrides);
+  }
 
   const config = ACCEPT_OR_WARN_SITES[site];
   if (!config) return false;
@@ -1527,9 +1531,46 @@ async function handleLiveRampKetch(siteOverrides, prefs, config) {
     return true;
   }
 
-  // For custom preferences: try a quick cookie-write path first; fall through to UI flow.
+  // Fast path: if existing consent already matches our prefs from a prior session,
+  // no UI interaction needed — the SDK state is already correct.
+  if (liveRampConsentMatches(prefs)) {
+    startFlowCooldown(config.cooldownScope);
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+    await reportAction('site_specific:ketch:cookie', prefs.globalPreference);
+    return true;
+  }
+
+  // EU/GDPR banners expose a "Configure Settings" panel. Use the UI flow so Ketch's
+  // own SDK records all required purposes — our 3-purpose cookie write is insufficient
+  // for EU consent and triggers a reload loop if applied directly.
+  // Use a direct settings-panel check rather than isKetchPrivacyCenterPage() — that
+  // function uses readySelectors which include the banner button IDs, causing it to
+  // return true when only the first-level banner is visible (before Configure Settings
+  // has been clicked), which would incorrectly skip the panel-open step.
+  const settingsPanelVisible = config.settingsSelectors.some((sel) => isSelectorVisible(sel));
+  const opened = settingsPanelVisible || clickElement(config.bannerManageSelectors);
+  if (opened) {
+    clickElement(config.purposeTabSelectors);
+    const ready = await waitForSiteSelectors(config.settingsSelectors, 5000);
+    if (ready) {
+      const outcome = await applyKetchPreferences(config, prefs);
+      if (outcome === 'applied') {
+        await handleKetchViaConsentCookie(siteOverrides, prefs, config, { persistOnly: true });
+        startFlowCooldown(config.cooldownScope);
+        if (!clickElement(config.saveSelectors)) return false;
+        const dismissed = await waitForSelectorsToDisappear(config.bannerWatchSelectors, config.postSaveWaitMs ?? 5000);
+        if (!dismissed) return false;
+        await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+        await reportAction('site_specific:ketch:save', prefs.globalPreference);
+        return true;
+      }
+    }
+  }
+
+  // US/CCPA mode: no settings panel accessible — write cookies and reload.
+  // Our 3-purpose cookie satisfies Ketch's US configuration and the banner stays gone.
   const customPersisted = await handleKetchViaConsentCookie(siteOverrides, prefs, config, { persistOnly: true });
-  if (customPersisted && liveRampConsentMatches(prefs)) {
+  if (customPersisted) {
     startFlowCooldown(config.cooldownScope);
     await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
     await reportAction('site_specific:ketch:cookie', prefs.globalPreference);
@@ -1537,25 +1578,7 @@ async function handleLiveRampKetch(siteOverrides, prefs, config) {
     return true;
   }
 
-  if (!onPrivacyCenterPage) {
-    const opened = clickElement(config.bannerManageSelectors);
-    if (!opened) return false;
-  }
-  const ready = await waitForSiteSelectors(['#analytics', '#behavioral_advertising', 'text:confirm'], 5000);
-  if (!ready) return false;
-
-  if (!(await applyKetchRuleState({ id: 'analytics', labels: ['analytics'] }, Boolean(prefs.analytics)))) return false;
-  if (!(await applyKetchRuleState({ id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising'] }, Boolean(prefs.advertising)))) return false;
-  await handleKetchViaConsentCookie(siteOverrides, prefs, config, { persistOnly: true });
-
-  startFlowCooldown(config.cooldownScope);
-  if (!clickElement(config.saveSelectors)) return false;
-  const dismissed = await waitForSelectorsToDisappear(config.bannerWatchSelectors, config.postSaveWaitMs ?? 5000);
-  if (!dismissed) return false;
-
-  await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
-  await reportAction('site_specific:ketch:save', prefs.globalPreference);
-  return true;
+  return false;
 }
 
 function isKetchPrivacyCenterPage(config) {
@@ -2347,6 +2370,60 @@ async function handleDisneyPrivacyCenter(prefs) {
 
   await reportAction('site_specific:disney:privacy_center', prefs.globalPreference);
   return true;
+}
+
+async function handleGitHub(prefs, siteOverrides) {
+  const DIALOG_SEL = 'ghcc-consent [role="dialog"][aria-label="Manage cookie preferences"]';
+
+  const visible = await waitForSiteSelectors([DIALOG_SEL], 5000);
+  if (!visible) return false;
+
+  const dialog = document.querySelector(DIALOG_SEL);
+  if (!dialog || !isVisible(dialog)) return false;
+
+  const acceptAll = prefs.globalPreference === 'accept_all' || siteOverrides.alwaysAccept;
+
+  // Set each configurable radio group (Required has no radios and is skipped naturally).
+  for (const group of dialog.querySelectorAll('[role="radiogroup"]')) {
+    const sampleInput = group.querySelector('input[type="radio"]');
+    if (!sampleInput) continue;
+    const categoryName = sampleInput.name.toLowerCase().replace(/\s+/g, '');
+    const desiredValue = githubCategoryValue(categoryName, prefs, acceptAll);
+    const input = group.querySelector(`input[type="radio"][value="${desiredValue}"]`);
+    if (!input) continue;
+    const label = dialog.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+    const target = label ?? input;
+    if (isVisible(target)) dispatchSyntheticClick(target);
+  }
+
+  await new Promise((r) => setTimeout(r, 300));
+
+  const saveButton = Array.from(dialog.querySelectorAll('button')).find(
+    (btn) => /save changes/i.test(btn.textContent),
+  );
+  if (!saveButton || !isVisible(saveButton)) return false;
+  dispatchSyntheticClick(saveButton);
+
+  const dismissed = await waitForSelectorsToDisappear([DIALOG_SEL], 5000);
+  if (!dismissed) return false;
+
+  await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+  const method = acceptAll
+    ? (siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:github:accept_all')
+    : prefs.globalPreference === 'reject_all'
+    ? 'site_specific:github:reject_all'
+    : 'site_specific:github:custom';
+  await reportAction(method, prefs.globalPreference);
+  return true;
+}
+
+function githubCategoryValue(normalizedName, prefs, acceptAll) {
+  if (acceptAll) return 'accept';
+  if (prefs.globalPreference === 'reject_all') return 'reject';
+  // custom
+  if (normalizedName === 'analytics') return prefs.analytics ? 'accept' : 'reject';
+  if (normalizedName === 'socialmedia') return prefs.advertising ? 'accept' : 'reject';
+  return prefs.uncategorized === 'accept' ? 'accept' : 'reject';
 }
 
 async function handleLeMonde(prefs, siteOverrides) {

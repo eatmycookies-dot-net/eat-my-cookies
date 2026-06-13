@@ -26,6 +26,7 @@
     'www.bloomberg.com',
     'www.nbcnews.com',
     'www.zoom.com',
+    'github.com',
   ]);
 
   const REJECT_SELS = [
