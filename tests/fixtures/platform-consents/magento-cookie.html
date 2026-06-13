@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Magento Cookie Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    .message.global.cookie {
+      position: fixed;
+      inset: auto 0 0 0;
+      background: #fff7ed;
+      color: #7c2d12;
+      border-top: 1px solid #fdba74;
+      padding: 16px;
+      z-index: 9999;
+    }
+    .action {
+      cursor: pointer;
+      margin-right: 8px;
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Magento Cookie Fixture</h1>
+    <p>Local fixture used to validate the extension's generic Magento cookie notice handling.</p>
+  </main>
+
+  <div class="message global cookie" id="magento-cookie">
+    <button class="action allow primary" type="button">Allow Cookies</button>
+    <button class="action close" type="button">Close</button>
+  </div>
+
+  <script>
+    (() => {
+      const banner = document.getElementById('magento-cookie');
+      const allow = document.querySelector('.message.global.cookie .action.allow');
+      const close = document.querySelector('.message.global.cookie .action.close');
+
+      window.__fixtureState = {
+        choice: null,
+        bannerVisible: true,
+      };
+
+      allow.addEventListener('click', () => {
+        window.__fixtureState = {
+          choice: 'accept',
+          bannerVisible: false,
+        };
+        banner.remove();
+      });
+
+      close.addEventListener('click', () => {
+        window.__fixtureState = {
+          choice: 'reject',
+          bannerVisible: false,
+        };
+        banner.remove();
+      });
+    })();
+  </script>
+</body>
+</html>

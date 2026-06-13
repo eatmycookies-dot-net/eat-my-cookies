@@ -17,11 +17,13 @@
  */
 
 const { chromium } = require('playwright');
+const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const EXT_DIR      = path.resolve(__dirname, '..');   // unpacked extension root
+const EXT_LAUNCH_DIR = path.join(os.tmpdir(), 'emc-extension-no-spaces');
 const SITES_FILE   = path.join(__dirname, 'sites.json');
 const BANNER_WAIT  = 8000;   // ms to wait for banner to appear
 const HANDLE_WAIT  = 6000;   // ms to wait for extension to handle it
@@ -56,7 +58,17 @@ const VPN_PROFILE_DIR = vpnProfileArg
   : process.env.EMC_VPN_PROFILE
     ? path.resolve(process.env.EMC_VPN_PROFILE)
     : path.resolve(__dirname, '..', '.tmp-vpn-profile');
+const VPN_RUNS_DIR = path.resolve(__dirname, '..', '.tmp-vpn-runs');
 const BROWSER_HOME_DIR = path.resolve(__dirname, '..', '.tmp-browser-home');
+function getSystemChromeExecutable() {
+  if (process.env.CHROME_EXECUTABLE) return process.env.CHROME_EXECUTABLE;
+  switch (process.platform) {
+    case 'darwin':  return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    case 'linux':   return '/usr/bin/google-chrome';
+    case 'win32':   return 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+    default:        return null;
+  }
+}
 
 function argVal(args, key) {
   const match = args.find(a => a.startsWith(key + '='));
@@ -121,8 +133,10 @@ function printSummary() {
 
 // ── Core test logic ───────────────────────────────────────────────────────────
 async function testSite(page, site) {
+  await clearSiteState(page, site.url);
   const beforeStats = await readStatsSnapshot(page.context());
   await applySiteLocale(page, site);
+  const bannerWaitMs = site.bannerWaitMs ?? BANNER_WAIT;
   const handleWaitMs = site.handleWaitMs ?? HANDLE_WAIT;
   const visitedTopLevelUrls = [];
   const recordTopLevelUrl = (frame) => {
@@ -149,7 +163,7 @@ async function testSite(page, site) {
   }
 
   // Wait for the banner to appear
-  const bannerFound = await waitForAny(page, site.bannerSelectors, BANNER_WAIT);
+  const bannerFound = await waitForAny(page, site.bannerSelectors, bannerWaitMs);
   if (await isChallengePage(page)) {
     return { status: 'SKIP', detail: 'Blocked by anti-bot challenge during banner detection' };
   }
@@ -236,6 +250,15 @@ async function testSite(page, site) {
     detail += '; Shopify consent verified';
   }
 
+  if (site.debugConsentmoInspectUrl) {
+    const consentmoSnapshot = await readConsentmoDebugSnapshot(
+      page,
+      site.debugConsentmoInspectUrl,
+      site.debugConsentmoInspectWaitMs ?? 4000,
+    );
+    detail += `; consentmo=${consentmoSnapshot}`;
+  }
+
   if (site.followUpNavigation?.enabled) {
     const followUp = await runFollowUpNavigation(page, site);
     if (!followUp.ok) {
@@ -252,14 +275,62 @@ async function testSite(page, site) {
   return { status: 'PASS', detail };
 }
 
+async function clearSiteState(page, url) {
+  const context = page.context();
+  await context.clearCookies().catch(() => {});
+
+  let origin = null;
+  try {
+    origin = new URL(url).origin;
+  } catch (_) {
+    origin = null;
+  }
+  if (!origin) return;
+
+  const session = await context.newCDPSession(page).catch(() => null);
+  if (!session) return;
+
+  await session.send('Storage.clearDataForOrigin', {
+    origin,
+    storageTypes: 'all',
+  }).catch(() => {});
+}
+
 async function readShopifyConsentMismatch(page, expected) {
-  const actual = await page.evaluate(() => {
-    const api = window.Shopify?.customerPrivacy ?? window.Shopify?.trackingConsent;
-    return api?.currentVisitorConsent?.() ?? null;
+  const diagnostic = await page.evaluate(async () => {
+    const getApi = () => window.Shopify?.customerPrivacy ?? window.Shopify?.trackingConsent ?? null;
+    let api = getApi();
+
+    if (!api?.currentVisitorConsent && typeof window.Shopify?.loadFeatures === 'function') {
+      await new Promise((resolve) => {
+        try {
+          window.Shopify.loadFeatures([
+            {
+              name: 'consent-tracking-api',
+              version: '0.1',
+            },
+          ], () => resolve());
+        } catch (_) {
+          resolve();
+        }
+      });
+      api = getApi();
+    }
+
+    return {
+      actual: api?.currentVisitorConsent?.() ?? null,
+      shopifyPresent: Boolean(window.Shopify),
+      loadFeaturesPresent: typeof window.Shopify?.loadFeatures === 'function',
+      customerPrivacyPresent: Boolean(window.Shopify?.customerPrivacy),
+      trackingConsentPresent: Boolean(window.Shopify?.trackingConsent),
+      shouldShowBanner: api?.shouldShowBanner?.() ?? null,
+      saleOfDataRegion: api?.saleOfDataRegion?.() ?? null,
+    };
   });
 
+  const actual = diagnostic?.actual;
   if (!actual) {
-    return 'Banner dismissed but Shopify consent API was unavailable';
+    return `Banner dismissed but Shopify consent API was unavailable (shopify=${diagnostic?.shopifyPresent ? 'yes' : 'no'} loadFeatures=${diagnostic?.loadFeaturesPresent ? 'yes' : 'no'} customerPrivacy=${diagnostic?.customerPrivacyPresent ? 'yes' : 'no'} trackingConsent=${diagnostic?.trackingConsentPresent ? 'yes' : 'no'} shouldShowBanner=${diagnostic?.shouldShowBanner ?? 'n/a'} saleOfDataRegion=${diagnostic?.saleOfDataRegion ?? 'n/a'})`;
   }
 
   const normalizedActual = {
@@ -281,6 +352,118 @@ function normalizeShopifyConsent(value) {
   if (value === 'yes' || value === true) return true;
   if (value === 'no' || value === false) return false;
   return null;
+}
+
+async function readConsentmoDebugSnapshot(page, inspectUrl, waitMs) {
+  try {
+    await page.goto(inspectUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+    await page.waitForTimeout(waitMs);
+
+    return await page.evaluate(() => {
+      const host = document.querySelector('csm-cookie-consent');
+      const root = host?.shadowRoot;
+      if (!host || !root) {
+        return JSON.stringify({
+          host: Boolean(host),
+          root: Boolean(root),
+          emcPref: document.documentElement.dataset.emcPref ?? null,
+        });
+      }
+
+      const isVisible = (el) => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+      };
+
+      const openButton = [...root.querySelectorAll('button, [role="button"], a')]
+        .find((el) => isVisible(el) && /preferences|settings|manage/i.test((el.textContent || '').trim()));
+      openButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+
+      const snapshot = {
+        emcPref: document.documentElement.dataset.emcPref ?? null,
+        opened: Boolean(openButton),
+        openText: openButton ? (openButton.textContent || '').trim() : null,
+        controls: [],
+        radios: [],
+      };
+
+      snapshot.controls = [...root.querySelectorAll('[role="switch"][aria-describedby]')].map((control) => {
+        const nested = control.querySelector('input[type="checkbox"]');
+        const rejectContainer = control.querySelector('.reject-container, [class*="reject-container"]');
+        const acceptContainer = control.querySelector('.accept-container, [class*="accept-container"]');
+        return {
+          describedBy: control.getAttribute('aria-describedby'),
+          ariaLabel: control.getAttribute('aria-label'),
+          ariaChecked: control.getAttribute('aria-checked'),
+          nestedChecked: nested instanceof HTMLInputElement ? nested.checked : null,
+          rejectChecked: Boolean(rejectContainer?.classList?.contains('checked')),
+          acceptChecked: Boolean(acceptContainer?.classList?.contains('checked')),
+          visible: isVisible(control),
+        };
+      });
+
+      snapshot.radios = [...root.querySelectorAll('input[type="radio"]')].map((el) => ({
+        name: el.name,
+        value: el.value,
+        checked: el.checked,
+      }));
+
+      return JSON.stringify(snapshot);
+    });
+  } catch (error) {
+    return `inspect_error:${error.message.split('\n')[0]}`;
+  }
+}
+
+function createFreshVpnRunProfile(baseProfileDir) {
+  fs.mkdirSync(VPN_RUNS_DIR, { recursive: true });
+  const runProfileDir = fs.mkdtempSync(path.join(VPN_RUNS_DIR, 'profile-'));
+  const transientNames = new Set([
+    'SingletonLock',
+    'SingletonCookie',
+    'SingletonSocket',
+    'DevToolsActivePort',
+    'RunningChromeVersion',
+  ]);
+
+  for (const entry of fs.readdirSync(baseProfileDir)) {
+    if (transientNames.has(entry)) continue;
+    try {
+      fs.cpSync(
+        path.join(baseProfileDir, entry),
+        path.join(runProfileDir, entry),
+        { recursive: true, force: true },
+      );
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+
+  for (const transientName of transientNames) {
+    fs.rmSync(path.join(runProfileDir, transientName), { recursive: true, force: true });
+  }
+
+  return runProfileDir;
+}
+
+function clearChromeSingletonFiles(profileDir) {
+  for (const transientName of ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'DevToolsActivePort']) {
+    fs.rmSync(path.join(profileDir, transientName), { recursive: true, force: true });
+  }
+}
+
+function prepareExtensionLaunchDir(extDir) {
+  try {
+    fs.rmSync(EXT_LAUNCH_DIR, { force: true });
+  } catch (_) {}
+  try {
+    fs.symlinkSync(extDir, EXT_LAUNCH_DIR);
+    return EXT_LAUNCH_DIR;
+  } catch (_) {
+    return extDir;
+  }
 }
 
 async function buildFailureDetail(page, site, beforeStats, prefix) {
@@ -427,13 +610,38 @@ async function selectorVisible(page, sel) {
         const style = getComputedStyle(el);
         return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
       };
-      return Array.from(document.querySelectorAll('button, [role="button"], a, div, span'))
-        .some((el) => isVisible(el) && (el.textContent || '').trim().toLowerCase().includes(needle));
+      const roots = [document];
+      for (let i = 0; i < roots.length; i += 1) {
+        const root = roots[i];
+        for (const host of root.querySelectorAll('*')) {
+          if (host.shadowRoot) roots.push(host.shadowRoot);
+        }
+      }
+      return roots.some((root) =>
+        Array.from(root.querySelectorAll('button, [role="button"], a, div, span'))
+          .some((el) => isVisible(el) && (el.textContent || '').trim().toLowerCase().includes(needle))
+      );
     }, phrase);
   }
 
-  const el = await page.$(sel);
-  return Boolean(el && await el.isVisible());
+  return page.evaluate((selector) => {
+    const isVisible = (el) => {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const roots = [document];
+    for (let i = 0; i < roots.length; i += 1) {
+      const root = roots[i];
+      for (const host of root.querySelectorAll('*')) {
+        if (host.shadowRoot) roots.push(host.shadowRoot);
+      }
+    }
+    return roots.some((root) =>
+      Array.from(root.querySelectorAll(selector)).some((el) => isVisible(el))
+    );
+  }, sel);
 }
 
 async function runFollowUpNavigation(page, site) {
@@ -670,13 +878,17 @@ async function readStatsSnapshot(browser) {
     process.exit(1);
   }
 
-  const extPaths    = useVpn ? [EXT_DIR, VPN_EXT_DIR] : [EXT_DIR];
-  const userDataDir = useVpn ? VPN_PROFILE_DIR : '';
-
   if (useVpn) {
     fs.mkdirSync(VPN_PROFILE_DIR, { recursive: true });
+    clearChromeSingletonFiles(VPN_PROFILE_DIR);
   }
   fs.mkdirSync(BROWSER_HOME_DIR, { recursive: true });
+
+  const launchExtDir = prepareExtensionLaunchDir(EXT_DIR);
+  const extPaths = useVpn ? [launchExtDir, VPN_EXT_DIR] : [launchExtDir];
+  const userDataDir = useVpn
+    ? createFreshVpnRunProfile(VPN_PROFILE_DIR)
+    : '';
 
   const headless = !headed && !useVpn;
   const launchOptions = {
@@ -704,12 +916,42 @@ async function readStatsSnapshot(browser) {
     } catch (_) {
       browser = await chromium.launchPersistentContext(userDataDir, launchOptions);
     }
+  } else if (useVpn) {
+    const vpnCandidates = [
+      getSystemChromeExecutable() ? { executablePath: getSystemChromeExecutable() } : null,
+      { channel: 'chrome' },
+      { channel: 'chromium' },
+      {},
+    ].filter(Boolean);
+    for (const candidate of vpnCandidates) {
+      try {
+        browser = await chromium.launchPersistentContext(userDataDir, { ...launchOptions, ...candidate });
+        break;
+      } catch (_) {}
+    }
   } else {
+    const headedCandidates = [
+      getSystemChromeExecutable() ? { executablePath: getSystemChromeExecutable() } : null,
+      { channel: 'chrome' },
+      { channel: 'chromium' },
+    ].filter(Boolean);
+    for (const candidate of headedCandidates) {
+      try {
+        browser = await chromium.launchPersistentContext(userDataDir, { ...launchOptions, ...candidate });
+        break;
+      } catch (_) {}
+    }
+    if (!browser) {
+      browser = await chromium.launchPersistentContext(userDataDir, launchOptions);
+    }
+  }
+  if (!browser) {
     browser = await chromium.launchPersistentContext(userDataDir, launchOptions);
   }
 
   if (useVpn) {
-    console.log(`VPN mode: using profile at ${VPN_PROFILE_DIR}`);
+    console.log(`VPN mode: base profile ${VPN_PROFILE_DIR}`);
+    console.log(`VPN mode: active profile ${userDataDir}`);
     console.log('Waiting 4s for VPN extension to reconnect...');
     await new Promise(r => setTimeout(r, 4000));
   } else if (headless) {
@@ -750,6 +992,11 @@ async function readStatsSnapshot(browser) {
   }
 
   await browser.close();
+  if (useVpn) {
+    try {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+    } catch (_) {}
+  }
   printSummary();
 
   process.exit(results.fail.length > 0 ? 1 : 0);

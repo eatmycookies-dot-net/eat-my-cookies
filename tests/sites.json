@@ -1262,6 +1262,692 @@
         "analytics": true,
         "marketing": false
       }
+    },
+    {
+      "name": "ANTA EU (VPN Custom)",
+      "url": "https://eu.anta.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Shopify Customer Privacy",
+      "tier": "cmp-api/dom",
+      "preference": "custom",
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "note": "ANTA's cookie policy identifies the storefront as Shopify-hosted, so this target is intended to validate the generic Shopify Customer Privacy path from an EU/VPN session.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": true,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "bannerSelectors": [
+        "#shopify-pc__banner",
+        ".shopify-pc__banner__dialog",
+        "#shopify-pc__prefs",
+        "#shopify-pc__prefs__dialog",
+        ".shopify-pc__prefs__dialog"
+      ],
+      "consentSelectors": [
+        "#shopify-pc__banner__btn-manage-prefs",
+        "#shopify-pc__prefs__header-save",
+        "#shopify-pc__prefs__preferences-input",
+        "#shopify-pc__prefs__marketing-input",
+        "#shopify-pc__prefs__analytics-input"
+      ],
+      "expectedShopifyConsent": {
+        "preferences": true,
+        "analytics": true,
+        "marketing": false
+      }
+    },
+    {
+      "name": "CLUSE EU (VPN Custom)",
+      "url": "https://cluse.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Pandectes GDPR Compliance",
+      "tier": "dom",
+      "preference": "custom",
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "note": "CLUSE is Shopify-hosted but the live EU consent surface is Pandectes, not Shopify Customer Privacy, so this target validates the Pandectes flow instead.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": true,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "bannerSelectors": [
+        "#pandectes-banner",
+        ".pd-cookie-banner-window",
+        "#pd-cp-preferences"
+      ],
+      "consentSelectors": [
+        ".cc-btn.cc-settings",
+        ".cc-btn.cc-deny",
+        ".cc-btn.cc-allow",
+        ".pd-cp-ui-save"
+      ]
+    },
+    {
+      "name": "Bare Biology EU (VPN Custom)",
+      "url": "https://www.barebiology.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Consentmo GDPR Compliance",
+      "tier": "dom",
+      "preference": "custom",
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "note": "Bare Biology is Shopify-hosted but the live EU consent surface is Consentmo in a shadow-root custom element, so this target validates the Consentmo flow instead.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": true,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "debugConsentmoInspectUrl": "https://www.barebiology.com/pages/cookie-policy",
+      "debugConsentmoInspectWaitMs": 5000,
+      "bannerSelectors": [
+        "csm-cookie-consent"
+      ],
+      "consentSelectors": [
+        "csm-cookie-consent"
+      ]
+    },
+    {
+      "name": "Renais EU (VPN Custom)",
+      "url": "https://eu.renais.co.uk/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Shopify Customer Privacy",
+      "tier": "cmp-api/dom",
+      "preference": "custom",
+      "bannerWaitMs": 18000,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "note": "Renais's cookie policy documents Shopify privacy cookies including _tracking_consent and _cmp_a, so this target is intended to validate the generic Shopify Customer Privacy path from an EU/VPN session.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": true,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "bannerSelectors": [
+        "#shopify-pc__banner",
+        ".shopify-pc__banner__dialog",
+        "#shopify-pc__prefs",
+        "#shopify-pc__prefs__dialog",
+        ".shopify-pc__prefs__dialog"
+      ],
+      "consentSelectors": [
+        "#shopify-pc__banner__btn-manage-prefs",
+        "#shopify-pc__prefs__header-save",
+        "#shopify-pc__prefs__preferences-input",
+        "#shopify-pc__prefs__marketing-input",
+        "#shopify-pc__prefs__analytics-input"
+      ],
+      "expectedShopifyConsent": {
+        "preferences": true,
+        "analytics": true,
+        "marketing": false
+      }
+    },
+    {
+      "name": "QualityMinds",
+      "url": "https://qualityminds.com/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Complianz",
+      "tier": "dom",
+      "preference": "custom",
+      "requireBannerDismissal": true,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": true,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#cmplz-cookiebanner-container",
+        ".cmplz-cookiebanner"
+      ],
+      "consentSelectors": [
+        ".cmplz-deny",
+        ".cmplz-accept",
+        ".cmplz-view-preferences",
+        ".cmplz-save-preferences",
+        "#cmplz-statistics-optin",
+        "#cmplz-preferences-optin",
+        "#cmplz-marketing-optin"
+      ]
+    },
+    {
+      "name": "Cookie Information",
+      "url": "https://cookieinformation.com/",
+      "region": "US",
+      "cmp": "Cookie Information",
+      "tier": "dom",
+      "bannerSelectors": [
+        "#coiOverlay",
+        "#coi-banner-wrapper",
+        "#coiConsentBanner",
+        ".coi-consent-summary"
+      ],
+      "consentSelectors": [
+        "#declineButton",
+        "#updateButton",
+        ".coi-banner__nextpage",
+        ".summary-texts__show-details"
+      ]
+    },
+    {
+      "name": "Cookie Control",
+      "url": "https://cookiecontrol.com/",
+      "region": "US",
+      "cmp": "Cookie Control by Civic",
+      "tier": "dom",
+      "bannerSelectors": [
+        "#ccc-notify .ccc-notify-button",
+        "#ccc-content",
+        "#ccc[open]"
+      ],
+      "consentSelectors": [
+        "#ccc-close",
+        "#ccc-notify .ccc-notify-button"
+      ]
+    },
+    {
+      "name": "realmaker.de",
+      "url": "https://realmaker.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Borlabs Cookie",
+      "tier": "dom",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": true,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "bannerSelectors": [
+        "#BorlabsCookieBox",
+        ".show-cookie-box"
+      ],
+      "consentSelectors": [
+        ".cookie-box ._brlbs-manage-btn>a",
+        "#CookiePrefSave",
+        "#borlabs-cookie-group-statistics",
+        "#borlabs-cookie-group-marketing",
+        "#borlabs-cookie-group-external-media"
+      ]
+    },
+    {
+      "name": "CookieWow Help",
+      "url": "https://help.cookiewow.com/en/article/how-to-customize-cookie-banner-css-13nxfte/",
+      "region": "US",
+      "cmp": "Cookie Wow",
+      "tier": "dom",
+      "preference": "reject_all",
+      "bannerSelectors": [
+        ".cwc-banner-container",
+        ".cwc-consent-summary-container"
+      ],
+      "consentSelectors": [
+        ".cwc-setting-button",
+        ".cwc-save-setting-wrapper button",
+        ".cwc-accept-button"
+      ]
+    },
+    {
+      "name": "Beumer Group",
+      "url": "https://www.beumergroup.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Borlabs Cookie",
+      "tier": "dom",
+      "preference": "custom",
+      "bannerWaitMs": 18000,
+      "handleWaitMs": 10000,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": true,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "bannerSelectors": [
+        "#BorlabsCookieBox",
+        ".show-cookie-box"
+      ],
+      "consentSelectors": [
+        ".cookie-box ._brlbs-btn-accept-all",
+        ".cookie-box ._brlbs-btn-accept-only-essential",
+        ".cookie-box ._brlbs-manage-btn>a",
+        "#CookiePrefSave"
+      ]
+    },
+    {
+      "name": "Danfoss Drives",
+      "url": "https://discover-drives.danfoss.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Borlabs Cookie",
+      "tier": "dom",
+      "preference": "custom",
+      "bannerWaitMs": 18000,
+      "handleWaitMs": 10000,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": true,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "bannerSelectors": [
+        "#BorlabsCookieBox",
+        ".show-cookie-box"
+      ],
+      "consentSelectors": [
+        ".cookie-box ._brlbs-btn-accept-all",
+        ".cookie-box ._brlbs-btn-accept-only-essential",
+        ".cookie-box ._brlbs-manage-btn>a",
+        "#CookiePrefSave"
+      ]
+    },
+    {
+      "name": "Danfoss Privacy Policy",
+      "url": "https://www.danfoss.com/de-de/terms/privacy/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Cookie Information",
+      "tier": "dom",
+      "preference": "custom",
+      "bannerWaitMs": 18000,
+      "handleWaitMs": 12000,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#ccb-coiOverlay",
+        "#ccb-coi-banner-wrapper",
+        "#ccb-coiPage-1",
+        "#coiOverlay",
+        "#coiConsentBanner",
+        "#coi-banner-wrapper"
+      ],
+      "consentSelectors": [
+        ".summary-texts__show-details",
+        "#ccb-updateButton",
+        "#ccb-declineButton",
+        "#updateButton",
+        "#declineButton",
+        "#cookie_cat_functional",
+        "#cookie_cat_statistic",
+        "#cookie_cat_marketing"
+      ]
+    },
+    {
+      "name": "MSA Safety Blog",
+      "url": "https://emeablog.msasafety.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "CookieYes",
+      "tier": "dom",
+      "preference": "custom",
+      "bannerWaitMs": 35000,
+      "handleWaitMs": 16000,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": true,
+        "ccpaDoNotSell": true,
+        "uncategorized": "accept"
+      },
+      "bannerSelectors": [
+        "#cookie-law-info-bar",
+        ".cky-banner-element",
+        ".cky-consent-container"
+      ],
+      "consentSelectors": [
+        ".cky-btn-customize",
+        "button[data-cky-tag='settings-button']",
+        "button[data-cky-tag='detail-save-button']"
+      ]
+    },
+    {
+      "name": "Content Shifu",
+      "url": "https://contentshifu.com/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "GlowCookies",
+      "tier": "dom",
+      "preference": "reject_all",
+      "bannerSelectors": [
+        "#glowCookies-banner",
+        ".glowCookies__banner"
+      ],
+      "consentSelectors": [
+        "#acceptCookies",
+        "#rejectCookies"
+      ]
+    },
+    {
+      "name": "Peterborough Cookies",
+      "url": "https://www.peterborough.gov.uk/cookies",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Cookie Control by Civic",
+      "tier": "dom",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": true,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#ccc-notify .ccc-notify-button",
+        "#ccc-content",
+        "#ccc[open]"
+      ],
+      "consentSelectors": [
+        "#ccc-dismiss-button",
+        "#ccc-close",
+        "#ccc-notify .ccc-notify-button"
+      ]
+    },
+    {
+      "name": "Cambridge UIS Cookie Compliance",
+      "url": "https://help.uis.cam.ac.uk/service/websites-and-intranets/websites/cookie-compliance",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Cookie Control by Civic",
+      "tier": "dom",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": true,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#ccc-notify .ccc-notify-button",
+        "#ccc-content",
+        "#ccc[open]"
+      ],
+      "consentSelectors": [
+        "#ccc-dismiss-button",
+        "#ccc-close",
+        "#ccc-notify .ccc-notify-button"
+      ]
+    },
+    {
+      "name": "Childrens Commissioner Cookies",
+      "url": "https://www.childrenscommissioner.gov.uk/privacy/cookies/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Cookie Control by Civic",
+      "tier": "dom",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#ccc-notify .ccc-notify-button",
+        "#ccc-content",
+        "#ccc[open]"
+      ],
+      "consentSelectors": [
+        "#ccc-dismiss-button",
+        "#ccc-close",
+        "#ccc-notify .ccc-notify-button"
+      ]
+    },
+    {
+      "name": "Truendo Home",
+      "url": "https://truendo.com/en",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Truendo",
+      "tier": "dom",
+      "preference": "custom",
+      "bannerWaitMs": 18000,
+      "handleWaitMs": 10000,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#truendo_container div[class*='tru_cookie-dialog']",
+        "#truendo_container #tru_options_btn",
+        "#truendo_container #truendo_fab",
+        "#truendo_container [data-cy='tru-fab']"
+      ],
+      "consentSelectors": [
+        "#truendo_container [data-cy='action-button-all']",
+        "#truendo_container [data-cy='action-button-necessary']",
+        "#truendo_container [data-cy='tru-panel-close']",
+        "#truendo_container button.tru_title__close"
+      ]
+    },
+    {
+      "name": "Sportradar",
+      "url": "https://sportradar.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Truendo",
+      "tier": "dom",
+      "preference": "custom",
+      "bannerWaitMs": 18000,
+      "handleWaitMs": 10000,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#truendo_container div[class*='tru_cookie-dialog']",
+        "#truendo_container #tru_options_btn"
+      ],
+      "consentSelectors": [
+        "#truendo_container [data-cy='action-button-accept']",
+        "#truendo_container [data-cy='action-button-reject']",
+        "#truendo_container [data-cy='action-button-save']"
+      ]
+    },
+    {
+      "name": "LAOLA1",
+      "url": "https://www.laola1.at/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Truendo",
+      "tier": "dom",
+      "preference": "custom",
+      "bannerWaitMs": 18000,
+      "handleWaitMs": 12000,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#truendo_container div[class*='tru_cookie-dialog']",
+        "#truendo_container #tru_options_btn"
+      ],
+      "consentSelectors": [
+        "#truendo_container [data-cy='action-button-accept']",
+        "#truendo_container [data-cy='action-button-reject']",
+        "#truendo_container [data-cy='action-button-save']"
+      ]
+    },
+    {
+      "name": "aTelevisao",
+      "url": "https://www.atelevisao.com/",
+      "region": "EU",
+      "locale": "pt-PT",
+      "acceptLanguage": "pt-PT,pt;q=0.9,en;q=0.8",
+      "cmp": "Clickio",
+      "tier": "dom",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#cl-consent",
+        ".cl-consent__inner"
+      ],
+      "consentSelectors": [
+        ".cl-consent__btn--outline",
+        ".cl-consent-tabs__item"
+      ]
+    },
+    {
+      "name": "Crealogix Cookie Docs",
+      "url": "https://crealogix.com/en/cookie_docs",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "cookiesjsr",
+      "tier": "dom",
+      "preference": "reject_all",
+      "bannerSelectors": [
+        "#cookiesjsr",
+        ".cookiesjsr--app",
+        ".cookiesjsr-settings"
+      ],
+      "consentSelectors": [
+        ".cookiesjsr-btn.allowAll",
+        ".cookiesjsr-layer--actions .save"
+      ]
+    },
+    {
+      "name": "PathoSense Cookie Docs",
+      "url": "https://www.pathosense.com/cookies/documentation",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "cookiesjsr",
+      "tier": "dom",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#cookiesjsr",
+        ".cookiesjsr--app",
+        ".cookiesjsr-settings"
+      ],
+      "consentSelectors": [
+        ".cookiesjsr-settings",
+        ".cookiesjsr-layer--actions .save"
+      ]
+    },
+    {
+      "name": "Diariomotor Clickio",
+      "url": "https://www.diariomotor.com/diariomotor-sin-cookies/",
+      "region": "EU",
+      "locale": "es-ES",
+      "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
+      "cmp": "Clickio",
+      "tier": "dom",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#cl-consent",
+        ".cl-consent__inner",
+        ".dm-button.cursor-pointer"
+      ],
+      "consentSelectors": [
+        ".cl-consent__btn--outline",
+        ".cl-consent-tabs__item",
+        ".dm-button.cursor-pointer"
+      ]
+    },
+    {
+      "name": "LiveRamp Cookie Preferences",
+      "url": "https://liveramp.com/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "Ketch",
+      "tier": "site-specific",
+      "preference": "custom",
+      "bannerWaitMs": 18000,
+      "handleWaitMs": 12000,
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": true,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#ketch-banner",
+        "#ketch-banner-button-primary",
+        "#ketch-banner-button-secondary",
+        "#ketch-banner-button-tertiary"
+      ],
+      "consentSelectors": [
+        "#ketch-banner-button-primary",
+        "text:confirm",
+        "[id*='purpose-list-switch-container']"
+      ]
     }
   ]
 }

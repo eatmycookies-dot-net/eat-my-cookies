@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pandectes Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    .hidden { display: none !important; }
+    #pandectes-banner,
+    #pd-cp-preferences {
+      position: fixed;
+      inset: auto 24px 24px 24px;
+      max-width: 640px;
+      background: #fff;
+      color: #111827;
+      border: 1px solid #d1d5db;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+      padding: 20px;
+      z-index: 9999;
+    }
+    #pd-cp-preferences {
+      inset: 8% 24px auto 24px;
+    }
+    .cc-compliance,
+    .pd-cp-ui-header {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .pd-cp-purpose-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    button, a[role="button"] {
+      cursor: pointer;
+      padding: 10px 14px;
+      border: 1px solid #111827;
+      background: #fff;
+      color: #111827;
+    }
+    .cc-allow, .pd-cp-btn-accept {
+      background: #111827;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Pandectes Fixture</h1>
+    <p>Local fixture used to validate generic Pandectes handling.</p>
+  </main>
+
+  <div id="pandectes-banner" role="alertdialog" aria-label="We respect your privacy">
+    <div class="pd-cookie-banner-window cc-window">
+      <p>We use cookies to improve your shopping experience and provide personalized ads.</p>
+      <div class="cc-compliance cc-highlight">
+        <button type="button" class="cc-btn cc-settings" aria-controls="pd-cp-preferences">Preferences</button>
+        <button type="button" class="cc-btn cc-btn-decision cc-deny">Decline</button>
+        <button type="button" class="cc-btn cc-btn-decision cc-allow">Accept</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pd-cp-preferences" class="hidden" role="region" aria-labelledby="pd-cp-ui-title">
+    <div class="pd-cp-ui-header">
+      <button type="button" class="pd-cp-btn pd-cp-btn-reject">Reject all</button>
+      <button type="button" class="pd-cp-btn pd-cp-btn-accept">Accept all</button>
+    </div>
+    <div class="pd-cp-purpose-row pd-cp-purpose-row-1">
+      <div class="pd-cp-purpose-info">
+        <div class="pd-cp-bold-messaging">Functional cookies</div>
+      </div>
+      <div class="pd-cp-purpose-actions">
+        <label class="pd-cp-preferences-switch" aria-label="functionality cookies">
+          <input id="pd-functional" type="checkbox" role="switch" name="pref_1" checked>
+          <span>toggle</span>
+        </label>
+      </div>
+    </div>
+    <div class="pd-cp-purpose-row pd-cp-purpose-row-2">
+      <div class="pd-cp-purpose-info">
+        <div class="pd-cp-bold-messaging">Performance cookies</div>
+      </div>
+      <div class="pd-cp-purpose-actions">
+        <label class="pd-cp-preferences-switch" aria-label="performance cookies">
+          <input id="pd-analytics" type="checkbox" role="switch" name="pref_2" checked>
+          <span>toggle</span>
+        </label>
+      </div>
+    </div>
+    <div class="pd-cp-purpose-row pd-cp-purpose-row-3">
+      <div class="pd-cp-purpose-info">
+        <div class="pd-cp-bold-messaging">Targeting cookies</div>
+      </div>
+      <div class="pd-cp-purpose-actions">
+        <label class="pd-cp-preferences-switch" aria-label="targeting cookies">
+          <input id="pd-advertising" type="checkbox" role="switch" name="pref_3" checked>
+          <span>toggle</span>
+        </label>
+      </div>
+    </div>
+    <div class="pd-cp-ui-footer">
+      <a role="button" class="pd-cp-btn pd-cp-ui-save" onclick="window.__pandectesSave()">Save preferences</a>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const banner = document.getElementById('pandectes-banner');
+      const prefs = document.getElementById('pd-cp-preferences');
+      const functional = document.getElementById('pd-functional');
+      const analytics = document.getElementById('pd-analytics');
+      const advertising = document.getElementById('pd-advertising');
+
+      window.__fixtureState = {
+        mode: null,
+        functional: functional.checked,
+        analytics: analytics.checked,
+        advertising: advertising.checked,
+        bannerVisible: true,
+      };
+
+      function finish(mode) {
+        window.__fixtureState = {
+          mode,
+          functional: functional.checked,
+          analytics: analytics.checked,
+          advertising: advertising.checked,
+          bannerVisible: false,
+        };
+        banner.remove();
+        prefs.remove();
+      }
+
+      function setAll(next) {
+        functional.checked = next;
+        analytics.checked = next;
+        advertising.checked = next;
+      }
+
+      document.querySelector('.cc-settings').addEventListener('click', () => {
+        prefs.classList.remove('hidden');
+      });
+      document.querySelector('.cc-deny').addEventListener('click', () => {
+        setAll(false);
+        finish('reject_all');
+      });
+      document.querySelector('.cc-allow').addEventListener('click', () => {
+        setAll(true);
+        finish('accept_all');
+      });
+      document.querySelector('.pd-cp-btn-reject').addEventListener('click', () => setAll(false));
+      document.querySelector('.pd-cp-btn-accept').addEventListener('click', () => setAll(true));
+      window.__pandectesSave = () => finish('custom');
+    })();
+  </script>
+</body>
+</html>

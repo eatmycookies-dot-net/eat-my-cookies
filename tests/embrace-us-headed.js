@@ -7,8 +7,7 @@ const EXT_DIR = path.resolve(__dirname, '..');
 const SITE_URL = 'https://www.embracepetinsurance.com/';
 const args = process.argv.slice(2);
 const USE_VPN = args.includes('--vpn');
-const VPN_EXT_DIR = process.env.EMC_VPN_EXT ||
-  '/Users/nextwave/Library/Application Support/Google/Chrome/Default/Extensions/omghfjlpggmjjaagoclmmobgdodcjboh/3.93.2_0';
+const VPN_EXT_DIR = process.env.EMC_VPN_EXT || null;
 const VPN_PROFILE_DIR = path.resolve(__dirname, '..', '.tmp-vpn-profile');
 const BROWSER_HOME_DIR = path.resolve(
   __dirname,
@@ -157,7 +156,7 @@ async function delay(ms) {
 }
 
 async function launchBrowser() {
-  const extPaths = USE_VPN ? [EXT_DIR, VPN_EXT_DIR] : [EXT_DIR];
+  const extPaths = USE_VPN ? [EXT_DIR, VPN_EXT_DIR].filter(Boolean) : [EXT_DIR];
   const userDataDir = USE_VPN ? VPN_PROFILE_DIR : '';
   return chromium.launchPersistentContext(userDataDir, {
     headless: false,
@@ -502,8 +501,10 @@ async function runScenario(browser, scenario) {
 }
 
 (async () => {
-  if (USE_VPN && !fs.existsSync(VPN_EXT_DIR)) {
-    console.error(`VPN extension not found at ${VPN_EXT_DIR}`);
+  if (USE_VPN && (!VPN_EXT_DIR || !fs.existsSync(VPN_EXT_DIR))) {
+    console.error(VPN_EXT_DIR
+      ? `VPN extension not found at ${VPN_EXT_DIR}`
+      : 'EMC_VPN_EXT env var is required when using --vpn');
     process.exit(1);
   }
   const browser = await launchBrowser();

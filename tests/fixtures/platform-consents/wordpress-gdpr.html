@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>WordPress GDPR Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    .hidden { display: none !important; }
+    .wpgdprc-consent-bar,
+    .wpgdprc-consent-modal {
+      position: fixed;
+      inset: auto 0 0 0;
+      background: #1f2937;
+      color: #fff;
+      padding: 16px;
+      z-index: 9999;
+    }
+    .wpgdprc-consent-modal {
+      inset: 10% 10% auto 10%;
+      background: #fff;
+      color: #111827;
+      border: 1px solid #d1d5db;
+    }
+    .wpgdprc-consent-modal__item {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin: 10px 0;
+    }
+    .wpgdprc-button,
+    .wpgdprc-consent-bar__button,
+    .wpgdprc-consent-bar__settings {
+      cursor: pointer;
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 6px;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>WordPress GDPR Fixture</h1>
+    <p>Local fixture used to validate the extension's generic WordPress GDPR handling.</p>
+  </main>
+
+  <div class="wpgdprc-consent-bar" id="wp-bar">
+    <button class="wpgdprc-consent-bar__settings" type="button">Settings</button>
+    <button class="wpgdprc-consent-bar__button" type="button">Accept</button>
+  </div>
+
+  <section class="wpgdprc-consent-modal hidden" id="wp-modal">
+    <div class="wpgdprc-consent-modal__item">
+      <label>
+        <input id="wp-functional" type="checkbox" checked>
+        <span class="wpgdprc-consent-modal__description">Functional cookies</span>
+      </label>
+    </div>
+    <div class="wpgdprc-consent-modal__item">
+      <label>
+        <input id="wp-analytics" type="checkbox" checked>
+        <span class="wpgdprc-consent-modal__description">Analytics cookies</span>
+      </label>
+    </div>
+    <div class="wpgdprc-consent-modal__item">
+      <label>
+        <input id="wp-advertising" type="checkbox" checked>
+        <span class="wpgdprc-consent-modal__description">Advertising cookies</span>
+      </label>
+    </div>
+    <button class="wpgdprc-button" type="button">Save my settings</button>
+  </section>
+
+  <script>
+    (() => {
+      const bar = document.getElementById('wp-bar');
+      const modal = document.getElementById('wp-modal');
+      const functional = document.getElementById('wp-functional');
+      const analytics = document.getElementById('wp-analytics');
+      const advertising = document.getElementById('wp-advertising');
+
+      window.__fixtureState = {
+        saved: false,
+        functional: functional.checked,
+        analytics: analytics.checked,
+        advertising: advertising.checked,
+        bannerVisible: true,
+        modalVisible: false,
+      };
+
+      function finish(mode) {
+        window.__fixtureState = {
+          saved: true,
+          mode,
+          functional: functional.checked,
+          analytics: analytics.checked,
+          advertising: advertising.checked,
+          bannerVisible: false,
+          modalVisible: false,
+        };
+        bar.remove();
+        modal.remove();
+      }
+
+      document.querySelector('.wpgdprc-consent-bar__settings').addEventListener('click', () => {
+        modal.classList.remove('hidden');
+        window.__fixtureState.modalVisible = true;
+      });
+
+      document.querySelector('.wpgdprc-consent-bar__button').addEventListener('click', () => {
+        functional.checked = true;
+        analytics.checked = true;
+        advertising.checked = true;
+        finish('accept_all');
+      });
+
+      document.querySelector('.wpgdprc-button').addEventListener('click', () => {
+        finish('custom');
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -67,6 +67,15 @@
     'input[aria-labelledby*="osano-cm" i]',
     '[role="switch"][aria-labelledby*="osano-cm" i]',
   ];
+  const TRUENDO_VISIBLE_SELECTORS = [
+    '#truendo_container',
+    '[data-cy="accept-only-banner"]',
+    '[data-cy="tru-panel"]',
+    '[data-cy="action-button-all"]',
+    '[data-cy="action-button-necessary"]',
+    '.tru_cookie-dialog_ok',
+    '.tru_overlay',
+  ];
   let _guardianRetryTimer = null;
 
   // Sourcepoint: intercept window._sp_queue before their SDK processes it.
@@ -477,6 +486,62 @@
       }));
       return false;
     },
+    Truendo: async (w, prefs) => {
+      if (!w.Truendo || typeof w.Truendo !== 'object') return false;
+      if (!hasVisibleSelector(TRUENDO_VISIBLE_SELECTORS) && !document.cookie.includes('truendo_cmp=')) return false;
+      if (prefs.globalPreference === 'custom' &&
+          (prefs.functional === undefined || prefs.analytics === undefined || prefs.advertising === undefined)) {
+        return false;
+      }
+
+      const desiredState = buildTruendoDesiredState(prefs);
+
+      if (prefs.globalPreference === 'custom') {
+        const currentState = readTruendoConsentState(w);
+        applyTruendoApiToggle(w, currentState, desiredState, 'preferences', 'togglePreferences');
+        applyTruendoApiToggle(w, currentState, desiredState, 'marketing', 'toggleMarketing');
+        applyTruendoApiToggle(w, currentState, desiredState, 'statistics', 'toggleStatistics');
+        applyTruendoApiToggle(w, currentState, desiredState, 'social_content', 'toggleContent');
+        applyTruendoApiToggle(w, currentState, desiredState, 'social_sharing', 'toggleSharing');
+        applyTruendoApiToggle(w, currentState, desiredState, 'add_features', 'addFeatures');
+      } else if (prefs.globalPreference !== 'accept_all' && prefs.globalPreference !== 'reject_all') {
+        return false;
+      }
+
+      // For accept_all / reject_all: call the Truendo SDK so it updates its internal
+      // consent state for ALL categories. Without this the SDK's state doesn't change
+      // and waitForTruendoConsentState times out. These calls do NOT freeze the page —
+      // the freeze came solely from suppressTruendoSurface() manipulating DOM elements
+      // that triggered Truendo's MutationObserver. SDK API calls are safe.
+      if (prefs.globalPreference === 'accept_all') {
+        try { if (typeof w.Truendo.acceptAllCookies === 'function') w.Truendo.acceptAllCookies(); } catch (_) {}
+      } else if (prefs.globalPreference === 'reject_all') {
+        try { if (typeof w.Truendo.acceptNecessaryCookiesOnly === 'function') w.Truendo.acceptNecessaryCookiesOnly(); } catch (_) {}
+      }
+
+      // Also write the cookie directly for belt-and-suspenders persistence.
+      syncTruendoConsentCookie(desiredState);
+
+      const verified = await waitForTruendoConsentState(w, desiredState, 4000);
+      if (!verified) return false;
+
+      // Do NOT call suppressTruendoSurface() — hiding the banner elements fires Truendo's
+      // own MutationObserver, which can run heavy synchronous SDK code and freeze the page.
+      // Instead reload: on the reloaded page Truendo reads the cookie, sees consent is set,
+      // and never shows the banner.
+      _handled = true;
+      document.dispatchEvent(new CustomEvent('__emc_handled__', {
+        detail: {
+          method: prefs.globalPreference === 'custom'
+            ? 'cmp_api:Truendo:custom'
+            : prefs.globalPreference === 'accept_all'
+              ? 'cmp_api:Truendo:accept_all'
+              : 'cmp_api:Truendo:reject_all',
+        },
+      }));
+      setTimeout(() => { try { location.reload(); } catch (_) {} }, 0);
+      return true;
+    },
   };
 
   const CMP_SELECTORS = {
@@ -517,6 +582,7 @@
       '#shopify-pc__banner__btn-manage-prefs',
     ],
     Nike: [],
+    Truendo: TRUENDO_VISIBLE_SELECTORS,
   };
 
   const HOST_RESTRICTIONS = {
@@ -1300,9 +1366,140 @@
       return NIKE_CCPA_HOSTS.has(window.location.hostname) &&
         /^\/(?:guest|member)\/settings\/do-not-share-my-data/.test(window.location.pathname);
     }
+    if (name === 'Truendo') {
+      return Boolean(window.Truendo) && document.cookie.includes('truendo_cmp=');
+    }
     return name === 'OneTrust' &&
       DISNEY_FAMILY_USNAT_HOSTS.has(window.location.hostname) &&
       document.getElementById('ot-group-id-BG559') != null;
+  }
+
+  function buildTruendoDesiredState(prefs) {
+    const desiredFunctional = Boolean(prefs?.functional) || prefs?.uncategorized === 'accept';
+    return {
+      ack: true,
+      preferences: desiredFunctional,
+      marketing: Boolean(prefs?.advertising),
+      necessary: true,
+      statistics: Boolean(prefs?.analytics),
+      social_content: desiredFunctional,
+      social_sharing: desiredFunctional,
+      add_features: prefs?.uncategorized === 'accept',
+      consent_sent: 'true',
+    };
+  }
+
+  function readTruendoConsentState(w = window) {
+    try {
+      const raw = document.cookie.split('; ').find((entry) => entry.startsWith('truendo_cmp='));
+      if (raw) {
+        const parsed = JSON.parse(decodeURIComponent(raw.slice('truendo_cmp='.length)));
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof w.Truendo?.getFullConsentDecoded === 'function') {
+        const consent = w.Truendo.getFullConsentDecoded();
+        if (consent && typeof consent === 'object') return consent;
+      }
+      if (typeof w.Truendo?.getFullConsent === 'function') {
+        const consent = w.Truendo.getFullConsent();
+        if (consent && typeof consent === 'object') return consent;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  function applyTruendoApiToggle(w, currentState, desiredState, key, methodName) {
+    if (!w.Truendo || typeof w.Truendo[methodName] !== 'function') return false;
+    if (typeof currentState?.[key] === 'boolean' && currentState[key] === desiredState[key]) return true;
+    try {
+      w.Truendo[methodName]();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function syncTruendoConsentCookie(desiredState) {
+    const currentState = readTruendoConsentState() ?? {};
+    const next = {
+      ...currentState,
+      ...desiredState,
+    };
+    if (!next.exp) {
+      next.exp = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    }
+    try {
+      const parts = [
+        `truendo_cmp=${encodeURIComponent(JSON.stringify(next))}`,
+        'path=/',
+        'max-age=31536000',
+        'SameSite=Lax',
+      ];
+      if (location.protocol === 'https:') parts.push('Secure');
+      document.cookie = parts.join('; ');
+    } catch (_) {}
+  }
+
+  async function waitForTruendoConsentState(w, desiredState, timeoutMs = 4000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const currentState = readTruendoConsentState(w);
+      if (currentState &&
+          currentState.ack === desiredState.ack &&
+          currentState.preferences === desiredState.preferences &&
+          currentState.marketing === desiredState.marketing &&
+          currentState.necessary === desiredState.necessary &&
+          currentState.statistics === desiredState.statistics &&
+          currentState.social_content === desiredState.social_content &&
+          currentState.social_sharing === desiredState.social_sharing &&
+          currentState.add_features === desiredState.add_features) {
+        return true;
+      }
+      await delay(100);
+    }
+    return false;
+  }
+
+  function suppressTruendoSurface(durationMs = 15000) {
+    const selectors = [
+      '#truendo_container',
+      '.tru_overlay',
+      '[data-cy="accept-only-banner"]',
+      '[data-cy="tru-panel"]',
+      '[data-cy="action-button-all"]',
+      '[data-cy="action-button-necessary"]',
+      '.tru_cookie-dialog_ok',
+    ];
+
+    const hide = () => {
+      for (const selector of selectors) {
+        for (const el of document.querySelectorAll(selector)) {
+          if (!(el instanceof HTMLElement)) continue;
+          el.style.setProperty('display', 'none', 'important');
+          el.style.setProperty('visibility', 'hidden', 'important');
+          el.setAttribute('aria-hidden', 'true');
+        }
+      }
+      try {
+        document.body?.style?.setProperty('overflow', '', 'important');
+        document.documentElement?.style?.setProperty('overflow', '', 'important');
+      } catch (_) {}
+    };
+
+    hide();
+    const observer = new MutationObserver(() => hide());
+    try {
+      observer.observe(document.documentElement ?? document, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+      });
+      setTimeout(() => observer.disconnect(), durationMs);
+    } catch (_) {}
   }
 
   function shouldUseOneTrustPrivacyCenterOptOut(prefs, host = window.location.hostname) {
@@ -1510,9 +1707,9 @@
     const settingsVisible = hasVisibleSelector([
       '#onetrust-consent-sdk',
       '#onetrust-pc-sdk',
-      '#ot-group-id-C0004',
-      '#ot-group-id-C0003',
-      '#ot-group-id-C0002',
+      '.save-preference-btn-handler',
+      '.category-switch-handler',
+      "input[id^='ot-group-id-']",
     ]);
     if (!settingsVisible) {
       const opened = clickFirstVisible([
@@ -1528,18 +1725,15 @@
     }
 
     if (!(await waitForAnyVisible([
-      '#ot-group-id-C0004',
-      '#ot-group-id-C0003',
-      '#ot-group-id-C0002',
+      '.category-switch-handler',
+      "input[id^='ot-group-id-']",
       '.save-preference-btn-handler',
       '#onetrust-accept-btn-handler',
     ], 4000))) {
       return false;
     }
 
-    setOneTrustGroupStateById('ot-group-id-C0004', Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false);
-    setOneTrustGroupStateById('ot-group-id-C0003', Boolean(prefs.functional));
-    setOneTrustGroupStateById('ot-group-id-C0002', Boolean(prefs.analytics));
+    if (!applyOneTrustCustomPreferences(prefs)) return false;
 
     await delay(250);
 
@@ -1614,6 +1808,103 @@
     if (Boolean(toggle.checked) === checked) return true;
     forceOneTrustToggleState(toggle, checked);
     return true;
+  }
+
+  function applyOneTrustCustomPreferences(prefs) {
+    if (applyOneTrustCustomPreferencesViaApi(prefs)) {
+      return true;
+    }
+
+    const toggles = visibleOneTrustToggles();
+    if (!toggles.length) return false;
+
+    let appliedAny = false;
+    for (const toggle of toggles) {
+      const nextState = desiredOneTrustToggleState(toggle, prefs);
+      if (nextState === null) continue;
+      appliedAny = true;
+      if (Boolean(toggle.checked) !== nextState) {
+        forceOneTrustToggleState(toggle, nextState);
+      }
+    }
+
+    return appliedAny;
+  }
+
+  function applyOneTrustCustomPreferencesViaApi(prefs) {
+    const updateConsent = window.OneTrust?.UpdateConsent;
+    if (typeof updateConsent !== 'function') return false;
+
+    const categoryEntries = oneTrustCategoryEntries();
+    if (!categoryEntries.length) return false;
+
+    let appliedAny = false;
+    for (const entry of categoryEntries) {
+      const nextState = desiredOneTrustEntryState(entry, prefs);
+      if (nextState === null) continue;
+      appliedAny = true;
+      try {
+        updateConsent('Category', `${entry.id}:${nextState ? '1' : '0'}`);
+      } catch (_) {}
+    }
+    return appliedAny;
+  }
+
+  function desiredOneTrustToggleState(toggle, prefs) {
+    return desiredOneTrustEntryState({
+      id: toggle?.id?.replace(/^ot-group-id-/, '') ?? '',
+      text: oneTrustToggleText(toggle),
+    }, prefs);
+  }
+
+  function desiredOneTrustEntryState(entry, prefs) {
+    const id = entry?.id ?? '';
+    const text = entry?.text ?? '';
+
+    if (id === 'C0002' || /performance|analytics|measurement|statistics/i.test(text)) {
+      return Boolean(prefs.analytics);
+    }
+
+    if (id === 'C0003' || /functional|preference|personalization/i.test(text)) {
+      return Boolean(prefs.functional);
+    }
+
+    if (
+      id === 'C0004' ||
+      id === 'C0005' ||
+      /targeting|advertising|marketing|social media|sale of personal data|share of personal data/i.test(text)
+    ) {
+      return Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;
+    }
+
+    if (/do not sell|do not share|sale of personal data|share of personal data/i.test(text) || /[A-Z]+_BG/.test(id)) {
+      return prefs.ccpaDoNotSell === false;
+    }
+
+    if (prefs.uncategorized === 'accept') return true;
+    if (prefs.uncategorized === 'reject') return false;
+    return null;
+  }
+
+  function oneTrustToggleText(toggle) {
+    const parts = [];
+    const label = findToggleLabel(toggle);
+    if (label?.textContent) parts.push(label.textContent);
+
+    const row = toggle.closest?.('.ot-cat-item, .ot-accordion-layout, .ot-host-item, .ot-pc-content, .ot-vlst-cntr');
+    if (row?.textContent) parts.push(row.textContent);
+
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function oneTrustCategoryEntries() {
+    const rows = Array.from(document.querySelectorAll(
+      '#onetrust-pc-sdk [data-optanongroupid], #onetrust-banner-sdk [data-optanongroupid]'
+    ));
+    return rows.map((row) => ({
+      id: row.getAttribute('data-optanongroupid') ?? '',
+      text: row.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    })).filter((entry) => entry.id);
   }
 
   function closeZoomOneTrustBannerIfVisible() {
@@ -1772,8 +2063,12 @@
   }
 
   function findToggleLabel(toggle) {
-    if (!toggle?.id || typeof CSS?.escape !== 'function') return null;
-    return document.querySelector(`label[for="${CSS.escape(toggle.id)}"]`);
+    if (!toggle) return null;
+    if (toggle.id && typeof CSS?.escape === 'function') {
+      const explicit = document.querySelector(`label[for="${CSS.escape(toggle.id)}"]`);
+      if (explicit) return explicit;
+    }
+    return toggle.parentElement?.querySelector('.ot-switch-nob, .ot-tgl-cntr, .category-switch-handler') ?? null;
   }
 
   async function waitForNikeCheckbox(timeoutMs) {

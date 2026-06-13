@@ -23,6 +23,7 @@
     "test:unit:coverage": "vitest run --coverage",
     "test:static": "node tests/static-checks.js",
     "test:e2e": "node tests/validate.js",
+    "test:e2e:platforms": "node tests/e2e-platform-fixtures.js",
     "test:e2e:disney": "node tests/disney-ccpa.js",
     "test:e2e:disney-homepage": "node tests/disney-family-homepage-ccpa.js",
     "test:e2e:headed": "node tests/validate.js --headed",

@@ -106,6 +106,314 @@ const COOKIESCRIPT_SAVE_SELECTORS = [
   'button#cookiescript_save',
   '[role="button"]#cookiescript_save',
 ];
+const WORDPRESSGDPR_ACTIONABLE_SURFACE_SELECTORS = [
+  '.wpgdprc-consent-bar',
+  '.wpgdprc-consent-modal',
+  '.wpgdprc-consent-bar__settings',
+  '.wpgdprc-consent-bar__button',
+  '.wpgdprc-button',
+];
+const WORDPRESSGDPR_PREFERENCE_SURFACE_SELECTORS = [
+  '.wpgdprc-consent-modal',
+  '.wpgdprc-consent-modal__description',
+  '.wpgdprc-button',
+];
+const WORDPRESSGDPR_OPEN_SELECTORS = [
+  '.wpgdprc-consent-bar__settings',
+];
+const WORDPRESSGDPR_ACCEPT_SELECTORS = [
+  '.wpgdprc-consent-bar__button',
+];
+const WOOCOMMERCE_STORE_NOTICE_ACTIONABLE_SURFACE_SELECTORS = [
+  '.woocommerce-store-notice',
+  '.woocommerce-store-notice__dismiss-link',
+];
+const BIGCOMMERCE_CATALYST_PLATFORM_SELECTOR = 'meta[name="platform"][content="bigcommerce.catalyst"]';
+const BIGCOMMERCE_CATALYST_DIALOG_SELECTORS = [
+  '[role="dialog"][aria-modal="true"]',
+  '[role="dialog"]',
+  'dialog[open]',
+  '[aria-modal="true"]',
+];
+const MAGENTO_COOKIE_ACTIONABLE_SURFACE_SELECTORS = [
+  '.message.global.cookie',
+  '.cookie.message',
+  '[data-role="cookie-settings"]',
+];
+const MAGENTO_COOKIE_ACCEPT_SELECTORS = [
+  '.message.global.cookie .action.allow',
+  '.message.global.cookie .action.accept',
+  '.cookie.message .action.allow',
+  '.cookie.message .action.accept',
+];
+const MAGENTO_COOKIE_REJECT_SELECTORS = [
+  '.message.global.cookie .action.close',
+  '.cookie.message .action.close',
+  '[data-role="closeBtn"]',
+];
+const PANDECTES_ACTIONABLE_SURFACE_SELECTORS = [
+  '#pandectes-banner',
+  '.pd-cookie-banner-window',
+  '#pd-cp-preferences',
+  '.pd-cp-ui-save',
+];
+const PANDECTES_ACCEPT_SELECTORS = [
+  '.cc-btn.cc-allow',
+];
+const PANDECTES_REJECT_SELECTORS = [
+  '.cc-btn.cc-deny',
+];
+const PANDECTES_OPEN_SELECTORS = [
+  '.cc-btn.cc-settings',
+  'button[aria-controls="pd-cp-preferences"]',
+];
+const PANDECTES_PREFERENCE_SELECTORS = [
+  '#pd-cp-preferences',
+  '.pd-cp-purpose-row',
+  '.pd-cp-ui-save',
+];
+const CONSENTMO_ACTIONABLE_SURFACE_SELECTORS = [
+  'csm-cookie-consent',
+];
+const CONSENTMO_PREFERENCE_SELECTORS = [
+  '.cookieconsent-preferences',
+  '.cc-settings-panel',
+  '#cookieconsent-settings',
+  '.cc-category',
+  '.cc-save-preferences',
+  '.cc-btn-accept-selected',
+];
+const COMPLIANZ_ACTIONABLE_SURFACE_SELECTORS = [
+  '#cmplz-cookiebanner-container',
+  '.cmplz-cookiebanner',
+  '.cmplz-view-preferences',
+  '.cmplz-save-preferences',
+  '#cmplz-statistics-optin',
+  '#cmplz-preferences-optin',
+  '#cmplz-marketing-optin',
+];
+const COMPLIANZ_ACCEPT_SELECTORS = [
+  '.cmplz-btn.cmplz-accept',
+  '.cmplz-accept',
+];
+const COMPLIANZ_REJECT_SELECTORS = [
+  '.cmplz-btn.cmplz-deny',
+  '.cmplz-deny',
+];
+const COMPLIANZ_OPEN_SELECTORS = [
+  '.cmplz-view-preferences',
+  '.cmplz-manage-options',
+];
+const COMPLIANZ_SAVE_SELECTORS = [
+  '.cmplz-save-preferences',
+];
+const COMPLIANZ_PREFERENCE_SELECTORS = [
+  '.cmplz-save-preferences',
+  '.cmplz-categories',
+  '.cmplz-category',
+  '#cmplz-statistics-optin',
+  '#cmplz-preferences-optin',
+  '#cmplz-marketing-optin',
+];
+const BORLABS_ACTIONABLE_SURFACE_SELECTORS = [
+  '#BorlabsCookieBox',
+  '.show-cookie-box',
+  '.cookie-box ._brlbs-btn-accept-all',
+  '.cookie-box ._brlbs-btn-accept-only-essential',
+  '.cookie-box ._brlbs-manage-btn>a',
+  '.cookie-box ._brlbs-manage-btn',
+  '#CookiePrefSave',
+  '.brlbs-btn-save',
+  '#CookieBoxSaveButton',
+  '#borlabs-cookie-group-statistics',
+  '#borlabs-cookie-group-marketing',
+  '#borlabs-cookie-group-external-media',
+  '#statistics',
+  '#analytics',
+  '#marketing',
+  '#external-media',
+];
+const BORLABS_PREFERENCE_SELECTORS = [
+  '#CookiePrefSave',
+  '.brlbs-btn-save',
+  '#CookieBoxSaveButton',
+  '#borlabs-cookie-group-statistics',
+  '#borlabs-cookie-group-marketing',
+  '#borlabs-cookie-group-external-media',
+  '#statistics',
+  '#analytics',
+  '#marketing',
+  '#external-media',
+];
+const COOKIEINFORMATION_ACTIONABLE_SURFACE_SELECTORS = [
+  '#coiOverlay',
+  '#ccb-coiOverlay',
+  '#coiSummery',
+  '#coiConsentBanner',
+  '#ccb-coiConsentBanner',
+  '#coi-banner-wrapper',
+  '#ccb-coi-banner-wrapper',
+  '.coi-consent-summary',
+  '.coi-banner__nextpage',
+  '.summary-texts__show-details',
+  '#ccb-show_details',
+  '#show_details',
+  '#declineButton',
+  '#updateButton',
+];
+const COOKIEINFORMATION_CATEGORY_SELECTORS = [
+  '#switch-cookie_cat_functional',
+  '#switch-cookie_cat_statistic',
+  '#switch-cookie_cat_marketing',
+  '#cookie_cat_functional',
+  '#cookie_cat_statistic',
+  '#cookie_cat_marketing',
+];
+const COOKIEINFORMATION_PREFERENCE_SELECTORS = [
+  ...COOKIEINFORMATION_CATEGORY_SELECTORS,
+  '#coiConsentBanner #declineButton',
+  '#ccb-coiConsentBanner #declineButton',
+  '#coiOverlay #declineButton',
+  '#ccb-coiOverlay #declineButton',
+  '#ccb-declineButton',
+  '#coiConsentBanner #updateButton',
+  '#ccb-coiConsentBanner #updateButton',
+  '#coiOverlay #updateButton',
+  '#ccb-coiOverlay #updateButton',
+  '#ccb-updateButton',
+];
+const COOKIEINFORMATION_OPEN_SELECTORS = [
+  '.coi-banner__nextpage',
+  '.summary-texts__show-details',
+  '#ccb-show_details',
+  '#show_details',
+];
+const COOKIEWOW_ACTIONABLE_SURFACE_SELECTORS = [
+  '.cwc-banner-container',
+  '.cwc-consent-summary-container',
+  '.cwc-setting-button',
+  '.cwc-save-setting-wrapper button',
+];
+const COOKIEWOW_ACCEPT_SELECTORS = [
+  '.cwc-accept-button',
+];
+const COOKIEWOW_PREFERENCE_SELECTORS = [
+  '.cwc-category-item',
+  '.cwc-switch',
+  '.cwc-save-setting-wrapper button',
+];
+const COOKIEYES_ACTIONABLE_SURFACE_SELECTORS = [
+  '#cookie-law-info-bar',
+  '.cky-consent-container',
+  '.cky-banner-element',
+  '.cky-btn-customize',
+  'button[data-cky-tag="settings-button"]',
+  '.cky-preference-center',
+];
+const COOKIEYES_PREFERENCE_SELECTORS = [
+  '.cky-preference-center',
+  '.cky-preference-header',
+  '.cky-switch input[type="checkbox"]',
+  'button[data-cky-tag="detail-save-button"]',
+  '.cky-btn-preferences',
+];
+const COOKIEWOW_ANALYTICS_PATTERNS = [
+  /\banalytics\b/i,
+  /คุกกี้ในส่วนวิเคราะห์/i,
+  /访问分析cookie/i,
+  /トラフィック分析cookie/i,
+];
+const COOKIEWOW_MARKETING_PATTERNS = [
+  /\bmarketing\b/i,
+  /คุกกี้ในส่วนการตลาด/i,
+  /营销cookie/i,
+  /マーケティングcookie/i,
+];
+const COOKIECONTROLCIVIC_ACTIONABLE_SURFACE_SELECTORS = [
+  '#ccc-notify .ccc-notify-button',
+  '#ccc-content',
+  '#ccc[open]',
+  '#ccc-close',
+  '#ccc-dismiss-button',
+  '#ccc-recommended-settings',
+];
+const COOKIECONTROLCIVIC_PREFERENCE_SELECTORS = [
+  '#ccc-recommended-settings',
+  '#ccc-dismiss-button',
+  '#ccc-end',
+  '#cc-end',
+  '#ccc-optional-categories .optional-cookie',
+  '#iab-purposes .optional-cookie',
+  '#iab-purpose .optional-cookie',
+  '#iab-purpose .checkbox-toggle-input',
+  '#iab-special-purpose-options .checkbox-toggle-input',
+  '#ccc-optional-categories .checkbox-toggle-input',
+  '#ccc-close',
+  '#ccc-icon',
+];
+const COOKIECONTROLCIVIC_OPEN_SELECTORS = [
+  '#ccc #ccc-notify .ccc-notify-button',
+  '#ccc-notify .ccc-notify-button',
+  '#ccc-icon',
+];
+const TRUENDO_ACTIONABLE_SURFACE_SELECTORS = [
+  '#truendo_container div[class*="tru_cookie-dialog"]',
+  '#truendo_container #tru_options_btn',
+  '#truendo_container #truendo_fab',
+  '#truendo_container [data-cy="tru-fab"]',
+  '#truendo_container [data-cy="action-button-necessary"]',
+  '#truendo_container [data-cy="action-button-all"]',
+  '#truendo_container .tru_btn_ok--necessary',
+  '#truendo_container .tru_btn_ok--all',
+  '#truendo_container .tru_cookie-dialog_ok',
+  '#truendo_container [data-cy="tru-panel"]',
+  '#truendo_container [data-cy="tru-panel-close"]',
+  '#truendo_container button.tru_title__close',
+];
+const TRUENDO_PREFERENCE_SELECTORS = [
+  '#truendo_container [data-cy="tru-panel"]',
+  '#truendo_container .tru-expand',
+  '#truendo_container [role="switch"]',
+  '#truendo_container input[type="checkbox"]',
+  '#truendo_container [data-cy^="toggle "]',
+  '#truendo_container [data-cy="tru-panel-close"]',
+  '#truendo_container button.tru_title__close',
+];
+const CLICKIO_ACTIONABLE_SURFACE_SELECTORS = [
+  '#cl-consent',
+  '.cl-consent__inner',
+  '.cl-consent__btn--outline',
+  '.cl-consent-tabs__item',
+  '.dm-button.cursor-pointer',
+];
+const CLICKIO_PREFERENCE_SELECTORS = [
+  '.cl-consent-tabs__item',
+  '.cl-consent-tabs__content',
+  '.cl-consent__buttons--three-btns',
+];
+const COOKIESJSR_ACTIONABLE_SURFACE_SELECTORS = [
+  '#cookiesjsr',
+  '.cookiesjsr--app',
+  '.cookiesjsr-settings',
+  '.cookiesjsr-layer--actions .save',
+];
+const COOKIESJSR_PREFERENCE_SELECTORS = [
+  '.cookiesjsr-service-group',
+  '.cookiesjsr-service',
+  '.cookiesjsr-switch',
+  '.cookiesjsr-layer--actions .save',
+];
+const PRIVACYMANAGER_ACTIONABLE_SURFACE_SELECTORS = [
+  '.notice-title',
+  '#manageSettings',
+  '#saveAndExit',
+  '.mat-dialog-title.confirmationDialogTitle',
+];
+const PRIVACYMANAGER_PREFERENCE_SELECTORS = [
+  'ul li',
+  '#mat-slider',
+  '#saveAndExit',
+];
 const OSANO_ACTIONABLE_SURFACE_SELECTORS = [
   '.osano-cm-dialog',
   '.osano-cm-window',
@@ -146,9 +454,18 @@ const OSANO_ROOT_SELECTORS = [
 const SHOPIFY_STABLE_HIDDEN_MS = 1500;
 const SHOPIFY_DISMISS_TIMEOUT_MS = 7000;
 
+let _cmpsPromise = null;
+function loadCMPs() {
+  if (!_cmpsPromise) {
+    _cmpsPromise = fetch(chrome.runtime.getURL('rules/cmps.json'))
+      .then((r) => r.json())
+      .then((data) => data.cmps);
+  }
+  return _cmpsPromise;
+}
+
 async function runDOMHandler(prefs) {
-  const cmpsUrl = chrome.runtime.getURL('rules/cmps.json');
-  const { cmps } = await fetch(cmpsUrl).then((r) => r.json());
+  const cmps = await loadCMPs();
 
   const immediate = await tryCMPs(cmps, prefs);
   if (immediate) return immediate;
@@ -258,6 +575,114 @@ async function tryCMPs(cmps, prefs) {
     if (cmp.id === 'cookiescript' && prefs.globalPreference === 'custom') {
       if (await executeCookieScriptCustomFlow(cmp, prefs)) {
         return { method: `dom:${cmp.id}:custom`, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'wordpressgdpr') {
+      const wordpressResult = await executeWordPressGdprFlow(cmp, prefs);
+      if (wordpressResult) {
+        return { method: wordpressResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'bigcommercecatalyst') {
+      const bigCommerceResult = await executeBigCommerceCatalystFlow(cmp, prefs);
+      if (bigCommerceResult) {
+        return { method: bigCommerceResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'magentocookie') {
+      const magentoResult = await executeMagentoCookieFlow(cmp, prefs);
+      if (magentoResult) {
+        return { method: magentoResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'pandectes') {
+      const pandectesResult = await executePandectesFlow(cmp, prefs);
+      if (pandectesResult) {
+        return { method: pandectesResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'consentmo') {
+      const consentmoResult = await executeConsentmoFlow(cmp, prefs);
+      if (consentmoResult) {
+        return { method: consentmoResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'woocommercestorenotice' && !hasVisibleSelector(WOOCOMMERCE_STORE_NOTICE_ACTIONABLE_SURFACE_SELECTORS)) {
+      continue;
+    }
+    if (cmp.id === 'complianz') {
+      const complianzResult = await executeComplianzFlow(cmp, prefs);
+      if (complianzResult) {
+        return { method: complianzResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'borlabs') {
+      const borlabsResult = await executeBorlabsFlow(cmp, prefs);
+      if (borlabsResult) {
+        return { method: borlabsResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'cookieinformation') {
+      const cookieInformationResult = await executeCookieInformationFlow(cmp, prefs);
+      if (cookieInformationResult) {
+        return { method: cookieInformationResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'cookiewow') {
+      const cookieWowResult = await executeCookieWowFlow(cmp, prefs);
+      if (cookieWowResult) {
+        return { method: cookieWowResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'cookieyes') {
+      const cookieYesResult = await executeCookieYesFlow(cmp, prefs);
+      if (cookieYesResult) {
+        return { method: cookieYesResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'cookiecontrolcivic') {
+      const cookieControlResult = await executeCookieControlCivicFlow(cmp, prefs);
+      if (cookieControlResult) {
+        return { method: cookieControlResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'truendo') {
+      const truendoResult = await executeTruendoFlow(cmp, prefs);
+      if (truendoResult) {
+        return { method: truendoResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'clickio') {
+      const clickioResult = await executeClickioFlow(cmp, prefs);
+      if (clickioResult) {
+        return { method: clickioResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'cookiesjsr') {
+      const cookiesJsrResult = await executeCookiesJsrFlow(cmp, prefs);
+      if (cookiesJsrResult) {
+        return { method: cookiesJsrResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'privacymanager') {
+      const privacyManagerResult = await executePrivacyManagerFlow(cmp, prefs);
+      if (privacyManagerResult) {
+        return { method: privacyManagerResult, cmpName: cmp.name };
       }
       continue;
     }
@@ -418,41 +843,41 @@ async function executeOneTrustRejectFlow(cmp, host = location.hostname) {
 }
 
 async function executeOneTrustCustomFlow(cmp, prefs, host = location.hostname) {
-  if (!ZOOM_ONETRUST_HOSTS.has(host)) return false;
-
   const settingsVisible = hasVisibleSelector([
     '#onetrust-consent-sdk',
     '#onetrust-pc-sdk',
-    '#ot-group-id-C0004',
-    '#ot-group-id-C0003',
-    '#ot-group-id-C0002',
+    '.save-preference-btn-handler',
+    '.category-switch-handler',
+    "input[id^='ot-group-id-']",
   ]);
   if (!settingsVisible) {
     const opened = clickFirstVisible([
       '#onetrust-pc-btn-handler',
       '#ot-do-not-sell',
+      '#ot-sdk-btn',
       '.ot-sdk-show-settings',
       'button[aria-label*="Privacy Choices" i]',
       'button[title*="Privacy Choices" i]',
       'button[aria-label*="Cookie Settings" i]',
       'button[title*="Cookie Settings" i]',
+      'button[aria-label*="Manage Preferences" i]',
+      'button[title*="Manage Preferences" i]',
     ]);
     if (!opened) return false;
   }
 
   if (!(await waitForAnyVisible([
-    '#ot-group-id-C0004',
-    '#ot-group-id-C0003',
-    '#ot-group-id-C0002',
+    '.category-switch-handler',
+    "input[id^='ot-group-id-']",
     '.save-preference-btn-handler',
     '#onetrust-accept-btn-handler',
   ], 4000))) {
     return false;
   }
 
-  setOneTrustGroupStateById('ot-group-id-C0004', Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false);
-  setOneTrustGroupStateById('ot-group-id-C0003', Boolean(prefs.functional));
-  setOneTrustGroupStateById('ot-group-id-C0002', Boolean(prefs.analytics));
+  if (!applyOneTrustCustomPreferences(prefs)) {
+    return false;
+  }
 
   await delay(250);
 
@@ -460,7 +885,11 @@ async function executeOneTrustCustomFlow(cmp, prefs, host = location.hostname) {
     return false;
   }
 
-  scheduleZoomOneTrustCleanup();
+  if (ZOOM_ONETRUST_HOSTS.has(host)) {
+    scheduleZoomOneTrustCleanup();
+  } else if (shouldForceOneTrustCleanup(host)) {
+    scheduleHostOneTrustCleanup(host);
+  }
   return waitForDismissal(cmp, cmp.actions?.reject_all ?? []);
 }
 
@@ -673,6 +1102,1002 @@ async function executeCookieScriptCustomFlow(cmp, prefs) {
   if (!saveClicked) return false;
 
   return waitForDismissal(cmp, selectorActions(cookieScriptDismissSelectors()));
+}
+
+async function executeWordPressGdprFlow(cmp, prefs) {
+  if (!hasVisibleSelector(WORDPRESSGDPR_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' && clickFirstVisible(WORDPRESSGDPR_ACCEPT_SELECTORS)) {
+    if (await waitForDismissal(cmp, selectorActions(wordpressGdprDismissSelectors()), 5000)) {
+      return 'dom:wordpressgdpr:accept_all';
+    }
+  }
+
+  const preferencesVisible = hasVisibleSelector(WORDPRESSGDPR_PREFERENCE_SURFACE_SELECTORS);
+  const opened = preferencesVisible || clickFirstVisible(WORDPRESSGDPR_OPEN_SELECTORS);
+  if (!opened) return false;
+
+  if (!(await waitForAnyVisible(WORDPRESSGDPR_PREFERENCE_SURFACE_SELECTORS, 4000))) {
+    return false;
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const appliedResults = [
+    await setWordPressGdprCategoryState(
+      [/\bfunctional\b/i, /\bpreferences?\b/i, /\bpersonal(?:i|z)ation\b/i, /\bexperience\b/i],
+      Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+    ),
+    await setWordPressGdprCategoryState(
+      [/\banalytics?\b/i, /\bstatistics?\b/i, /\bmeasurement\b/i, /\bperformance\b/i],
+      Boolean(flowPrefs.analytics),
+    ),
+    await setWordPressGdprCategoryState(
+      [/\bmarketing\b/i, /\badvertis(?:ing|ement)\b/i, /\btarget(?:ing)?\b/i, /\bsale of data\b/i],
+      Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false,
+    ),
+    await setWordPressGdprCategoryState(
+      [/\bthird[-\s]?party\b/i, /\bexternal\b/i, /\bunclassified\b/i, /\bother\b/i, /\beyeota\b/i],
+      flowPrefs.uncategorized === 'accept',
+    ),
+  ];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  const saved = clickButtonByTextWithin(document, /save my settings|save settings|save/i);
+  if (!saved) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(wordpressGdprDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:wordpressgdpr:custom' : `dom:wordpressgdpr:${prefs.globalPreference}`;
+}
+
+function normalizeImportedFlowPrefs(prefs) {
+  if (prefs.globalPreference === 'accept_all') {
+    return {
+      ...prefs,
+      functional: true,
+      analytics: true,
+      advertising: true,
+      uncategorized: 'accept',
+      ccpaDoNotSell: false,
+    };
+  }
+
+  if (prefs.globalPreference === 'reject_all') {
+    return {
+      ...prefs,
+      functional: false,
+      analytics: false,
+      advertising: false,
+      uncategorized: 'reject',
+      ccpaDoNotSell: true,
+    };
+  }
+
+  return prefs;
+}
+
+function wantsAdvertisingCategoryConsent(prefs) {
+  return Boolean(prefs?.advertising);
+}
+
+async function executeBigCommerceCatalystFlow(cmp, prefs) {
+  if (!hasBigCommerceCatalystActionableSurface()) {
+    return false;
+  }
+
+  const payload = buildBigCommerceCatalystConsentPayload(prefs);
+  const persisted = await persistBigCommerceCatalystConsent(payload);
+  if (!persisted) return false;
+
+  if (await waitForBigCommerceCatalystDismissal(1200)) {
+    return bigCommerceCatalystMethodForPrefs(prefs);
+  }
+
+  if (prefs.globalPreference === 'accept_all') {
+    clickBigCommerceCatalystDirectAction('accept');
+  } else if (prefs.globalPreference === 'reject_all') {
+    clickBigCommerceCatalystDirectAction('reject');
+  }
+
+  await delay(350);
+  if (!(await waitForBigCommerceCatalystDismissal(1200))) {
+    cleanupBigCommerceCatalystConsentSurface();
+  }
+
+  return bigCommerceCatalystMethodForPrefs(prefs);
+}
+
+async function executeComplianzFlow(cmp, prefs) {
+  if (!hasVisibleSelector(COMPLIANZ_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' && (
+    clickFirstVisible(COMPLIANZ_ACCEPT_SELECTORS) ||
+    clickButtonByTextWithin(document, /^(?:accept|accept all)$/i)
+  )) {
+    if (await waitForDismissal(cmp, selectorActions(complianzDismissSelectors()), 6000)) {
+      return 'dom:complianz:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' && (
+    clickFirstVisible(COMPLIANZ_REJECT_SELECTORS) ||
+    clickButtonByTextWithin(document, /^(?:deny|reject all|reject|decline)$/i)
+  )) {
+    if (await waitForDismissal(cmp, selectorActions(complianzDismissSelectors()), 6000)) {
+      return 'dom:complianz:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(COMPLIANZ_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    clickFirstVisibleNative(COMPLIANZ_OPEN_SELECTORS) ||
+    clickFirstVisible(COMPLIANZ_OPEN_SELECTORS) ||
+    clickButtonByTextWithin(document, /view preferences|manage consent|preferences/i);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(COMPLIANZ_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const desiredFunctional = Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept';
+  const desiredAnalytics = Boolean(flowPrefs.analytics);
+  const desiredMarketing = Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false;
+
+  const appliedFunctional = await setComplianzCategoryState(
+    'cmplz-preferences-optin',
+    [/\bfunctional(?:ity)?\b/i, /\bpreferences?\b/i],
+    desiredFunctional,
+  );
+  const appliedAnalytics = await setComplianzCategoryState(
+    'cmplz-statistics-optin',
+    [/\bstatistics?\b/i, /\banalytics?\b/i, /\bmeasurement\b/i],
+    desiredAnalytics,
+  );
+  const appliedMarketing = await setComplianzCategoryState(
+    'cmplz-marketing-optin',
+    [/\bmarketing\b/i, /\badvertis(?:ing|ement)\b/i, /\btarget(?:ing)?\b/i],
+    desiredMarketing,
+  );
+  const appliedResults = [appliedFunctional, appliedAnalytics, appliedMarketing];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  if (!(clickFirstVisibleNative(COMPLIANZ_SAVE_SELECTORS) ||
+        clickFirstVisible(COMPLIANZ_SAVE_SELECTORS) ||
+        clickButtonByTextWithin(document, /save preferences|save/i))) {
+    return false;
+  }
+  if (!(await waitForDismissal(cmp, selectorActions(complianzDismissSelectors()), 6000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:complianz:custom' : `dom:complianz:${prefs.globalPreference}`;
+}
+
+async function executeBorlabsFlow(cmp, prefs) {
+  if (!hasVisibleSelector(BORLABS_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickFirstVisibleNative(['.cookie-box ._brlbs-btn-accept-all']) ||
+       clickFirstVisible(['.cookie-box ._brlbs-btn-accept-all']))) {
+    if (await waitForDismissal(cmp, selectorActions(borlabsDismissSelectors()), 5000)) {
+      return 'dom:borlabs:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' &&
+      (clickFirstVisibleNative(['.cookie-box ._brlbs-btn-accept-only-essential']) ||
+       clickFirstVisible(['.cookie-box ._brlbs-btn-accept-only-essential']))) {
+    if (await waitForDismissal(cmp, selectorActions(borlabsDismissSelectors()), 5000)) {
+      return 'dom:borlabs:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(BORLABS_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    clickFirstVisibleNative(['.cookie-box ._brlbs-manage-btn>a', '.cookie-box ._brlbs-manage-btn']) ||
+    clickFirstVisible(['.cookie-box ._brlbs-manage-btn>a', '.cookie-box ._brlbs-manage-btn']);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(BORLABS_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const appliedAnalytics = await setCheckboxStateWithinContainerIds(
+    ['borlabs-cookie-group-statistics', 'statistics', 'analytics'],
+    Boolean(flowPrefs.analytics),
+  );
+  const appliedMarketing = await setCheckboxStateWithinContainerIds(
+    ['borlabs-cookie-group-marketing', 'marketing'],
+    wantsAdvertisingCategoryConsent(flowPrefs),
+  );
+  const appliedExternalMedia = await setCheckboxStateWithinContainerIds(
+    ['borlabs-cookie-group-external-media', 'external-media'],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+  );
+  const appliedResults = [appliedAnalytics, appliedMarketing, appliedExternalMedia];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  if (!(clickFirstVisibleNative(['#CookiePrefSave', '.brlbs-btn-save', '#CookieBoxSaveButton']) ||
+        clickFirstVisible(['#CookiePrefSave', '.brlbs-btn-save', '#CookieBoxSaveButton']))) return false;
+  syncBorlabsGoogleConsentCookie(flowPrefs);
+  if (!(await waitForDismissal(cmp, selectorActions(borlabsDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:borlabs:custom' : `dom:borlabs:${prefs.globalPreference}`;
+}
+
+async function executeCookieInformationFlow(cmp, prefs) {
+  if (!hasVisibleSelector(COOKIEINFORMATION_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' && clickFirstVisible([
+    '#coiOverlay button.coi-banner__accept',
+    '#ccb-coiOverlay button.coi-banner__accept',
+    '#coiConsentBanner .bottom-bar__update-consent',
+    '#ccb-coiConsentBanner .bottom-bar__update-consent',
+    '#ccb-updateButton',
+    '#coiConsentBanner #updateButton',
+    '#coiOverlay #updateButton',
+    '#updateButton',
+  ])) {
+    if (await waitForDismissal(cmp, selectorActions(cookieInformationDismissSelectors()), 5000)) {
+      return 'dom:cookieinformation:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' && clickFirstVisible([
+    '#ccb-coiConsentBanner #ccb-declineButton',
+    '#ccb-coiOverlay #ccb-declineButton',
+    '#ccb-declineButton',
+    '#coiConsentBanner #declineButton',
+    '#coiOverlay #declineButton',
+    '#declineButton',
+  ])) {
+    if (await waitForDismissal(cmp, selectorActions(cookieInformationDismissSelectors()), 5000)) {
+      return 'dom:cookieinformation:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(COOKIEINFORMATION_CATEGORY_SELECTORS);
+  const opened = preferencesVisible || clickFirstVisible(COOKIEINFORMATION_OPEN_SELECTORS);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(COOKIEINFORMATION_CATEGORY_SELECTORS, 4000))) return false;
+
+  const appliedFunctional = await setCheckboxStateWithinContainerIds(
+    ['switch-cookie_cat_functional', 'cookie_cat_functional'],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+  );
+  const appliedAnalytics = await setCheckboxStateWithinContainerIds(
+    ['switch-cookie_cat_statistic', 'cookie_cat_statistic'],
+    Boolean(flowPrefs.analytics),
+  );
+  const appliedMarketing = await setCheckboxStateWithinContainerIds(
+    ['switch-cookie_cat_marketing', 'cookie_cat_marketing'],
+    wantsAdvertisingCategoryConsent(flowPrefs),
+  );
+  const appliedResults = [appliedFunctional, appliedAnalytics, appliedMarketing];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  if (!clickFirstVisible([
+    '#ccb-coiConsentBanner #ccb-updateButton',
+    '#ccb-coiOverlay #ccb-updateButton',
+    '#ccb-updateButton',
+    '#coiConsentBanner #updateButton',
+    '#coiOverlay #updateButton',
+    '#updateButton',
+    '#ccb-coiConsentBanner #ccb-declineButton',
+    '#ccb-coiOverlay #ccb-declineButton',
+    '#ccb-declineButton',
+    '#coiConsentBanner #declineButton',
+    '#coiOverlay #declineButton',
+    '#declineButton',
+  ])) {
+    return false;
+  }
+  if (!(await waitForDismissal(cmp, selectorActions(cookieInformationDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:cookieinformation:custom' : `dom:cookieinformation:${prefs.globalPreference}`;
+}
+
+async function executeCookieWowFlow(cmp, prefs) {
+  if (!hasVisibleSelector(COOKIEWOW_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' && clickFirstVisible(COOKIEWOW_ACCEPT_SELECTORS)) {
+    if (await waitForDismissal(cmp, selectorActions(cookieWowDismissSelectors()), 5000)) {
+      return 'dom:cookiewow:accept_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(COOKIEWOW_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible || clickFirstVisible(['.cwc-setting-button']);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(COOKIEWOW_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const appliedAnalytics = await setCookieWowCategoryState(COOKIEWOW_ANALYTICS_PATTERNS, Boolean(flowPrefs.analytics));
+  const appliedMarketing = await setCookieWowCategoryState(
+    COOKIEWOW_MARKETING_PATTERNS,
+    Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false,
+  );
+  const appliedResults = [appliedAnalytics, appliedMarketing];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  if (!clickFirstVisible(['.cwc-save-setting-wrapper button'])) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(cookieWowDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:cookiewow:custom' : `dom:cookiewow:${prefs.globalPreference}`;
+}
+
+async function executeCookieYesFlow(cmp, prefs) {
+  if (!hasVisibleSelector(COOKIEYES_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickFirstVisibleNative(['.cky-btn-accept', '#cookie_action_close_header']) ||
+       clickFirstVisible(['.cky-btn-accept', '#cookie_action_close_header']))) {
+    if (await waitForDismissal(cmp, selectorActions(cookieYesDismissSelectors()), 5000)) {
+      return 'dom:cookieyes:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' &&
+      (clickFirstVisibleNative(['.cky-btn-reject', '#cookie_action_close_header_reject']) ||
+       clickFirstVisible(['.cky-btn-reject', '#cookie_action_close_header_reject']))) {
+    if (await waitForDismissal(cmp, selectorActions(cookieYesDismissSelectors()), 5000)) {
+      return 'dom:cookieyes:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(COOKIEYES_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    clickFirstVisibleNative([
+      '.cky-btn-customize',
+      'button[data-cky-tag="settings-button"]',
+      '#cky-btn-customize',
+    ]) ||
+    clickFirstVisible([
+      '.cky-btn-customize',
+      'button[data-cky-tag="settings-button"]',
+      '#cky-btn-customize',
+    ]);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(COOKIEYES_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const desiredFunctional = Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept';
+  const desiredAnalytics = Boolean(flowPrefs.analytics);
+  const desiredPerformance = Boolean(flowPrefs.analytics);
+  const desiredAdvertising = wantsAdvertisingCategoryConsent(flowPrefs);
+  const desiredOther = flowPrefs.uncategorized === 'accept';
+
+  const appliedFunctional = await setCheckboxStateById('ckySwitchfunctional', desiredFunctional);
+  const appliedAnalytics = await setCheckboxStateById('ckySwitchanalytics', desiredAnalytics);
+  const appliedPerformance = await setCheckboxStateById('ckySwitchperformance', desiredPerformance);
+  const appliedAdvertising = await setCheckboxStateById('ckySwitchadvertisement', desiredAdvertising);
+  const appliedOther = await setCheckboxStateById('ckySwitchother', desiredOther);
+  const appliedResults = [appliedFunctional, appliedAnalytics, appliedPerformance, appliedAdvertising, appliedOther];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  const saved = clickFirstVisibleNative([
+    'button[data-cky-tag="detail-save-button"]',
+    '.cky-btn-preferences',
+    '.cky-btn-accept',
+  ]) || clickFirstVisible([
+    'button[data-cky-tag="detail-save-button"]',
+    '.cky-btn-preferences',
+    '.cky-btn-accept',
+  ]);
+  if (!saved) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(cookieYesDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:cookieyes:custom' : `dom:cookieyes:${prefs.globalPreference}`;
+}
+
+async function executeCookieControlCivicFlow(cmp, prefs) {
+  if (!hasVisibleSelector(COOKIECONTROLCIVIC_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const closeBannerIfPresent = async () => {
+    const closed = clickFirstVisibleNative(['#ccc-close']) ||
+      clickFirstVisible(['#ccc-close']);
+    if (!closed) return false;
+    return waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 5000);
+  };
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickFirstVisibleNative(['#ccc-recommended-settings']) ||
+       clickButtonByTextWithinNative(document, /^(?:i accept|accept all)$/i) ||
+       clickButtonByTextWithin(document, /^(?:i accept|accept all)$/i))) {
+    if ((await waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 3000)) || await closeBannerIfPresent()) {
+      return 'dom:cookiecontrolcivic:accept_all';
+    }
+  }
+  if (prefs.globalPreference === 'reject_all' &&
+      (clickButtonByTextWithinNative(document, /^(?:i do not accept|reject all|decline all)$/i) ||
+       clickButtonByTextWithin(document, /^(?:i do not accept|reject all|decline all)$/i))) {
+    if ((await waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 3000)) || await closeBannerIfPresent()) {
+      return 'dom:cookiecontrolcivic:reject_all';
+    }
+  }
+  const preferencesVisible = hasVisibleSelector(COOKIECONTROLCIVIC_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    openCookieControlCivicPreferenceCenter() ||
+    clickButtonByTextWithinNative(document, /(?:cookie preferences|settings)/i) ||
+    clickButtonByTextWithin(document, /(?:cookie preferences|settings)/i) ||
+    clickFirstVisible(COOKIECONTROLCIVIC_OPEN_SELECTORS);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(COOKIECONTROLCIVIC_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const desiredFunctional = Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept';
+  const desiredAnalytics = Boolean(flowPrefs.analytics);
+  const desiredAdvertising = wantsAdvertisingCategoryConsent(flowPrefs);
+  const appliedAnalytics = await setCheckboxStateInVisibleSection(
+    '#ccc-optional-categories .optional-cookie, #iab-purposes .optional-cookie, #iab-purpose .optional-cookie',
+    '.optional-cookie-header',
+    [/\banalytical cookies\b/i, /\bmeasurement cookies\b/i, /\bstatistics\b/i],
+    desiredAnalytics,
+  );
+  const appliedMarketing = await setCheckboxStateInVisibleSection(
+    '#ccc-optional-categories .optional-cookie, #iab-purposes .optional-cookie, #iab-purpose .optional-cookie',
+    '.optional-cookie-header',
+    [/\bmarketing cookies\b/i, /\badvertising\b/i, /\btargeting\b/i],
+    desiredAdvertising,
+  );
+  const appliedSocial = await setCheckboxStateInVisibleSection(
+    '#ccc-optional-categories .optional-cookie, #iab-purposes .optional-cookie, #iab-purpose .optional-cookie',
+    '.optional-cookie-header',
+    [/\bsocial sharing cookies\b/i, /\bsocial media\b/i],
+    desiredFunctional,
+  );
+  const appliedFunctional = await setCheckboxStateInVisibleSection(
+    '#ccc-optional-categories .optional-cookie, #iab-purposes .optional-cookie, #iab-purpose .optional-cookie',
+    '.optional-cookie-header',
+    [/\bfunctionality cookies\b/i, /\bpersonalisation cookies\b/i, /\bpreferences\b/i],
+    desiredFunctional,
+  );
+  const appliedOptionalInputs = await setCookieControlCivicOptionalInputs({
+    functional: desiredFunctional,
+    analytics: desiredAnalytics,
+    advertising: desiredAdvertising,
+    uncategorized: flowPrefs.uncategorized,
+  });
+  const appliedIabInputs = await setCookieControlCivicIabPurposeStates({
+    functional: desiredFunctional,
+    analytics: desiredAnalytics,
+    advertising: desiredAdvertising,
+  });
+
+  const appliedResults = [appliedAnalytics, appliedMarketing, appliedSocial, appliedFunctional, appliedOptionalInputs, appliedIabInputs];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  if (!(clickFirstVisibleNative(['#ccc-dismiss-button', '#ccc-close']) ||
+        clickFirstVisible(['#ccc-dismiss-button', '#ccc-close']))) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:cookiecontrolcivic:custom' : `dom:cookiecontrolcivic:${prefs.globalPreference}`;
+}
+
+async function executeMagentoCookieFlow(cmp, prefs) {
+  if (!hasVisibleSelector(MAGENTO_COOKIE_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickFirstVisible(MAGENTO_COOKIE_ACCEPT_SELECTORS) ||
+       clickButtonByTextWithin(document, /^(?:accept|allow|ok|got it)$/i))) {
+    if (await waitForDismissal(cmp, selectorActions(magentoCookieDismissSelectors()), 5000)) {
+      return 'dom:magentocookie:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference !== 'accept_all' &&
+      (clickFirstVisible(MAGENTO_COOKIE_REJECT_SELECTORS) ||
+       clickButtonByTextWithin(document, /(?:reject|decline|dismiss|close|only necessary|essential only)/i))) {
+    if (await waitForDismissal(cmp, selectorActions(magentoCookieDismissSelectors()), 5000)) {
+      return 'dom:magentocookie:reject_all';
+    }
+  }
+
+  return false;
+}
+
+async function executePandectesFlow(cmp, prefs) {
+  if (!hasVisibleSelector(PANDECTES_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickFirstVisible(PANDECTES_ACCEPT_SELECTORS) ||
+       clickButtonByTextWithin(document, /^(?:accept|accept all)$/i))) {
+    if (await waitForDismissal(cmp, selectorActions(pandectesDismissSelectors()), 5000)) {
+      return 'dom:pandectes:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' &&
+      (clickFirstVisible(PANDECTES_REJECT_SELECTORS) ||
+       clickButtonByTextWithin(document, /^(?:decline|reject all|reject|essential only)$/i))) {
+    if (await waitForDismissal(cmp, selectorActions(pandectesDismissSelectors()), 5000)) {
+      return 'dom:pandectes:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(PANDECTES_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    clickFirstVisible(PANDECTES_OPEN_SELECTORS) ||
+    clickButtonByTextWithin(document, /(?:preferences|settings|manage)/i);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(PANDECTES_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const appliedFunctional = await setCheckboxStateInVisibleSection(
+    '.pd-cp-purpose-row',
+    '.pd-cp-purpose-info, .pd-cp-bold-messaging, [class*="purpose-info"], [class*="purpose-title"]',
+    [/\bfunctional(?:ity)?\b/i, /\bpreferences?\b/i, /\bpersonal(?:i|z)ation\b/i],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+  );
+  const appliedAnalytics = await setCheckboxStateInVisibleSection(
+    '.pd-cp-purpose-row',
+    '.pd-cp-purpose-info, .pd-cp-bold-messaging, [class*="purpose-info"], [class*="purpose-title"]',
+    [/\bperformance\b/i, /\banalytics?\b/i, /\bstatistics?\b/i, /\bmeasurement\b/i],
+    Boolean(flowPrefs.analytics),
+  );
+  const appliedMarketing = await setCheckboxStateInVisibleSection(
+    '.pd-cp-purpose-row',
+    '.pd-cp-purpose-info, .pd-cp-bold-messaging, [class*="purpose-info"], [class*="purpose-title"]',
+    [/\btarget(?:ing)?\b/i, /\bmarketing\b/i, /\badvertis(?:ing|ement)\b/i],
+    Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false,
+  );
+  const appliedResults = [appliedFunctional, appliedAnalytics, appliedMarketing];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  const saved = clickFirstVisible(['.pd-cp-ui-save']) ||
+    clickButtonByTextWithin(document, /save preferences|save/i);
+  if (!saved) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(pandectesDismissSelectors()), 5000))) return false;
+
+  return platformCustomMethodForPrefs('pandectes', prefs);
+}
+
+async function executeConsentmoFlow(cmp, prefs) {
+  const host = findConsentmoHost();
+  const root = consentmoShadowRoot(host);
+  if (!host || !root) return false;
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickButtonByTextWithinNative(root, /^(?:accept all|allow all|accept)$/i) ||
+       clickButtonByTextWithin(root, /^(?:accept all|allow all|accept)$/i))) {
+    if (await waitForConsentmoDismissal(host, root, 5000)) {
+      return 'dom:consentmo:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' &&
+      (clickButtonByTextWithinNative(root, /^(?:reject all|decline all|decline|essential only)$/i) ||
+       clickButtonByTextWithin(root, /^(?:reject all|decline all|decline|essential only)$/i))) {
+    if (await waitForConsentmoDismissal(host, root, 5000)) {
+      return 'dom:consentmo:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelectorWithin(root, CONSENTMO_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    clickButtonByTextWithinNative(root, /(?:preferences|settings|manage)/i) ||
+    clickButtonByTextWithin(root, /(?:preferences|settings|manage)/i);
+  if (!opened) return false;
+  if (!(await waitForAnyVisibleWithin(root, CONSENTMO_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const consentmoSectionSelector = [
+    '.cc-category',
+    '.cookie-category',
+    '[data-consent-category]',
+    '.cc-checkbox-container',
+    '.isense-cc-checkbox-container',
+  ].join(', ');
+  const consentmoTitleSelector = [
+    '.cc-category-title',
+    '.cookie-category-title',
+    '.cc-category-label',
+    '[class*="category-title"]',
+    'label',
+    'p',
+  ].join(', ');
+
+  const appliedFunctional = await setConsentmoCategoryState(
+    root,
+    consentmoSectionSelector,
+    consentmoTitleSelector,
+    [/\bfunctional(?:ity)?\b/i, /\bpreferences?\b/i, /\bpersonal(?:i|z)ation\b/i],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+    ['functionality-cookie-category-text'],
+  );
+  const appliedAnalytics = await setConsentmoCategoryState(
+    root,
+    consentmoSectionSelector,
+    consentmoTitleSelector,
+    [/\banalytics?\b/i, /\bperformance\b/i, /\bstatistics?\b/i, /\bmeasurement\b/i],
+    Boolean(flowPrefs.analytics),
+    ['analytics-cookie-category-text'],
+  );
+  const appliedMarketing = await setConsentmoCategoryState(
+    root,
+    consentmoSectionSelector,
+    consentmoTitleSelector,
+    [/\bmarketing\b/i, /\badvertis(?:ing|ement)\b/i, /\btarget(?:ing)?\b/i],
+    Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false,
+    ['marketing-cookie-category-text'],
+  );
+  const appliedResults = [appliedFunctional, appliedAnalytics, appliedMarketing];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  const saved = clickFirstVisibleWithinNative(root, [
+    '.cc-btn-accept-selected',
+    '.cc-save-preferences',
+    '.cc-submit-consent',
+    'button[aria-label="Save my choice"]',
+    'button[aria-label*="Save my choice" i]',
+    'button[aria-label*="Save preferences" i]',
+  ]) || clickFirstVisibleWithin(root, [
+    '.cc-btn-accept-selected',
+    '.cc-save-preferences',
+    '.cc-submit-consent',
+    'button[aria-label="Save my choice"]',
+    'button[aria-label*="Save my choice" i]',
+    'button[aria-label*="Save preferences" i]',
+  ]) || clickButtonByTextWithinNative(root, /save my choice|save preferences|save/i) ||
+    clickButtonByTextWithin(root, /save my choice|save preferences|save/i);
+  if (!saved) return false;
+  if (!(await waitForConsentmoDismissal(host, root, 5000))) return false;
+
+  return platformCustomMethodForPrefs('consentmo', prefs);
+}
+
+async function executeTruendoFlow(cmp, prefs) {
+  if (!hasVisibleSelector(TRUENDO_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  const apiResult = await executeTruendoApiFlow(prefs);
+  if (apiResult) return apiResult;
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickFirstVisibleNative([
+        '#truendo_container [data-cy="action-button-all"]',
+        '#truendo_container [data-cy="banner-ack-btn"]',
+        '#truendo_container .tru_btn_ok--all',
+        '#truendo_container .tru_cookie-dialog_ok',
+      ]) ||
+       clickFirstVisible([
+         '#truendo_container [data-cy="action-button-all"]',
+         '#truendo_container [data-cy="banner-ack-btn"]',
+         '#truendo_container .tru_btn_ok--all',
+         '#truendo_container .tru_cookie-dialog_ok',
+       ]))) {
+    if (await waitForTruendoTransientSurfacesToClose(5000)) {
+      return 'dom:truendo:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' &&
+      (clickFirstVisibleNative([
+        '#truendo_container [data-cy="action-button-necessary"]',
+        '#truendo_container .tru_btn_ok--necessary',
+      ]) ||
+       clickFirstVisible([
+         '#truendo_container [data-cy="action-button-necessary"]',
+         '#truendo_container .tru_btn_ok--necessary',
+       ]))) {
+    if (await waitForTruendoTransientSurfacesToClose(5000)) {
+      return 'dom:truendo:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(TRUENDO_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    clickFirstVisibleNative([
+      '#truendo_container #tru_options_btn',
+      '#truendo_container #truendo_fab',
+      '#truendo_container [data-cy="tru-fab"]',
+      '#truendo_container [data-cy="cookie settings"]',
+      '#truendo_container .tru_pay_button',
+    ]) ||
+    clickFirstVisible([
+      '#truendo_container #tru_options_btn',
+      '#truendo_container #truendo_fab',
+      '#truendo_container [data-cy="tru-fab"]',
+      '#truendo_container [data-cy="cookie settings"]',
+      '#truendo_container .tru_pay_button',
+    ]) ||
+    clickButtonByTextWithinNative(document.querySelector('#truendo_container') ?? document, /cookie settings|options|opciones|optionen/i) ||
+    clickButtonByTextWithin(document.querySelector('#truendo_container') ?? document, /cookie settings|options|opciones|optionen/i);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(TRUENDO_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const desiredFunctional = Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept';
+  const desiredAnalytics = Boolean(flowPrefs.analytics);
+  const desiredAdvertising = wantsAdvertisingCategoryConsent(flowPrefs);
+  const desiredUncategorized = flowPrefs.uncategorized === 'accept';
+  const baselineReject = clickFirstVisibleNative([
+    '#truendo_container [data-cy="action-button-necessary"]',
+    '#truendo_container .tru_btn_ok--necessary',
+  ]) || clickFirstVisible([
+    '#truendo_container [data-cy="action-button-necessary"]',
+    '#truendo_container .tru_btn_ok--necessary',
+  ]);
+  if (baselineReject) {
+    await waitForAnyVisible(TRUENDO_PREFERENCE_SELECTORS, 3000);
+    await delay(250);
+  }
+
+  const appliedFunctional = await setTruendoToggleState([
+    /\bfunctional\b/i,
+    /\bpreferences?\b/i,
+    /\bpersonal(?:i|z)ation\b/i,
+    /\bsocial content\b/i,
+    /\bsocial sharing\b/i,
+    /\bsocial media\b/i,
+  ], desiredFunctional);
+  const appliedAnalytics = await setTruendoToggleState([
+    /\banalytics?\b/i,
+    /\bstatistics?\b/i,
+    /\bmeasurement\b/i,
+    /\bperformance\b/i,
+  ], desiredAnalytics);
+  const appliedMarketing = await setTruendoToggleState([
+    /\bmarketing\b/i,
+    /\badvertis(?:ing|ement)\b/i,
+    /\btarget(?:ing)?\b/i,
+  ], desiredAdvertising);
+  const appliedSocialContent = await setCheckboxStateByDataCy('toggle social_content', desiredFunctional);
+  const appliedStatistics = await setCheckboxStateByDataCy('toggle statistics', desiredAnalytics);
+  const appliedResults = [appliedFunctional, appliedAnalytics, appliedMarketing, appliedSocialContent, appliedStatistics];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) {
+    if (!baselineReject || desiredFunctional || desiredAnalytics || desiredAdvertising || desiredUncategorized) return false;
+  }
+
+  await delay(250);
+  if (!(clickFirstVisibleNative([
+    '#truendo_container [data-cy="tru-panel-close"]',
+    '#truendo_container button.tru_title__close',
+  ]) ||
+        clickFirstVisible([
+          '#truendo_container [data-cy="tru-panel-close"]',
+          '#truendo_container button.tru_title__close',
+        ]))) return false;
+  if (!(await waitForTruendoTransientSurfacesToClose(5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:truendo:custom' : `dom:truendo:${prefs.globalPreference}`;
+}
+
+async function executeTruendoApiFlow(prefs) {
+  const truendo = window.Truendo;
+  if (!truendo || typeof truendo !== 'object') return false;
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const desiredState = buildTruendoDesiredState(flowPrefs);
+
+  if (prefs.globalPreference === 'accept_all' && typeof truendo.acceptAllCookies === 'function') {
+    try { truendo.acceptAllCookies(); } catch (_) {}
+    syncTruendoConsentCookie(desiredState);
+    if (await waitForTruendoConsentState(desiredState, 2500) &&
+        await waitForTruendoTransientSurfacesToClose(5000)) {
+      return 'dom:truendo:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' && typeof truendo.acceptNecessaryCookiesOnly === 'function') {
+    try { truendo.acceptNecessaryCookiesOnly(); } catch (_) {}
+    syncTruendoConsentCookie(desiredState);
+    if (await waitForTruendoConsentState(desiredState, 2500) &&
+        await waitForTruendoTransientSurfacesToClose(5000)) {
+      return 'dom:truendo:reject_all';
+    }
+  }
+
+  if (prefs.globalPreference !== 'custom') return false;
+
+  const currentState = readTruendoConsentState();
+  applyTruendoApiToggle(currentState, desiredState, 'preferences', 'togglePreferences');
+  applyTruendoApiToggle(currentState, desiredState, 'marketing', 'toggleMarketing');
+  applyTruendoApiToggle(currentState, desiredState, 'statistics', 'toggleStatistics');
+  applyTruendoApiToggle(currentState, desiredState, 'social_content', 'toggleContent');
+  applyTruendoApiToggle(currentState, desiredState, 'social_sharing', 'toggleSharing');
+  applyTruendoApiToggle(currentState, desiredState, 'add_features', 'addFeatures');
+
+  syncTruendoConsentCookie(desiredState);
+  try { truendo.ack?.(); } catch (_) {}
+  try { truendo.runUnblockService?.(); } catch (_) {}
+
+  if (!(await waitForTruendoConsentState(desiredState, 2500))) return false;
+  if (!(await waitForTruendoTransientSurfacesToClose(5000))) return false;
+
+  return 'dom:truendo:custom';
+}
+
+async function executeClickioFlow(cmp, prefs) {
+  if (!hasVisibleSelector(CLICKIO_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' &&
+      clickFirstVisible(['.cl-consent__btn:not(.cl-consent__btn--outline)', '.cl-consent__btn--primary'])) {
+    if (await waitForDismissal(cmp, selectorActions(clickioDismissSelectors()), 5000)) {
+      return 'dom:clickio:accept_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(CLICKIO_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible || clickFirstVisible(['.cl-consent__btn--outline']);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(CLICKIO_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const appliedStorage = await setCheckboxStateInVisibleSection(
+    '.cl-consent-tabs__item',
+    '.cl-consent-node-h4',
+    [/store and\/or access information on a device/i],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+  );
+  const appliedAdvertising = await setCheckboxStateInVisibleSection(
+    '.cl-consent-tabs__item',
+    '.cl-consent-node-h4',
+    [/\badvertising\b/i, /advertising performance/i, /personalised advertising/i, /basic ads/i],
+    Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false,
+  );
+  const appliedContent = await setCheckboxStateInVisibleSection(
+    '.cl-consent-tabs__item',
+    '.cl-consent-node-h4',
+    [/personalised content/i, /content performance/i, /select content/i],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+  );
+  const appliedAnalytics = await setCheckboxStateInVisibleSection(
+    '.cl-consent-tabs__item',
+    '.cl-consent-node-h4',
+    [/\baudiences\b/i, /\bstatistics\b/i, /market research/i, /combine data/i],
+    Boolean(flowPrefs.analytics),
+  );
+
+  if (prefs.globalPreference !== 'accept_all') {
+    await applyClickioAllOffAcrossTabs();
+  }
+
+  const appliedResults = [appliedStorage, appliedAdvertising, appliedContent, appliedAnalytics];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  const saveClicked = clickFirstVisible(['.cl-consent__btn.cl-consent__btn--outline.cl-consent-node-a']) ||
+    clickButtonByTextWithin(document, /(?:save settings|agree to selected|accept selected|salva impostazioni)/i);
+  if (!saveClicked) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(clickioDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:clickio:custom' : `dom:clickio:${prefs.globalPreference}`;
+}
+
+async function executeCookiesJsrFlow(cmp, prefs) {
+  if (!hasVisibleSelector(COOKIESJSR_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' &&
+      clickFirstVisible(['.cookiesjsr-btn.allowAll', '.cookiesjsr-layer--actions .allow-all'])) {
+    if (await waitForDismissal(cmp, selectorActions(cookiesJsrDismissSelectors()), 5000)) {
+      return 'dom:cookiesjsr:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' &&
+      clickFirstVisible([
+        '.cookiesjsr-btn.denyAll',
+        '.cookiesjsr-layer--actions .deny-all',
+        '.cookiesjsr-layer--actions .decline-all',
+      ])) {
+    if (await waitForDismissal(cmp, selectorActions(cookiesJsrDismissSelectors()), 5000)) {
+      return 'dom:cookiesjsr:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(COOKIESJSR_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible || clickFirstVisible(['.cookiesjsr-settings']);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(COOKIESJSR_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const appliedFunctional = await setCookiesJsrSwitchesForServiceGroup(
+    [/\bfunctional\b/i, /\bpreferences?\b/i, /\bpersonal(?:i|z)ation\b/i],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+  );
+  const appliedAnalytics = await setCookiesJsrSwitchesForServiceGroup(
+    [/\bperformance\b/i, /\banalytics?\b/i, /\banalytical\b/i, /\bstatistics?\b/i, /\bmeasurement\b/i],
+    Boolean(flowPrefs.analytics),
+  );
+  const appliedMarketing = await setCookiesJsrSwitchesForServiceGroup(
+    [/\btracking\b/i, /\bmarketing\b/i, /\badvertis(?:ing|ement)\b/i, /\bvideo\b/i, /\bsocial\b/i, /\bmedia\b/i],
+    Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false,
+  );
+
+  const appliedResults = [appliedFunctional, appliedAnalytics, appliedMarketing];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  if (!clickFirstVisible(['.cookiesjsr-layer--actions .save'])) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(cookiesJsrDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:cookiesjsr:custom' : `dom:cookiesjsr:${prefs.globalPreference}`;
+}
+
+async function executePrivacyManagerFlow(cmp, prefs) {
+  if (!hasVisibleSelector(PRIVACYMANAGER_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(PRIVACYMANAGER_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    clickFirstVisible(['#en']) ||
+    clickFirstVisible(['#manageSettings']);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(PRIVACYMANAGER_PREFERENCE_SELECTORS, 4000))) return false;
+
+  const appliedStorage = await setPrivacyManagerSliderState(
+    [/store and\/or access information on a device/i, /informatie op een apparaat opslaan en\/of openen/i, /informationen auf einem gerät speichern/i],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+  );
+  const appliedAnalytics = await setPrivacyManagerSliderState(
+    [/\banalytics\b/i, /\banalytik\b/i, /precise geolocation data, and identification through device scanning/i],
+    Boolean(flowPrefs.analytics),
+  );
+  const appliedAdvertising = await setPrivacyManagerSliderState(
+    [/personalised ads and content/i, /\badvertising\b/i, /\bdirect marketing\b/i, /\bsocial media\b/i, /\badvertenties\b/i, /\bwerbung\b/i],
+    Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false,
+  );
+  const appliedFunctional = await setPrivacyManagerSliderState(
+    [/strictly necessary cookies/i, /\bfunctional\b/i, /\bfunctionele cookies\b/i, /\bfunktional\b/i],
+    Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept',
+  );
+  const appliedGeo = await setPrivacyManagerSliderState(
+    [/use precise geolocation data/i, /actively scan device characteristics/i, /precieze geolocatie/i],
+    Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false,
+  );
+
+  const appliedResults = [appliedStorage, appliedAnalytics, appliedAdvertising, appliedFunctional, appliedGeo];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+
+  await delay(250);
+  if (!clickFirstVisible(['#saveAndExit'])) return false;
+  await delay(250);
+  clickFirstVisible(['.mat-focus-indicator.okButton.mat-raised-button.mat-button-base']);
+  if (!(await waitForDismissal(cmp, selectorActions(privacyManagerDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:privacymanager:custom' : `dom:privacymanager:${prefs.globalPreference}`;
 }
 
 async function executeOsanoFlow(cmp, prefs) {
@@ -937,6 +2362,89 @@ function setOneTrustGroupStateById(id, checked) {
   return true;
 }
 
+function applyOneTrustCustomPreferences(prefs) {
+  const categoryToggles = oneTrustCategoryToggles();
+  if (!categoryToggles.length) return false;
+
+  let appliedAny = false;
+  for (const entry of categoryToggles) {
+    const nextState = desiredOneTrustEntryState(entry, prefs);
+    if (nextState === null) continue;
+    appliedAny = true;
+    if (Boolean(entry.toggle.checked) !== nextState) {
+      forceOneTrustToggleState(entry.toggle, nextState);
+    }
+  }
+
+  return appliedAny;
+}
+
+function desiredOneTrustToggleState(toggle, prefs) {
+  return desiredOneTrustEntryState({
+    id: toggle?.id?.replace(/^ot-group-id-/, '') ?? '',
+    text: oneTrustToggleText(toggle),
+  }, prefs);
+}
+
+function desiredOneTrustEntryState(entry, prefs) {
+  const id = entry?.id ?? '';
+  const text = entry?.text ?? '';
+
+  if (id === 'C0002' || /performance|analytics|measurement|statistics/i.test(text)) {
+    return Boolean(prefs.analytics);
+  }
+
+  if (id === 'C0003' || /functional|preference|personalization/i.test(text)) {
+    return Boolean(prefs.functional);
+  }
+
+  if (
+    id === 'C0004' ||
+    id === 'C0005' ||
+    /targeting|advertising|marketing|social media|sale of personal data|share of personal data/i.test(text)
+  ) {
+    return Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;
+  }
+
+  if (/do not sell|do not share|sale of personal data|share of personal data/i.test(text) || /[A-Z]+_BG/.test(id)) {
+    return prefs.ccpaDoNotSell === false;
+  }
+
+  if (prefs.uncategorized === 'accept') return true;
+  if (prefs.uncategorized === 'reject') return false;
+  return null;
+}
+
+function oneTrustToggleText(toggle) {
+  const parts = [];
+  const label = findToggleLabel(toggle);
+  if (label?.textContent) parts.push(label.textContent);
+
+  const row = toggle.closest?.('.ot-cat-item, .ot-accordion-layout, .ot-host-item, .ot-pc-content, .ot-vlst-cntr');
+  if (row?.textContent) parts.push(row.textContent);
+
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function oneTrustCategoryToggles() {
+  const rows = Array.from(document.querySelectorAll(
+    '#onetrust-pc-sdk [data-optanongroupid], #onetrust-banner-sdk [data-optanongroupid]'
+  ));
+  const entries = [];
+  for (const row of rows) {
+    const id = row.getAttribute('data-optanongroupid') ?? '';
+    if (!id) continue;
+    const toggle = row.querySelector(`input#ot-group-id-${id}, input[class*="category-switch-handler"]`);
+    if (!(toggle instanceof HTMLInputElement)) continue;
+    entries.push({
+      id,
+      text: row.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      toggle,
+    });
+  }
+  return entries;
+}
+
 function selectorActions(selectors) {
   return selectors.map((selector) => ({ type: 'click', selector }));
 }
@@ -994,6 +2502,16 @@ function cookieScriptDismissSelectors() {
     '#cookiescript_accept',
     '#cookiescript_reject',
     ...COOKIESCRIPT_SAVE_SELECTORS,
+  ];
+}
+
+function wordpressGdprDismissSelectors() {
+  return [
+    '.wpgdprc-consent-bar',
+    '.wpgdprc-consent-modal',
+    '.wpgdprc-consent-bar__settings',
+    '.wpgdprc-consent-bar__button',
+    '.wpgdprc-button',
   ];
 }
 
@@ -1413,6 +2931,1077 @@ function setCookieScriptSelectStateById(id, accept) {
   return select.value === desiredOption.value;
 }
 
+function complianzDismissSelectors() {
+  return [
+    '#cmplz-cookiebanner-container',
+    '.cmplz-cookiebanner',
+    '.cmplz-view-preferences',
+    '.cmplz-save-preferences',
+  ];
+}
+
+function borlabsDismissSelectors() {
+  return [
+    '#BorlabsCookieBox',
+    '.show-cookie-box',
+    '.cookie-box ._brlbs-btn-accept-all',
+    '.cookie-box ._brlbs-btn-accept-only-essential',
+    '.cookie-box ._brlbs-manage-btn>a',
+    '.cookie-box ._brlbs-manage-btn',
+    '#CookiePrefSave',
+  ];
+}
+
+function syncBorlabsGoogleConsentCookie(prefs) {
+  const payload = encodeURIComponent(JSON.stringify({
+    ad_storage: wantsAdvertisingCategoryConsent(prefs) ? 'granted' : 'denied',
+    ad_user_data: wantsAdvertisingCategoryConsent(prefs) ? 'granted' : 'denied',
+    ad_personalization: wantsAdvertisingCategoryConsent(prefs) ? 'granted' : 'denied',
+    analytics_storage: prefs.analytics ? 'granted' : 'denied',
+    functionality_storage: prefs.functional ? 'granted' : 'denied',
+    personalization_storage: prefs.functional ? 'granted' : 'denied',
+    security_storage: 'granted',
+  }));
+
+  const parts = [
+    `borlabs-cookie-gcs=${payload}`,
+    'path=/',
+    'max-age=31536000',
+    'SameSite=Lax',
+  ];
+  if (location.protocol === 'https:') parts.push('Secure');
+  try {
+    document.cookie = parts.join('; ');
+    document.dispatchEvent(new Event('borlabs-cookie-consent-saved'));
+    document.dispatchEvent(new Event('borlabs-cookie-handle-unblock'));
+  } catch (_) {}
+}
+
+function buildTruendoDesiredState(prefs) {
+  const desiredFunctional = Boolean(prefs?.functional) || prefs?.uncategorized === 'accept';
+  return {
+    ack: true,
+    preferences: desiredFunctional,
+    marketing: wantsAdvertisingCategoryConsent(prefs),
+    necessary: true,
+    statistics: Boolean(prefs?.analytics),
+    social_content: desiredFunctional,
+    social_sharing: desiredFunctional,
+    add_features: prefs?.uncategorized === 'accept',
+    consent_sent: 'true',
+  };
+}
+
+function readTruendoConsentState() {
+  try {
+    if (typeof window.Truendo?.getFullConsent === 'function') {
+      const consent = window.Truendo.getFullConsent();
+      if (consent && typeof consent === 'object') return consent;
+    }
+  } catch (_) {}
+
+  try {
+    const raw = document.cookie.split('; ').find((entry) => entry.startsWith('truendo_cmp='));
+    if (!raw) return null;
+    return JSON.parse(decodeURIComponent(raw.slice('truendo_cmp='.length)));
+  } catch (_) {
+    return null;
+  }
+}
+
+function applyTruendoApiToggle(currentState, desiredState, key, methodName) {
+  if (!window.Truendo || typeof window.Truendo[methodName] !== 'function') return false;
+  if (typeof currentState?.[key] === 'boolean' && currentState[key] === desiredState[key]) return true;
+  try {
+    window.Truendo[methodName]();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function syncTruendoConsentCookie(desiredState) {
+  const currentState = readTruendoConsentState() ?? {};
+  const next = {
+    ...currentState,
+    ...desiredState,
+  };
+  if (!next.exp) {
+    next.exp = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  }
+  try {
+    const parts = [
+      `truendo_cmp=${encodeURIComponent(JSON.stringify(next))}`,
+      'path=/',
+      'max-age=31536000',
+      'SameSite=Lax',
+    ];
+    if (location.protocol === 'https:') parts.push('Secure');
+    document.cookie = parts.join('; ');
+  } catch (_) {}
+}
+
+async function waitForTruendoConsentState(desiredState, timeoutMs = 2500) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const currentState = readTruendoConsentState();
+    if (currentState &&
+        currentState.ack === desiredState.ack &&
+        currentState.preferences === desiredState.preferences &&
+        currentState.marketing === desiredState.marketing &&
+        currentState.necessary === desiredState.necessary &&
+        currentState.statistics === desiredState.statistics &&
+        currentState.social_content === desiredState.social_content &&
+        currentState.social_sharing === desiredState.social_sharing &&
+        currentState.add_features === desiredState.add_features) {
+      return true;
+    }
+    await delay(100);
+  }
+  return false;
+}
+
+function cookieInformationDismissSelectors() {
+  return [
+    '#coiOverlay',
+    '#ccb-coiOverlay',
+    '#coiSummery',
+    '#coiConsentBanner',
+    '#ccb-coiConsentBanner',
+    '#coi-banner-wrapper',
+    '#ccb-coi-banner-wrapper',
+    '.coi-consent-summary',
+    ...COOKIEINFORMATION_OPEN_SELECTORS,
+    '#ccb-declineButton',
+    '#ccb-updateButton',
+    '#declineButton',
+    '#updateButton',
+  ];
+}
+
+function cookieWowDismissSelectors() {
+  return [
+    '.cwc-banner-container',
+    '.cwc-consent-summary-container',
+    '.cwc-setting-button',
+    '.cwc-save-setting-wrapper button',
+    ...COOKIEWOW_ACCEPT_SELECTORS,
+  ];
+}
+
+function cookieControlCivicDismissSelectors() {
+  return [
+    '#ccc-notify .ccc-notify-button',
+    '#ccc-content',
+    '#ccc[open]',
+    '#ccc-close',
+    '#ccc-dismiss-button',
+    '#ccc-recommended-settings',
+  ];
+}
+
+function magentoCookieDismissSelectors() {
+  return [
+    '.message.global.cookie',
+    '.cookie.message',
+    '[data-role="cookie-settings"]',
+  ];
+}
+
+function truendoDismissSelectors() {
+  return [
+    '#truendo_container div[class*="tru_cookie-dialog"]',
+    '#truendo_container .truendo_panel',
+    '#truendo_container #tru_options_btn',
+    '#truendo_container [data-cy="action-button-reject"]',
+    '#truendo_container .tru-reject-btn',
+    '#truendo_container [data-cy="action-button-save"]',
+  ];
+}
+
+async function waitForTruendoTransientSurfacesToClose(timeoutMs = 5000) {
+  const transientSelectors = [
+    '#truendo_container div[class*="tru_cookie-dialog"]',
+    '#truendo_container [data-cy="accept-only-banner"]',
+    '#truendo_container [data-cy="action-button-necessary"]',
+    '#truendo_container [data-cy="action-button-all"]',
+    '#truendo_container .tru_btn_ok--necessary',
+    '#truendo_container .tru_btn_ok--all',
+    '#truendo_container .tru_cookie-dialog_ok',
+    '#truendo_container [data-cy="tru-panel"]',
+    '#truendo_container [data-cy="tru-panel-close"]',
+    '#truendo_container button.tru_title__close',
+    '#truendo_container .tru_overlay',
+  ];
+
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const stillVisible = transientSelectors.some((selector) =>
+      Array.from(document.querySelectorAll(selector)).some((el) => isVisible(el)),
+    );
+    if (!stillVisible) return true;
+    await delay(200);
+  }
+  return false;
+}
+
+function clickioDismissSelectors() {
+  return [
+    '#cl-consent',
+    '.cl-consent__inner',
+    '.cl-consent__btn--outline',
+    '.cl-consent-tabs__item',
+  ];
+}
+
+function cookiesJsrDismissSelectors() {
+  return [
+    '#cookiesjsr',
+    '.cookiesjsr--app',
+    '.cookiesjsr-settings',
+    '.cookiesjsr-layer--actions .save',
+    '.cookiesjsr-btn.denyAll',
+  ];
+}
+
+function privacyManagerDismissSelectors() {
+  return [
+    '.notice-title',
+    '#manageSettings',
+    '#saveAndExit',
+    '.mat-dialog-title.confirmationDialogTitle',
+  ];
+}
+
+async function setCheckboxStateById(id, checked) {
+  const toggle = document.getElementById(id);
+  if (!(toggle instanceof HTMLInputElement)) return null;
+  return setCheckboxState(toggle, checked);
+}
+
+async function setCheckboxStateWithinContainerIds(ids, checked) {
+  for (const id of ids) {
+    const container = document.getElementById(id);
+    if (!container) continue;
+    const toggle = container instanceof HTMLInputElement
+      ? container
+      : container.querySelector('input[type="checkbox"], input[type="radio"]');
+    if (!(toggle instanceof HTMLInputElement)) continue;
+    const result = await setCheckboxState(toggle, checked);
+    if (result !== null) return result;
+  }
+  return null;
+}
+
+async function setCheckboxState(toggle, checked) {
+  if (!(toggle instanceof HTMLInputElement)) return null;
+  if (toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+
+  const interactionTarget = findCheckboxInteractionTarget(toggle);
+  if (!interactionTarget || (!isVisible(interactionTarget) && !isVisible(toggle))) return null;
+  if (Boolean(toggle.checked) === checked) return true;
+
+  if (dispatchSyntheticClick(interactionTarget) && (await waitForCheckboxState(toggle, checked, 700))) {
+    return true;
+  }
+
+  if (dispatchNativeClick(interactionTarget) && (await waitForCheckboxState(toggle, checked, 700))) {
+    return true;
+  }
+
+  if (interactionTarget !== toggle &&
+      dispatchNativeClick(toggle) &&
+      (await waitForCheckboxState(toggle, checked, 700))) {
+    return true;
+  }
+
+  forceCheckboxState(toggle, checked);
+  return waitForCheckboxState(toggle, checked, 700);
+}
+
+function findCheckboxInteractionTarget(toggle) {
+  const explicitLabel = toggle.labels?.[0];
+  if (explicitLabel && isVisible(explicitLabel)) return explicitLabel;
+  const nestedLabel = toggle.closest?.('label');
+  if (nestedLabel && isVisible(nestedLabel)) return nestedLabel;
+  const siblingToggle = toggle.parentElement?.querySelector?.('.checkbox-toggle-toggle, .cky-slider, .mdc-switch, .tru_switch, .tru_switch *');
+  if (siblingToggle && isVisible(siblingToggle)) return siblingToggle;
+  if (isVisible(toggle)) return toggle;
+  return explicitLabel || nestedLabel || toggle;
+}
+
+async function waitForCheckboxState(toggle, checked, timeoutMs = 700) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (Boolean(toggle.checked) === checked) return true;
+    await delay(50);
+  }
+  return Boolean(toggle.checked) === checked;
+}
+
+function forceCheckboxState(toggle, checked) {
+  const nativeSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype, 'checked'
+  )?.set;
+  if (nativeSetter) {
+    nativeSetter.call(toggle, checked);
+  } else {
+    toggle.checked = checked;
+  }
+  toggle.dispatchEvent(new Event('input', { bubbles: true }));
+  toggle.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+async function setCookieWowCategoryState(patterns, checked) {
+  const item = Array.from(document.querySelectorAll('.cwc-category-item')).find((candidate) => {
+    if (!isVisible(candidate)) return false;
+    const title = candidate.querySelector('.cwc-category-item-title')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    return patterns.some((pattern) => pattern.test(title));
+  });
+  if (!item) return null;
+
+  const toggle = item.querySelector('input[type="checkbox"]');
+  if (!(toggle instanceof HTMLInputElement)) return false;
+  const interactionTarget = item.querySelector('.cwc-switch') ?? findCheckboxInteractionTarget(toggle);
+  if (!interactionTarget) return false;
+  if (Boolean(toggle.checked) === checked) return true;
+
+  if (dispatchSyntheticClick(interactionTarget) && (await waitForCheckboxState(toggle, checked, 700))) {
+    return true;
+  }
+
+  forceCheckboxState(toggle, checked);
+  return waitForCheckboxState(toggle, checked, 700);
+}
+
+async function setWordPressGdprCategoryState(patterns, checked) {
+  const toggle = findWordPressGdprCategoryToggle(patterns);
+  if (!(toggle instanceof HTMLInputElement)) return null;
+  return setCheckboxState(toggle, checked);
+}
+
+function hasBigCommerceCatalystActionableSurface() {
+  return Boolean(document.querySelector(BIGCOMMERCE_CATALYST_PLATFORM_SELECTOR)) &&
+    findBigCommerceCatalystConsentRoot() !== null;
+}
+
+function findBigCommerceCatalystConsentRoot() {
+  const candidates = Array.from(document.querySelectorAll(BIGCOMMERCE_CATALYST_DIALOG_SELECTORS));
+  let best = null;
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    if (!isVisible(candidate)) continue;
+    const score = scoreBigCommerceCatalystConsentRoot(candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return bestScore >= 3 ? best : null;
+}
+
+function scoreBigCommerceCatalystConsentRoot(root) {
+  const visibleButtons = findVisibleButtonsWithin(root);
+  const checkboxCount = root.querySelectorAll('input[type="checkbox"], [role="checkbox"], [aria-checked]').length;
+  const text = root.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  let score = 0;
+
+  if (visibleButtons.length >= 2) score += 2;
+  if (checkboxCount >= 3) score += 3;
+  if (/\bprivacy\b|\bcookies?\b/i.test(text)) score += 1;
+  if (/\baccept all\b|\breject all\b|\bcustomize\b|\bsave settings\b/i.test(text)) score += 1;
+
+  return score;
+}
+
+function findVisibleButtonsWithin(root) {
+  return Array.from(root.querySelectorAll('button, a, [role="button"]')).filter((button) => isVisible(button));
+}
+
+function buildBigCommerceCatalystConsentPayload(prefs) {
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const allow = [];
+  const deny = [];
+  const categories = [
+    { id: 1, enabled: Boolean(flowPrefs.analytics) },
+    { id: 2, enabled: Boolean(flowPrefs.functional) },
+    { id: 3, enabled: Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false },
+  ];
+
+  for (const category of categories) {
+    if (category.enabled) {
+      allow.push(category.id);
+    } else {
+      deny.push(category.id);
+    }
+  }
+
+  return { allow, deny };
+}
+
+async function persistBigCommerceCatalystConsent(payload) {
+  try {
+    const response = await fetch('/api/storefront/consent', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return response.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function waitForBigCommerceCatalystDismissal(timeoutMs = 1200) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (!findBigCommerceCatalystConsentRoot()) return true;
+    await delay(50);
+  }
+  return !findBigCommerceCatalystConsentRoot();
+}
+
+function clickBigCommerceCatalystDirectAction(action) {
+  const root = findBigCommerceCatalystConsentRoot();
+  if (!root) return false;
+
+  const buttons = findVisibleButtonsWithin(root);
+  if (buttons.length < 2) return false;
+
+  const target = action === 'reject'
+    ? buttons[0]
+    : buttons[1];
+  if (!target) return false;
+
+  return dispatchSyntheticClick(target);
+}
+
+function cleanupBigCommerceCatalystConsentSurface() {
+  const root = findBigCommerceCatalystConsentRoot();
+  if (!root) return;
+
+  root.remove();
+  document.documentElement.style.overflow = '';
+  document.body.style.overflow = '';
+}
+
+function bigCommerceCatalystMethodForPrefs(prefs) {
+  if (prefs.globalPreference === 'accept_all') return 'dom:bigcommercecatalyst:accept_all';
+  if (prefs.globalPreference === 'reject_all') return 'dom:bigcommercecatalyst:reject_all';
+  if (prefs.ccpaDoNotSell !== false) return 'dom:bigcommercecatalyst:ccpa';
+  return 'dom:bigcommercecatalyst:custom';
+}
+
+function findWordPressGdprCategoryToggle(patterns) {
+  const descriptions = document.querySelectorAll('.wpgdprc-consent-modal__description');
+  for (const description of descriptions) {
+    if (!isVisible(description)) continue;
+    const text = description.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!text || !patterns.some((pattern) => pattern.test(text))) continue;
+
+    let container = description;
+    for (let depth = 0; depth < 4 && container; depth += 1) {
+      const toggle = container.querySelector?.('input[type="checkbox"], input[type="radio"]');
+      if (toggle instanceof HTMLInputElement) return toggle;
+      container = container.parentElement;
+    }
+  }
+  return null;
+}
+
+async function setCheckboxStateInVisibleSection(sectionSelector, titleSelector, patterns, checked) {
+  return setCheckboxStateInVisibleSectionWithin(document, sectionSelector, titleSelector, patterns, checked);
+}
+
+async function setCheckboxStateInVisibleSectionWithin(root, sectionSelector, titleSelector, patterns, checked) {
+  const section = findVisibleSectionByText(sectionSelector, titleSelector, patterns, root);
+  if (!section) return null;
+  const switchControl = section.querySelector('[role="switch"][aria-checked], button[aria-checked], [aria-checked][tabindex]');
+  if (switchControl) {
+    return setAriaToggleState(switchControl, checked);
+  }
+  const toggle = section.querySelector('input[type="checkbox"], input[type="radio"]');
+  if (!(toggle instanceof HTMLInputElement)) return false;
+  return setCheckboxState(toggle, checked);
+}
+
+function findVisibleSectionByText(sectionSelector, titleSelector, patterns, root = document) {
+  const sections = root.querySelectorAll(sectionSelector);
+  for (const section of sections) {
+    if (!isVisible(section)) continue;
+    const title = Array.from(section.querySelectorAll(titleSelector))
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+      .join(' ');
+    if (!title) continue;
+    if (patterns.some((pattern) => pattern.test(title))) {
+      return section;
+    }
+  }
+  return null;
+}
+
+function platformCustomMethodForPrefs(cmpId, prefs) {
+  if (prefs.globalPreference === 'accept_all') return `dom:${cmpId}:accept_all`;
+  if (prefs.globalPreference === 'reject_all') return `dom:${cmpId}:reject_all`;
+  return `dom:${cmpId}:custom`;
+}
+
+async function setComplianzCategoryState(id, patterns, checked) {
+  const direct = await setCheckboxStateById(id, checked);
+  if (direct !== null) return direct;
+  return setCheckboxStateInVisibleSection(
+    '.cmplz-category',
+    '.cmplz-category-title, .cmplz-category-header, summary, label',
+    patterns,
+    checked,
+  );
+}
+
+function pandectesDismissSelectors() {
+  return [
+    '#pandectes-banner',
+    '.pd-cookie-banner-window',
+    '#pd-cp-preferences',
+    '.pd-cp-ui-save',
+    ...PANDECTES_ACCEPT_SELECTORS,
+    ...PANDECTES_REJECT_SELECTORS,
+    ...PANDECTES_OPEN_SELECTORS,
+  ];
+}
+
+function findConsentmoHost() {
+  const hosts = Array.from(document.querySelectorAll('csm-cookie-consent'));
+  for (const host of hosts) {
+    const root = host.shadowRoot;
+    if (!root) continue;
+    if (hasVisibleSelectorWithin(root, [
+      '.cookieconsent-wrapper',
+      '.cookieconsent-preferences',
+      '.cc-settings-panel',
+      '.cc-save-preferences',
+      'button',
+    ])) {
+      return host;
+    }
+  }
+  return hosts.find((host) => host.shadowRoot) ?? hosts[0] ?? null;
+}
+
+function consentmoShadowRoot(host = findConsentmoHost()) {
+  return host?.shadowRoot ?? null;
+}
+
+function hasVisibleSelectorWithin(root, selectors) {
+  return selectors.some((selector) =>
+    Array.from(root.querySelectorAll(selector)).some((el) => isVisible(el))
+  );
+}
+
+async function waitForAnyVisibleWithin(root, selectors, timeoutMs = 3000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (selectors.some((selector) => firstVisibleElementWithin(root, [selector]))) return true;
+    await delay(100);
+  }
+  return false;
+}
+
+async function waitForConsentmoDismissal(host, root, timeoutMs = 4000) {
+  const started = Date.now();
+  let hiddenSince = null;
+  while (Date.now() - started < timeoutMs) {
+    const rootVisible = Boolean(host?.isConnected && root && hasVisibleSelectorWithin(root, [
+      '.cookieconsent-wrapper',
+      '.cookieconsent-preferences',
+      '.cc-settings-panel',
+      '.cc-save-preferences',
+      'button',
+    ]));
+    if (!host?.isConnected || !rootVisible) {
+      hiddenSince ??= Date.now();
+      if (Date.now() - hiddenSince >= 1200) return true;
+    } else {
+      hiddenSince = null;
+    }
+    await delay(100);
+  }
+  return false;
+}
+
+async function setConsentmoCategoryState(root, sectionSelector, titleSelector, patterns, checked, describedByTokens = []) {
+  const describedByMatch = findConsentmoSwitchByAriaDescribedBy(root, describedByTokens);
+  if (describedByMatch) {
+    return setConsentmoSwitchState(describedByMatch, checked);
+  }
+
+  const section = findVisibleSectionByText(sectionSelector, titleSelector, patterns, root);
+  if (!section) return null;
+
+  const switchControl = section.querySelector('[role="switch"][aria-checked], [aria-checked][tabindex]');
+  if (switchControl) {
+    return setConsentmoSwitchState(switchControl, checked);
+  }
+
+  const checkbox = section.querySelector('input[type="checkbox"], input[type="radio"]');
+  if (checkbox instanceof HTMLInputElement) {
+    return setCheckboxState(checkbox, checked);
+  }
+
+  return false;
+}
+
+function findConsentmoSwitchByAriaDescribedBy(root, tokens = []) {
+  if (!root || !tokens.length) return null;
+  const controls = root.querySelectorAll('[role="switch"][aria-describedby]');
+  for (const control of controls) {
+    if (!isVisible(control)) continue;
+    const describedBy = control.getAttribute('aria-describedby') ?? '';
+    const parts = describedBy.split(/\s+/).filter(Boolean);
+    if (tokens.some((token) => parts.includes(token))) {
+      return control;
+    }
+  }
+  return null;
+}
+
+async function setConsentmoSwitchState(control, checked) {
+  const current = readConsentmoSwitchState(control);
+  if (current === null) return false;
+  if (current === checked) return true;
+
+  const directTarget = checked
+    ? control.querySelector('.accept-container, [class*="accept-container"]')
+    : control.querySelector('.reject-container, [class*="reject-container"]');
+  if (directTarget && isVisible(directTarget) &&
+      dispatchNativeClick(directTarget) &&
+      (await waitForConsentmoSwitchState(control, checked, 900))) {
+    return true;
+  }
+
+  if (directTarget && isVisible(directTarget) &&
+      dispatchSyntheticClick(directTarget) &&
+      (await waitForConsentmoSwitchState(control, checked, 900))) {
+    return true;
+  }
+
+  if (dispatchNativeClick(control) &&
+      (await waitForConsentmoSwitchState(control, checked, 900))) {
+    return true;
+  }
+
+  if (dispatchSyntheticClick(control) &&
+      (await waitForConsentmoSwitchState(control, checked, 900))) {
+    return true;
+  }
+
+  forceConsentmoSwitchState(control, checked);
+  if (await waitForConsentmoSwitchState(control, checked, 900)) {
+    return true;
+  }
+
+  // Consentmo can repaint the visual switch but keep the underlying checkbox model
+  // unchanged. Force both layers together one more time before we give up.
+  forceConsentmoCheckboxModel(control, checked);
+  return waitForConsentmoSwitchState(control, checked, 1200);
+}
+
+function readConsentmoSwitchState(control) {
+  if (control.getAttribute?.('aria-checked') != null) {
+    return control.getAttribute('aria-checked') === 'true';
+  }
+
+  const nestedCheckbox = control.querySelector('input[type="checkbox"]');
+  if (nestedCheckbox instanceof HTMLInputElement) {
+    return Boolean(nestedCheckbox.checked);
+  }
+
+  const rejectContainer = control.querySelector('.reject-container, [class*="reject-container"]');
+  const acceptContainer = control.querySelector('.accept-container, [class*="accept-container"]');
+  if (acceptContainer?.classList?.contains('checked')) return true;
+  if (rejectContainer?.classList?.contains('checked')) return false;
+
+  return null;
+}
+
+async function waitForConsentmoSwitchState(control, checked, timeoutMs = 700) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (readConsentmoSwitchState(control) === checked) return true;
+    await delay(50);
+  }
+  return readConsentmoSwitchState(control) === checked;
+}
+
+function forceConsentmoSwitchState(control, checked) {
+  const rejectContainer = control.querySelector('.reject-container, [class*="reject-container"]');
+  const acceptContainer = control.querySelector('.accept-container, [class*="accept-container"]');
+  if (acceptContainer) {
+    acceptContainer.classList.toggle('checked', checked);
+  }
+  if (rejectContainer) {
+    rejectContainer.classList.toggle('checked', !checked);
+  }
+
+  if (control.getAttribute?.('aria-checked') != null) {
+    control.setAttribute('aria-checked', checked ? 'true' : 'false');
+  }
+
+  forceConsentmoCheckboxModel(control, checked);
+
+  control.dispatchEvent(new Event('input', { bubbles: true }));
+  control.dispatchEvent(new Event('change', { bubbles: true }));
+  control.dispatchEvent(new CustomEvent('consentmo:toggle', {
+    bubbles: true,
+    composed: true,
+    detail: { checked },
+  }));
+}
+
+function forceConsentmoCheckboxModel(control, checked) {
+  const nestedCheckbox = control.querySelector('input[type="checkbox"]');
+  if (!(nestedCheckbox instanceof HTMLInputElement)) return;
+
+  forceCheckboxState(nestedCheckbox, checked);
+  nestedCheckbox.setAttribute('aria-checked', checked ? 'true' : 'false');
+  nestedCheckbox.dispatchEvent(new Event('click', { bubbles: true, composed: true }));
+  nestedCheckbox.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  nestedCheckbox.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+}
+
+function clickButtonByTextWithin(root, pattern) {
+  const scope = root ?? document;
+  const buttons = scope.querySelectorAll('button, a, [role="button"]');
+  for (const button of buttons) {
+    if (!isVisible(button)) continue;
+    const text = button.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!pattern.test(text)) continue;
+    return dispatchSyntheticClick(button);
+  }
+  return false;
+}
+
+function clickButtonByTextWithinNative(root, pattern) {
+  const scope = root ?? document;
+  const buttons = scope.querySelectorAll('button, a, [role="button"]');
+  for (const button of buttons) {
+    if (!isVisible(button)) continue;
+    const text = button.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!pattern.test(text)) continue;
+    return dispatchNativeClick(button);
+  }
+  return false;
+}
+
+async function setAllCookiesJsrSwitchesForTab(tabSelectors, checked) {
+  const tabClicked = clickFirstVisible(tabSelectors);
+  if (!tabClicked && !hasVisibleSelector(tabSelectors)) return null;
+  await delay(150);
+
+  const visibleServices = Array.from(document.querySelectorAll('.cookiesjsr-service')).filter((service) => isVisible(service));
+  if (visibleServices.length === 0) return null;
+
+  const results = [];
+  for (const service of visibleServices) {
+    const toggle = service.querySelector('.cookiesjsr-switch input[type="checkbox"], input[type="checkbox"]');
+    if (!(toggle instanceof HTMLInputElement)) continue;
+    results.push(await setCheckboxState(toggle, checked));
+  }
+
+  if (results.length === 0) return null;
+  if (results.includes(false)) return false;
+  return true;
+}
+
+async function setCookiesJsrSwitchesForServiceGroup(patterns, checked) {
+  const group = findVisibleCookiesJsrServiceGroup(patterns);
+  if (!group) return null;
+
+  const tab = group.querySelector('button[role="tab"], .cookiesjsr-service-group-tab, button');
+  if (tab && isVisible(tab)) {
+    dispatchNativeClick(tab) || dispatchSyntheticClick(tab);
+    await delay(150);
+  }
+
+  const panel = findCookiesJsrPanelForServiceGroup(group);
+  if (!panel) return false;
+
+  const services = Array.from(panel.querySelectorAll('.cookiesjsr-service')).filter((service) => isVisible(service));
+  if (services.length === 0) return null;
+
+  const results = [];
+  for (const service of services) {
+    const toggle = service.querySelector('.cookiesjsr-switch input[type="checkbox"], input[type="checkbox"]');
+    if (!(toggle instanceof HTMLInputElement)) continue;
+    results.push(await setCheckboxState(toggle, checked));
+  }
+
+  if (results.length === 0) return null;
+  if (results.includes(false)) return false;
+  return true;
+}
+
+function findVisibleCookiesJsrServiceGroup(patterns) {
+  const groups = document.querySelectorAll('.cookiesjsr-service-group');
+  for (const group of groups) {
+    if (!isVisible(group)) continue;
+    const tab = group.querySelector('button[role="tab"], .cookiesjsr-service-group-tab, button');
+    const identity = [
+      group.textContent ?? '',
+      tab?.textContent ?? '',
+      tab?.id ?? '',
+      tab?.getAttribute?.('aria-controls') ?? '',
+      group.id ?? '',
+      group.className ?? '',
+    ].join(' ').replace(/\s+/g, ' ').trim();
+    if (patterns.some((pattern) => pattern.test(identity))) {
+      return group;
+    }
+  }
+  return null;
+}
+
+function findCookiesJsrPanelForServiceGroup(group) {
+  const tab = group.querySelector('button[role="tab"], .cookiesjsr-service-group-tab, button');
+  const controlsId = tab?.getAttribute?.('aria-controls');
+  if (controlsId) {
+    const controlled = document.getElementById(controlsId);
+    if (controlled && isVisible(controlled)) return controlled;
+  }
+
+  const suffix = (group.id || tab?.id || '').replace(/^tab-/, '');
+  if (suffix) {
+    const panel = document.getElementById(`panel-${suffix}`);
+    if (panel && isVisible(panel)) return panel;
+  }
+
+  const sibling = group.nextElementSibling;
+  if (sibling && isVisible(sibling)) return sibling;
+
+  return firstVisibleElement(['.cookiesjsr-service-group--content', '[role="tabpanel"]']);
+}
+
+function cookieYesDismissSelectors() {
+  return [
+    '#cookie-law-info-bar',
+    '.cky-consent-container',
+    '.cky-banner-element',
+    '.cky-preference-center',
+  ];
+}
+
+function openCookieControlCivicPreferenceCenter() {
+  try {
+    const controller = window.ClickControl ?? window.CookieControl;
+    if (controller && typeof controller.open === 'function') {
+      controller.open();
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+async function setCookieControlCivicOptionalInputs(flowPrefs) {
+  const toggles = Array.from(document.querySelectorAll('#ccc-optional-categories .checkbox-toggle-input'));
+  if (toggles.length === 0) return null;
+
+  const results = [];
+  for (const toggle of toggles) {
+    if (!(toggle instanceof HTMLInputElement)) continue;
+    const section = toggle.closest('.optional-cookie');
+    const text = section?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    let desired = false;
+    if (/\bfunctionality\b|\bpersonalisation\b|\bpreferences?\b|\bsocial\b/i.test(text)) {
+      desired = Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept';
+    } else if (/\banalytics?\b|\bstatistics?\b|\bmeasurement\b|\bperformance\b/i.test(text)) {
+      desired = Boolean(flowPrefs.analytics);
+    } else if (/\bmarketing\b|\badvertis(?:ing|ement)\b|\btarget(?:ing)?\b/i.test(text)) {
+      desired = Boolean(flowPrefs.advertising);
+    } else {
+      desired = flowPrefs.uncategorized === 'accept';
+    }
+    results.push(await setCheckboxState(toggle, desired));
+  }
+
+  if (results.length === 0) return null;
+  if (results.includes(false)) return false;
+  return true;
+}
+
+async function setCookieControlCivicIabPurposeStates(flowPrefs) {
+  const toggles = Array.from(document.querySelectorAll('#iab-purpose .checkbox-toggle-input[id^="object-purpose-"], #iab-purpose input.checkbox-toggle-input[id^="purpose-"]'));
+  if (toggles.length === 0) return null;
+
+  const advertisingIds = new Set(['2', '3', '4', '5', '6', '8']);
+  const analyticsIds = new Set(['7', '9', '10']);
+  const functionalIds = new Set(['1']);
+  const results = [];
+
+  for (const toggle of toggles) {
+    if (!(toggle instanceof HTMLInputElement)) continue;
+    const match = toggle.id.match(/(?:object-purpose-|purpose-)(\d+)/);
+    if (!match) continue;
+    const purposeId = match[1];
+    let desired = false;
+    if (analyticsIds.has(purposeId)) {
+      desired = Boolean(flowPrefs.analytics);
+    } else if (advertisingIds.has(purposeId)) {
+      desired = Boolean(flowPrefs.advertising);
+    } else if (functionalIds.has(purposeId)) {
+      desired = Boolean(flowPrefs.functional);
+    } else {
+      desired = false;
+    }
+    results.push(await setCheckboxState(toggle, desired));
+  }
+
+  if (results.length === 0) return null;
+  if (results.includes(false)) return false;
+  return true;
+}
+
+async function setCheckboxStateByDataCy(value, checked) {
+  const escaped = window.CSS?.escape ? window.CSS.escape(value) : value.replace(/["\\]/g, '\\$&');
+  const toggle = document.querySelector(`[data-cy="${escaped}"]`);
+  if (!toggle) return null;
+  const input = toggle instanceof HTMLInputElement
+    ? toggle
+    : toggle.querySelector?.('input[type="checkbox"], input[type="radio"]') ?? toggle.closest?.('label, div')?.querySelector?.('input[type="checkbox"], input[type="radio"]');
+  if (!(input instanceof HTMLInputElement)) return false;
+  return setCheckboxState(input, checked);
+}
+
+async function setTruendoToggleState(patterns, checked) {
+  const groups = Array.from(document.querySelectorAll('#truendo_container [data-cy="tru-expand"], #truendo_container .tru-expand, #truendo_container .expand-section, #truendo_container [class*="tru_expand"]'));
+  for (const group of groups) {
+    if (!isVisible(group)) continue;
+    const text = group.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!text || !patterns.some((pattern) => pattern.test(text))) continue;
+    const toggle = group.querySelector('input[type="checkbox"], input[type="radio"]');
+    if (!(toggle instanceof HTMLInputElement)) return false;
+    return setCheckboxState(toggle, checked);
+  }
+  return null;
+}
+
+async function setAriaToggleState(control, checked) {
+  const current = readAriaToggleState(control);
+  if (current === null) return false;
+  if (current === checked) return true;
+
+  if (dispatchNativeClick(control) && (await waitForAriaToggleState(control, checked, 700))) {
+    return true;
+  }
+  if (dispatchSyntheticClick(control) && (await waitForAriaToggleState(control, checked, 700))) {
+    return true;
+  }
+
+  control.setAttribute('aria-checked', checked ? 'true' : 'false');
+  control.dispatchEvent(new Event('input', { bubbles: true }));
+  control.dispatchEvent(new Event('change', { bubbles: true }));
+  return waitForAriaToggleState(control, checked, 700);
+}
+
+function readAriaToggleState(control) {
+  if (control.getAttribute?.('aria-checked') != null) {
+    return control.getAttribute('aria-checked') === 'true';
+  }
+
+  const nested = control.querySelector?.('input[type="checkbox"], input[type="radio"]');
+  if (nested instanceof HTMLInputElement) {
+    return Boolean(nested.checked);
+  }
+
+  return null;
+}
+
+async function waitForAriaToggleState(control, checked, timeoutMs = 700) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (readAriaToggleState(control) === checked) return true;
+    await delay(50);
+  }
+  return readAriaToggleState(control) === checked;
+}
+
+async function applyClickioAllOffAcrossTabs() {
+  const tabSelectors = [
+    '.cl-consent-tabs__item',
+    "[title='Legitimate interest']",
+    "[title='Manage partners']",
+  ];
+
+  for (const selector of tabSelectors) {
+    const tab = firstVisibleElement([selector]);
+    if (tab) {
+      dispatchNativeClick(tab) || dispatchSyntheticClick(tab);
+      await delay(150);
+    }
+    const allOff = firstVisibleElement([
+      '.cl-consent-tabs__content.cl-consent-active [data-role="alloff"]',
+      '.cl-consent-tabs__content [data-role="alloff"]',
+    ]);
+    if (allOff) {
+      dispatchNativeClick(allOff) || dispatchSyntheticClick(allOff);
+      await delay(120);
+    }
+  }
+}
+
+async function setPrivacyManagerSliderState(patterns, checked) {
+  const row = findVisiblePrivacyManagerRow(patterns);
+  if (!row) return null;
+
+  const slider = row.querySelector('#mat-slider, [id="mat-slider"], [class*="mat-slider"]');
+  if (!slider) return false;
+  const state = readPrivacyManagerSliderState(slider);
+  if (state === null) return false;
+  if (state === checked) return true;
+
+  if (dispatchSyntheticClick(slider) && (await waitForPrivacyManagerSliderState(slider, checked, 700))) {
+    return true;
+  }
+
+  return waitForPrivacyManagerSliderState(slider, checked, 700);
+}
+
+function findVisiblePrivacyManagerRow(patterns) {
+  const rows = document.querySelectorAll('ul li');
+  for (const row of rows) {
+    if (!isVisible(row)) continue;
+    const text = Array.from(row.querySelectorAll('p'))
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+      .join(' ');
+    if (!text) continue;
+    if (patterns.some((pattern) => pattern.test(text))) return row;
+  }
+  return null;
+}
+
+function readPrivacyManagerSliderState(slider) {
+  const className = slider.className || '';
+  if (/\bstate-true\b/.test(className)) return true;
+  if (/\bstate-false\b/.test(className)) return false;
+  const ariaChecked = slider.getAttribute('aria-checked');
+  if (ariaChecked === 'true') return true;
+  if (ariaChecked === 'false') return false;
+  return null;
+}
+
+async function waitForPrivacyManagerSliderState(slider, checked, timeoutMs = 700) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (readPrivacyManagerSliderState(slider) === checked) return true;
+    await delay(50);
+  }
+  return readPrivacyManagerSliderState(slider) === checked;
+}
+
 function scheduleZoomOneTrustCleanup() {
   cleanupZoomOneTrustArtifacts();
   try {
@@ -1464,10 +4053,10 @@ function cleanupZoomOneTrustArtifacts() {
     '#onetrust-consent-sdk',
     '#onetrust-pc-sdk',
     '.onetrust-pc-dark-filter',
-    '.ot-sdk-container',
-    '.ot-sdk-row',
   ]) {
-    for (const el of document.querySelectorAll(sel)) el.remove?.();
+    for (const el of document.querySelectorAll(sel)) {
+      if (isVisible(el)) el.remove?.();
+    }
   }
   try {
     document.body?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
@@ -1531,6 +4120,16 @@ function clickFirstVisibleWithin(root, selectors) {
   return false;
 }
 
+function clickFirstVisibleWithinNative(root, selectors) {
+  if (!root) return false;
+  for (const selector of selectors) {
+    const el = firstVisibleElementWithin(root, [selector]);
+    if (!el) continue;
+    return dispatchNativeClick(el);
+  }
+  return false;
+}
+
 function hasVisibleSelector(selectors) {
   return selectors.some((selector) => document.querySelectorAll(selector).length > 0 &&
     Array.from(document.querySelectorAll(selector)).some((el) => isVisible(el)));
@@ -1567,8 +4166,12 @@ function isOneTrustToggleInteractable(toggle) {
 }
 
 function findToggleLabel(toggle) {
-  if (!toggle?.id || typeof CSS?.escape !== 'function') return null;
-  return document.querySelector(`label[for="${CSS.escape(toggle.id)}"]`);
+  if (!toggle) return null;
+  if (toggle.id && typeof CSS?.escape === 'function') {
+    const explicit = document.querySelector(`label[for="${CSS.escape(toggle.id)}"]`);
+    if (explicit) return explicit;
+  }
+  return toggle.parentElement?.querySelector('.ot-switch-nob, .ot-tgl-cntr, .category-switch-handler') ?? null;
 }
 
 // Sets a checkbox to the desired state in a way that works with React controlled

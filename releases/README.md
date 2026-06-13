@@ -8,6 +8,37 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Upcoming (unreleased)
 
+### OneTrust Follow-Ups
+
+- Generalized OneTrust custom preference handling so category-mapped sites can use the CMP's real group IDs instead of relying on brittle label-only matching.
+- Validated `guidepostgrowth.com` on June 12, 2026: custom preferences now map correctly through OneTrust's category group IDs (`C0002` Performance, `C0003` Functional, `C0004` Targeting, `C0005` Social Media).
+- Fixed Zoom's footer `Your Privacy Choices` and `Cookie Preferences` reopen links after banner handling. Root cause: Zoom-specific cleanup was removing hidden reusable OneTrust preference-center scaffolding (`#onetrust-pc-sdk`) along with the visible surface.
+- Zoom cleanup now removes only currently visible OneTrust banner / modal layers, preserving the hidden settings structure needed when the user later reopens privacy settings from the footer.
+
+### Platform / CMP Coverage Cleanup
+
+- Added generic `Pandectes` support covering `Accept All`, `Reject All`, and `Custom` preference flows.
+- Added generic `Consentmo` support covering `Accept All`, `Reject All`, and `Custom` preference flows, including shadow-root handling for Shopify app-extension installs such as Bare Biology.
+- Hardened `Complianz` custom handling so sites that expose `View preferences` first, like QualityMinds, now reliably open the preferences center before applying per-category settings.
+- Live validation on June 6-7, 2026 now confirms:
+  - `cluse.com` → `Pandectes` works for `Accept All`, `Reject All`, and `Custom`
+  - `barebiology.com` → `Consentmo` now saves the intended custom state correctly
+  - `qualityminds.com/en/` → `Complianz` custom flow now works end to end
+- Strengthened the VPN validator so a Bare Biology-style `PASS` is no longer just “banner dismissed”; the validator can now reopen Consentmo settings on the inspection page and report saved switch state for debugging.
+
+### Generic CMP Coverage Expansion
+
+- Added reusable generic CMP coverage for `Complianz`, `Cookie Information`, `Borlabs Cookie`, and `Cookie Wow`.
+- Extended the same generic CMP layer further with `Cookie Control by Civic`, `Truendo`, `Clickio`, `cookiesjsr`, and `privacymanager.io`.
+- Added live validated public-site coverage for:
+  - `qualityminds.com` → Complianz
+  - `cookieinformation.com` → Cookie Information
+- Added a public target probe for `cookiecontrol.com` → Cookie Control by Civic. The site exposes the expected banner, but automated validation currently hits an anti-bot challenge, so it remains documented as partial coverage rather than a clean pass.
+- Both newly validated sites pass targeted e2e on June 6, 2026:
+  - without VPN
+  - with the local Browsec VPN profile enabled
+- `Borlabs Cookie` and `Cookie Wow` are implemented in the generic layer but still need stable public regression targets before they should be marketed as broadly validated support.
+
 ### Ketch CMP — Generic Support
 
 - Added `KETCH_GENERIC_CONFIG` fallback so any Ketch-powered site now works without a dedicated site entry. Previously only `forbes.com`, `ketch.com`, `therealreal.com`, and `pret.com` were covered.

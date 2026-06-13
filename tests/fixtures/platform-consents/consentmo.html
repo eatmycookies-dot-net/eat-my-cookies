@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Consentmo Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    main { padding: 24px; }
+    csm-cookie-consent {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Consentmo Fixture</h1>
+    <p>Local fixture used to validate generic Consentmo handling.</p>
+  </main>
+
+  <csm-cookie-consent class="csm-cookie-consent needsclick" popover="manual"></csm-cookie-consent>
+
+  <script>
+    (() => {
+      const host = document.querySelector('csm-cookie-consent');
+      const shadow = host.attachShadow({ mode: 'open' });
+      shadow.innerHTML = `
+        <style>
+          .hidden { display: none !important; }
+          .cookieconsent-wrapper,
+          .cookieconsent-preferences {
+            position: fixed;
+            inset: auto 24px 24px 24px;
+            max-width: 640px;
+            background: #fff;
+            color: #111827;
+            border: 1px solid #d1d5db;
+            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+            padding: 20px;
+          }
+          .cookieconsent-preferences {
+            inset: 8% 24px auto 24px;
+          }
+          .actions,
+          .prefs-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+          }
+          .cc-category {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+            margin-top: 14px;
+          }
+          .isense-cc-checkbox-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+          }
+          .modern-switch-container {
+            display: inline-flex;
+            border-radius: 999px;
+            overflow: hidden;
+          }
+          .reject-container,
+          .accept-container {
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #cbd5e1;
+            color: #fff;
+            cursor: pointer;
+          }
+          .reject-container.checked {
+            background: #1f2937;
+          }
+          .accept-container.checked {
+            background: #166534;
+          }
+          button {
+            cursor: pointer;
+            padding: 10px 14px;
+            border: 1px solid #111827;
+            background: #fff;
+            color: #111827;
+          }
+          .primary {
+            background: #111827;
+            color: #fff;
+          }
+        </style>
+        <div class="cookieconsent-wrapper">
+          <p>We use cookies and similar technologies to personalize content and ads, analyze performance, and improve the website experience.</p>
+          <div class="actions">
+            <button type="button" class="primary">Accept All</button>
+            <button type="button">Reject All</button>
+            <button type="button">Preferences</button>
+          </div>
+        </div>
+        <div class="cookieconsent-preferences hidden">
+          <div class="prefs-actions">
+            <button type="button">Accept All</button>
+            <button type="button">Reject All</button>
+          </div>
+          <div class="cc-category" data-consent-category="functional">
+            <p class="cc-category-title">Functional cookies</p>
+            <div class="cc-checkbox-container isense-cc-checkbox-container">
+              <div role="switch" aria-checked="false" class="modern-switch-container isense-modern-switch-container" aria-label="Functional cookies">
+                <input id="cm-functional" type="checkbox" aria-hidden="true" tabindex="-1">
+                <div class="reject-container checked isense-reject-container">x</div>
+                <div class="accept-container isense-accept-container">v</div>
+              </div>
+            </div>
+          </div>
+          <div class="cc-category" data-consent-category="analytics">
+            <p class="cc-category-title">Analytics and Statistics</p>
+            <div class="cc-checkbox-container isense-cc-checkbox-container">
+              <div role="switch" aria-checked="false" class="modern-switch-container isense-modern-switch-container" aria-label="Analytics and Statistics">
+                <input id="cm-analytics" type="checkbox" aria-hidden="true" tabindex="-1">
+                <div class="reject-container checked isense-reject-container">x</div>
+                <div class="accept-container isense-accept-container">v</div>
+              </div>
+            </div>
+          </div>
+          <div class="cc-category" data-consent-category="marketing">
+            <p class="cc-category-title">Marketing and Retargeting</p>
+            <div class="cc-checkbox-container isense-cc-checkbox-container">
+              <div role="switch" aria-checked="false" class="modern-switch-container isense-modern-switch-container" aria-label="Marketing and Retargeting">
+                <input id="cm-advertising" type="checkbox" aria-hidden="true" tabindex="-1">
+                <div class="reject-container checked isense-reject-container">x</div>
+                <div class="accept-container isense-accept-container">v</div>
+              </div>
+            </div>
+          </div>
+          <div class="prefs-actions">
+            <button type="button" class="cc-save-preferences">Save preferences</button>
+          </div>
+        </div>
+      `;
+
+      const banner = shadow.querySelector('.cookieconsent-wrapper');
+      const prefs = shadow.querySelector('.cookieconsent-preferences');
+      const functional = shadow.getElementById('cm-functional');
+      const analytics = shadow.getElementById('cm-analytics');
+      const advertising = shadow.getElementById('cm-advertising');
+      const buttons = shadow.querySelectorAll('button');
+      const switches = shadow.querySelectorAll('[role="switch"]');
+
+      function logicalEnabled(input) {
+        return !!input.checked;
+      }
+
+      window.__fixtureState = {
+        mode: null,
+        functional: logicalEnabled(functional),
+        analytics: logicalEnabled(analytics),
+        advertising: logicalEnabled(advertising),
+        bannerVisible: true,
+      };
+
+      function finish(mode) {
+        window.__fixtureState = {
+          mode,
+          functional: logicalEnabled(functional),
+          analytics: logicalEnabled(analytics),
+          advertising: logicalEnabled(advertising),
+          bannerVisible: false,
+        };
+        host.remove();
+      }
+
+      function setAll(next) {
+        setSwitchState(switches[0], functional, next);
+        setSwitchState(switches[1], analytics, next);
+        setSwitchState(switches[2], advertising, next);
+      }
+
+      function setSwitchState(container, input, next) {
+        input.checked = next;
+        container.setAttribute('aria-checked', next ? 'true' : 'false');
+        container.querySelector('.accept-container').classList.toggle('checked', next);
+        container.querySelector('.reject-container').classList.toggle('checked', !next);
+      }
+
+      buttons[0].addEventListener('click', () => {
+        setAll(true);
+        finish('accept_all');
+      });
+      buttons[1].addEventListener('click', () => {
+        setAll(false);
+        finish('reject_all');
+      });
+      buttons[2].addEventListener('click', () => {
+        prefs.classList.remove('hidden');
+      });
+      buttons[3].addEventListener('click', () => setAll(true));
+      buttons[4].addEventListener('click', () => setAll(false));
+      buttons[5].addEventListener('click', () => finish('custom'));
+
+      for (const container of switches) {
+        const input = container.querySelector('input');
+        const reject = container.querySelector('.reject-container');
+        const accept = container.querySelector('.accept-container');
+        reject.addEventListener('click', () => setSwitchState(container, input, false));
+        accept.addEventListener('click', () => setSwitchState(container, input, true));
+      }
+    })();
+  </script>
+</body>
+</html>

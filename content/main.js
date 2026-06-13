@@ -21,6 +21,8 @@ const DYNAMIC_SITE_SPECIFIC_HOSTS = new Set([
   'www.ketch.com',
   'ketch.com',
   'www.pret.com',
+  'liveramp.com',
+  'www.liveramp.com',
 ]);
 const CONSENTMANAGER_TOP_LEVEL_EXCLUDED_SITES = new Set([
   'www.bbc.com',
@@ -45,6 +47,7 @@ let siteSpecificWatchStarted = false;
 let siteSpecificFlowLock = null;
 let shopifyWatchStarted = false;
 let osanoWatchStarted = false;
+let lateDomWatchStarted = false;
 let bloombergCcpaBridgeInstalled = false;
 let bloombergCcpaWatchToken = 0;
 let bloombergCcpaManualOpenUntil = 0;
@@ -141,6 +144,38 @@ const ACCEPT_OR_WARN_SITES = {
       '.iubenda-cs-accept-btn',
       'text:accetta e continua',
       'text:accetta',
+    ],
+  },
+  'www.diariomotor.com': {
+    reason: 'This Clickio wall currently offers accepting cookies or a paid consentless path. Reject/custom preferences are not available here without the subscription flow.',
+    detectSelectors: [
+      '#cl-consent',
+      '.cl-consent__inner',
+      'text:rechazar por',
+      'text:gestionar opciones',
+      'text:de acuerdo y cerrar',
+    ],
+    watchSelectors: ['#cl-consent', '.cl-consent__inner'],
+    acceptSelectors: [
+      '.cl-consent__btn:not(.cl-consent__btn--outline)',
+      '.cl-consent__btn--primary',
+      'text:de acuerdo y cerrar',
+    ],
+  },
+  'mundokodi.com': {
+    reason: 'This Clickio wall currently offers accepting cookies or a paid consentless path. Reject/custom preferences are not available here without the subscription flow.',
+    detectSelectors: [
+      '#cl-consent',
+      '.cl-consent__inner',
+      'text:rechazar y suscribirme',
+      'text:gestionar opciones',
+      'text:de acuerdo y cerrar',
+    ],
+    watchSelectors: ['#cl-consent', '.cl-consent__inner'],
+    acceptSelectors: [
+      '.cl-consent__btn:not(.cl-consent__btn--outline)',
+      '.cl-consent__btn--primary',
+      'text:de acuerdo y cerrar',
     ],
   },
 };
@@ -503,6 +538,132 @@ const KETCH_SITE_CONFIGS = {
     saveSelectors: ['data-nav-action:confirm', 'button[type="submit"]', 'text:save choices', 'text:confirm'],
     exitSelectors: [],
   },
+  'liveramp.com': {
+    siteLabel: 'LiveRamp',
+    privacyCenterTitle: 'settings',
+    homeUrl: 'https://liveramp.com/',
+    cooldownScope: 'liveramp',
+    purposeTabSelectors: ['text:vendors', 'text:purposes', 'text:cookie preference'],
+    readySelectors: [
+      '#ketch-banner-button-primary',
+      '#ketch-banner-button-secondary',
+      '#ketch-banner-button-tertiary',
+      'text:configure settings',
+      'text:confirm',
+      '[id*="purpose-list-switch-container"]',
+      '[class*="purposeList"]',
+    ],
+    settingsSelectors: [
+      'text:confirm',
+      '[id*="purpose-list-switch-container"]',
+      '[class*="purposeList"]',
+      'text:vendors',
+    ],
+    entrySelectors: [
+      '#ketch-banner-button-primary',
+      'text:configure settings',
+      'text:privacy settings',
+    ],
+    categoryRules: [
+      { id: 'analytics', labels: ['analytics', 'statistics', 'measure content performance', 'measure advertising performance', 'understand audiences'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'behavioral_advertising', labels: ['advertising', 'create profiles for personalised advertising', 'use profiles to select personalised advertising', 'use limited data to select advertising'], desired: (prefs) => Boolean(prefs.advertising) },
+      { id: 'functionality', labels: ['functional', 'functionality', 'personalise content', 'store and/or access information on a device'], desired: (prefs) => Boolean(prefs.functional) },
+    ],
+    bannerWatchSelectors: [
+      '#ketch-banner',
+      '#ketch-consent-banner',
+      '#ketch-banner-button-primary',
+      '#ketch-banner-button-secondary',
+      '#ketch-banner-button-tertiary',
+      'text:configure settings',
+      'text:reject all',
+      'text:accept all',
+    ],
+    bannerAcceptSelectors: [
+      '#ketch-banner-button-tertiary',
+      'button[aria-label*="Accept All" i]',
+      'text:accept all',
+    ],
+    bannerRejectSelectors: [
+      '#ketch-banner-button-secondary',
+      'button[aria-label*="Reject All" i]',
+      'text:reject all',
+    ],
+    bannerManageSelectors: [
+      '#ketch-banner-button-primary',
+      'button[aria-label*="Configure Settings" i]',
+      'text:configure settings',
+    ],
+    consentCookieName: '_ketch_consent_v1_',
+    customRejectBaseline: true,
+    saveSelectors: ['data-nav-action:confirm', 'text:confirm', 'text:save', 'button[type="submit"]'],
+    exitSelectors: ['data-nav-action:close', 'data-nav-action:back', 'button.ketch-btn-close', 'button[aria-label*="Close" i]', 'text:close'],
+    postSaveWaitMs: 5000,
+    skipExitAfterSave: true,
+  },
+  'www.liveramp.com': {
+    siteLabel: 'LiveRamp',
+    privacyCenterTitle: 'settings',
+    homeUrl: 'https://www.liveramp.com/',
+    cooldownScope: 'liveramp',
+    purposeTabSelectors: ['text:vendors', 'text:purposes', 'text:cookie preference'],
+    readySelectors: [
+      '#ketch-banner-button-primary',
+      '#ketch-banner-button-secondary',
+      '#ketch-banner-button-tertiary',
+      'text:configure settings',
+      'text:confirm',
+      '[id*="purpose-list-switch-container"]',
+      '[class*="purposeList"]',
+    ],
+    settingsSelectors: [
+      'text:confirm',
+      '[id*="purpose-list-switch-container"]',
+      '[class*="purposeList"]',
+      'text:vendors',
+    ],
+    entrySelectors: [
+      '#ketch-banner-button-primary',
+      'text:configure settings',
+      'text:privacy settings',
+    ],
+    categoryRules: [
+      { id: 'analytics', labels: ['analytics', 'statistics', 'measure content performance', 'measure advertising performance', 'understand audiences'], desired: (prefs) => Boolean(prefs.analytics) },
+      { id: 'behavioral_advertising', labels: ['advertising', 'create profiles for personalised advertising', 'use profiles to select personalised advertising', 'use limited data to select advertising'], desired: (prefs) => Boolean(prefs.advertising) },
+      { id: 'functionality', labels: ['functional', 'functionality', 'personalise content', 'store and/or access information on a device'], desired: (prefs) => Boolean(prefs.functional) },
+    ],
+    bannerWatchSelectors: [
+      '#ketch-banner',
+      '#ketch-consent-banner',
+      '#ketch-banner-button-primary',
+      '#ketch-banner-button-secondary',
+      '#ketch-banner-button-tertiary',
+      'text:configure settings',
+      'text:reject all',
+      'text:accept all',
+    ],
+    bannerAcceptSelectors: [
+      '#ketch-banner-button-tertiary',
+      'button[aria-label*="Accept All" i]',
+      'text:accept all',
+    ],
+    bannerRejectSelectors: [
+      '#ketch-banner-button-secondary',
+      'button[aria-label*="Reject All" i]',
+      'text:reject all',
+    ],
+    bannerManageSelectors: [
+      '#ketch-banner-button-primary',
+      'button[aria-label*="Configure Settings" i]',
+      'text:configure settings',
+    ],
+    consentCookieName: '_ketch_consent_v1_',
+    customRejectBaseline: true,
+    saveSelectors: ['data-nav-action:confirm', 'text:confirm', 'text:save', 'button[type="submit"]'],
+    exitSelectors: ['data-nav-action:close', 'data-nav-action:back', 'button.ketch-btn-close', 'button[aria-label*="Close" i]', 'text:close'],
+    postSaveWaitMs: 5000,
+    skipExitAfterSave: true,
+  },
 };
 
 // Fallback config for any Ketch site not listed in KETCH_SITE_CONFIGS.
@@ -537,6 +698,7 @@ const KETCH_GENERIC_CONFIG = {
     'text:cookie preferences',
     'text:manage preferences',
     'text:customize settings',
+    'text:configure settings',
   ],
   categoryRules: [
     { id: 'analytics', labels: ['analytics', 'performance', 'measurement', 'research'], desired: (prefs) => Boolean(prefs.analytics) },
@@ -570,6 +732,7 @@ const KETCH_GENERIC_CONFIG = {
   bannerManageSelectors: [
     '[class*="managePreferencesButton"]',
     'text:manage preferences',
+    'text:configure settings',
     'text:customize settings',
     'text:customize',
   ],
@@ -600,6 +763,7 @@ const MAIN_WORLD_ONLY_SITES = new Set([
   'www.hulu.com',
   'www.nike.com',
   'privacy.thewaltdisneycompany.com',
+  'truendo.com',
 ]);
 
 const DISNEY_FAMILY_USNAT_HOSTS = new Set([
@@ -637,6 +801,7 @@ async function bootstrap(force = false) {
   document.documentElement.dataset.emcRunSignature = currentRunSignature;
   scheduleShopifyWatch(prefs);
   scheduleOsanoWatch(prefs);
+  scheduleLateDomWatch(prefs);
   const hadPendingPreHandleAction = hasPendingPreHandleAction(currentRunSignature);
   await flushPendingPreHandleAction(currentRunSignature);
   if (!force && hadPendingPreHandleAction) return;
@@ -687,7 +852,7 @@ async function bootstrap(force = false) {
     return;
   }
   if (domResult) {
-    return reportAction(domResult.method, prefs.globalPreference);
+    return reportDomResult(domResult, prefs);
   }
 
   if (prefs.globalPreference !== 'custom') {
@@ -1004,7 +1169,7 @@ function scheduleOsanoWatch(prefs) {
         stop();
         return;
       }
-      await reportAction(result.method, prefs.globalPreference);
+      await reportDomResult(result, prefs);
       stop();
     } finally {
       running = false;
@@ -1030,6 +1195,66 @@ function scheduleOsanoWatch(prefs) {
     setTimeout(() => { void tryHandle(); }, ms);
   }
   setTimeout(() => stop(), 45000);
+}
+
+function scheduleLateDomWatch(prefs) {
+  if (lateDomWatchStarted) return;
+  if (MAIN_WORLD_ONLY_SITES.has(site)) return;
+  lateDomWatchStarted = true;
+  let stopped = false;
+  let running = false;
+
+  const stop = () => {
+    stopped = true;
+    try { observer?.disconnect(); } catch (_) {}
+  };
+
+  const tryHandle = async () => {
+    if (stopped || running) return;
+    if (currentRunSignature && wasHandledForCurrentPage(currentRunSignature)) {
+      stop();
+      return;
+    }
+
+    running = true;
+    try {
+      if (await handleSiteSpecificFlow({}, prefs)) {
+        stop();
+        return;
+      }
+
+      const result = await runDOMHandler(prefs);
+      if (!result) return;
+      if (result.preHandled) {
+        stop();
+        return;
+      }
+      await reportDomResult(result, prefs);
+      stop();
+    } finally {
+      running = false;
+    }
+  };
+
+  const observer = new MutationObserver(() => {
+    void tryHandle();
+  });
+
+  try {
+    observer.observe(document.body ?? document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
+  } catch (_) {
+    lateDomWatchStarted = false;
+    return;
+  }
+
+  for (const ms of [500, 1500, 3000, 5000, 8000, 12000, 16000, 22000, 30000]) {
+    setTimeout(() => { void tryHandle(); }, ms);
+  }
+  setTimeout(() => stop(), 35000);
 }
 
 function hasVisibleOsanoSurface() {
@@ -1099,6 +1324,11 @@ async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = 
   const interactionLockScope = `ketch:${config.cooldownScope}:${prefs.globalPreference}`;
   const { bypassLock = false } = options;
   if (!bypassLock && isSiteSpecificFlowLocked(interactionLockScope)) return true;
+
+  if (config.cooldownScope === 'liveramp') {
+    return handleLiveRampKetch(siteOverrides, prefs, config);
+  }
+
   const onPrivacyCenterPage = isKetchPrivacyCenterPage(config);
   if (!onPrivacyCenterPage) {
     if (isKetchBannerVisible(config)) {
@@ -1223,14 +1453,108 @@ async function handleKetchPrivacyCenter(siteOverrides, prefs, config, options = 
   if (outcome !== 'applied') return false;
 
   startFlowCooldown(config.cooldownScope);
+  if (shouldUseDirectKetchCookieFlow(config)) {
+    await handleKetchViaConsentCookie(siteOverrides, prefs, config, { persistOnly: true });
+  }
   if (!clickElement(config.saveSelectors)) return false;
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  await exitKetchPrivacyCenter(config);
+  const postSaveWaitMs = config.postSaveWaitMs ?? 2000;
+  await new Promise((resolve) => setTimeout(resolve, postSaveWaitMs));
+  if (config.skipExitAfterSave) {
+    const dismissed = await waitForSelectorsToDisappear(config.bannerWatchSelectors, postSaveWaitMs);
+    if (!dismissed && isKetchPrivacyCenterPage(config)) return false;
+  } else if (!(await exitKetchPrivacyCenter(config))) {
+    return false;
+  }
   await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
   await reportAction(
     siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:ketch:save',
     siteOverrides.alwaysAccept ? 'accept_all' : prefs.globalPreference,
   );
+  return true;
+}
+
+async function handleLiveRampKetch(siteOverrides, prefs, config) {
+  if (!config) return false;
+
+  const interactionLockScope = `ketch:${config.cooldownScope}:${prefs.globalPreference}`;
+  const onPrivacyCenterPage = isKetchPrivacyCenterPage(config);
+  const bannerVisible = isKetchBannerVisible(config);
+  if (!bannerVisible && !onPrivacyCenterPage) return false;
+
+  startSiteSpecificFlowLock(interactionLockScope);
+
+  // Helper: write consent cookies as belt-and-suspenders after the SDK button click.
+  // We do NOT call suppressLiveRampBanner() — manipulating Ketch's DOM elements fires
+  // Ketch's MutationObserver, which runs heavy synchronous SDK code and freezes the page.
+  const persistCookiesOnly = () =>
+    handleKetchViaConsentCookie(siteOverrides, prefs, config, { persistOnly: true });
+
+  // For accept_all / reject_all: click the Ketch banner button so that Ketch's own SDK
+  // records consent for ALL configured purposes (not just our 3 hardcoded ones).
+  // Clicking does not freeze the page — the previous freeze came solely from
+  // suppressLiveRampBanner() DOM manipulation. After the click Ketch writes its full
+  // consent cookie; our supplementary cookie write is only belt-and-suspenders.
+  if (siteOverrides.alwaysAccept || prefs.globalPreference === 'accept_all') {
+    const accepted = await clickAndWaitRetry(
+      config.bannerAcceptSelectors,
+      config.bannerWatchSelectors,
+      7000,
+      2,
+    );
+    if (!accepted) return false;
+    await persistCookiesOnly();
+    startFlowCooldown(config.cooldownScope);
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+    await reportAction(
+      siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:ketch:accept_all',
+      'accept_all',
+    );
+    return true;
+  }
+
+  if (prefs.globalPreference === 'reject_all') {
+    const rejected = await clickAndWaitRetry(
+      config.bannerRejectSelectors,
+      config.bannerWatchSelectors,
+      7000,
+      2,
+    );
+    if (!rejected) return false;
+    await persistCookiesOnly();
+    startFlowCooldown(config.cooldownScope);
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+    await reportAction('site_specific:ketch:reject_all', 'reject_all');
+    return true;
+  }
+
+  // For custom preferences: try a quick cookie-write path first; fall through to UI flow.
+  const customPersisted = await handleKetchViaConsentCookie(siteOverrides, prefs, config, { persistOnly: true });
+  if (customPersisted && liveRampConsentMatches(prefs)) {
+    startFlowCooldown(config.cooldownScope);
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+    await reportAction('site_specific:ketch:cookie', prefs.globalPreference);
+    setTimeout(() => { try { location.reload(); } catch (_) {} }, 50);
+    return true;
+  }
+
+  if (!onPrivacyCenterPage) {
+    const opened = clickElement(config.bannerManageSelectors);
+    if (!opened) return false;
+  }
+  const ready = await waitForSiteSelectors(['#analytics', '#behavioral_advertising', 'text:confirm'], 5000);
+  if (!ready) return false;
+
+  if (!(await applyKetchRuleState({ id: 'analytics', labels: ['analytics'] }, Boolean(prefs.analytics)))) return false;
+  if (!(await applyKetchRuleState({ id: 'behavioral_advertising', labels: ['behavioral advertising', 'advertising'] }, Boolean(prefs.advertising)))) return false;
+  await handleKetchViaConsentCookie(siteOverrides, prefs, config, { persistOnly: true });
+
+  startFlowCooldown(config.cooldownScope);
+  if (!clickElement(config.saveSelectors)) return false;
+  const dismissed = await waitForSelectorsToDisappear(config.bannerWatchSelectors, config.postSaveWaitMs ?? 5000);
+  if (!dismissed) return false;
+
+  await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+  await reportAction('site_specific:ketch:save', prefs.globalPreference);
   return true;
 }
 
@@ -1699,11 +2023,20 @@ function readCheckboxLikeState(input) {
 }
 
 async function exitKetchPrivacyCenter(config) {
-  if (!config || !isKetchPrivacyCenterPage(config)) return;
+  if (!config || !isKetchPrivacyCenterPage(config)) return true;
 
-  if (clickElement(config.exitSelectors)) {
+  const exitSelectors = [
+    ...(config.exitSelectors ?? []),
+    'data-nav-action:close',
+    'data-nav-action:back',
+    'button.ketch-btn-close',
+    'button[aria-label*="Close" i]',
+    'text:close',
+  ];
+
+  if (clickElement(exitSelectors)) {
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    if (!isKetchPrivacyCenterPage(config)) return;
+    if (!isKetchPrivacyCenterPage(config)) return true;
   }
 
   try {
@@ -1711,15 +2044,36 @@ async function exitKetchPrivacyCenter(config) {
     if (new RegExp(`^https?:\\/\\/(www\\.)?${site.replaceAll('.', '\\.')}\\/`, 'i').test(referrer) && history.length > 1) {
       history.back();
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      if (!isKetchPrivacyCenterPage(config)) return;
+      if (!isKetchPrivacyCenterPage(config)) return true;
     }
   } catch (_) {}
 
   try {
-    location.replace(config.homeUrl);
+    if (config.homeUrl) {
+      const targetUrl = new URL(config.homeUrl, location.href);
+      const currentUrl = new URL(location.href);
+      if (targetUrl.origin === currentUrl.origin && targetUrl.pathname === currentUrl.pathname) {
+        location.reload();
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        if (!isKetchPrivacyCenterPage(config)) return true;
+      }
+    }
+  } catch (_) {}
+
+  try {
+    if (config.homeUrl) {
+      location.replace(config.homeUrl);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (!isKetchPrivacyCenterPage(config)) return true;
+    }
   } catch (_) {
-    location.href = config.homeUrl;
+    if (config.homeUrl) {
+      location.href = config.homeUrl;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (!isKetchPrivacyCenterPage(config)) return true;
+    }
   }
+  return !isKetchPrivacyCenterPage(config);
 }
 
 async function retryDisneyFamilyUsNatMainWorld(prefs) {
@@ -2898,11 +3252,264 @@ function safeLocalStorageGet(key) {
   }
 }
 
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function readCookie(name) {
   try {
     const prefix = `${name}=`;
     const match = document.cookie.split('; ').find((entry) => entry.startsWith(prefix));
     return match ? match.slice(prefix.length) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeCookie(name, value, options = {}) {
+  try {
+    const parts = [`${name}=${value}`];
+    parts.push(`path=${options.path ?? '/'}`);
+    if (options.maxAge != null) parts.push(`max-age=${options.maxAge}`);
+    if (options.domain) parts.push(`domain=${options.domain}`);
+    parts.push(`SameSite=${options.sameSite ?? 'Lax'}`);
+    if (options.secure !== false && location.protocol === 'https:') parts.push('Secure');
+    document.cookie = parts.join('; ');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function shouldUseDirectKetchCookieFlow(config) {
+  return Boolean(config?.consentCookieName && config?.cooldownScope === 'liveramp');
+}
+
+async function handleKetchViaConsentCookie(siteOverrides, prefs, config, options = {}) {
+  if (!config?.consentCookieName) return false;
+  const { persistOnly = false } = options;
+  const payloads = buildLiveRampConsentPayloads(prefs);
+  if (!payloads?.ketch || !payloads?.swb || !payloads?.metadata) return false;
+
+  const cookieOptions = {
+    maxAge: 31536000,
+    domain: '.liveramp.com',
+    sameSite: 'None',
+    secure: true,
+  };
+  if (!writeCookie(config.consentCookieName, payloads.ketch, cookieOptions)) return false;
+  if (!writeCookie('_swb_consent_', payloads.swb, cookieOptions)) return false;
+  if (!writeCookie('_swb_consent__metadata', payloads.metadata, cookieOptions)) return false;
+
+  const storedKetch = safeLocalStorageSet(config.consentCookieName, payloads.ketch);
+  const storedSwb = safeLocalStorageSet('_swb_consent_', payloads.swb);
+  const storedMetadata = safeLocalStorageSet('_swb_consent__metadata', payloads.metadata);
+  if (!storedKetch || !storedSwb || !storedMetadata) return false;
+
+  if (persistOnly) return true;
+
+  startSiteSpecificFlowLock(`ketch:${config.cooldownScope}:${prefs.globalPreference}`);
+  startFlowCooldown(config.cooldownScope);
+
+  await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+  await reportAction(
+    siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:ketch:cookie',
+    siteOverrides.alwaysAccept ? 'accept_all' : prefs.globalPreference,
+  );
+
+  setTimeout(() => {
+    try {
+      if (config.homeUrl && isKetchPrivacyCenterPage(config)) {
+        location.replace(config.homeUrl);
+        return;
+      }
+      location.reload();
+    } catch (_) {}
+  }, 25);
+  return true;
+}
+
+function buildLiveRampConsentPayloads(prefs) {
+  const currentKetch = readLiveRampJsonState('_ketch_consent_v1_') ?? {};
+  const essentialServicesEnabled = true;
+  const ketchNext = {
+    ...currentKetch,
+    analytics: buildLiveRampKetchPurpose('analytics', Boolean(prefs?.analytics)),
+    essential_services: buildLiveRampKetchPurpose('essential_services', essentialServicesEnabled),
+    behavioral_advertising: buildLiveRampKetchPurpose('behavioral_advertising', Boolean(prefs?.advertising)),
+  };
+  const currentSwb = readLiveRampJsonState('_swb_consent_');
+  const swbBase = (currentSwb && typeof currentSwb === 'object')
+    ? currentSwb
+    : createDefaultLiveRampSwbConsent();
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const swbNext = {
+    ...swbBase,
+    collectedAt: timestamp,
+    cachedAt: timestamp,
+    interactive: true,
+    context: {
+      ...(swbBase.context ?? {}),
+      source: prefs?.globalPreference === 'reject_all' ? 'banner.rejectAll' : 'modal.manual',
+    },
+    purposes: {
+      ...(swbBase.purposes ?? {}),
+      analytics: buildLiveRampSwbPurpose('analytics', Boolean(prefs?.analytics), 'consent_optout'),
+      behavioral_advertising: buildLiveRampSwbPurpose('behavioral_advertising', Boolean(prefs?.advertising), 'consent_optin'),
+      essential_services: buildLiveRampSwbPurpose('essential_services', essentialServicesEnabled, 'consent_optout'),
+    },
+  };
+
+  return {
+    ketch: encodeBase64JsonCookie(ketchNext),
+    swb: encodeBase64JsonCookie(swbNext),
+    metadata: createLiveRampConsentMetadata(),
+  };
+}
+
+function buildLiveRampKetchPurpose(name, enabled) {
+  return {
+    status: enabled ? 'granted' : 'denied',
+    canonicalPurposes: [name],
+  };
+}
+
+function buildLiveRampSwbPurpose(name, enabled, legalBasisCode) {
+  return {
+    allowed: enabled ? 'true' : 'false',
+    collectedAt: 0,
+    issuedAt: 0,
+    legalBasisCode,
+    source: '',
+  };
+}
+
+function createDefaultLiveRampSwbConsent() {
+  const timestamp = Math.floor(Date.now() / 1000);
+  return {
+    collectedAt: timestamp,
+    cachedAt: timestamp,
+    interactive: true,
+    context: {
+      issuedAt: 0,
+      source: 'modal.manual',
+    },
+    controllerCode: '',
+    environmentCode: 'production',
+    identities: {},
+    jurisdictionCode: '',
+    propertyCode: 'website_smart_tag',
+    purposes: {},
+  };
+}
+
+function createLiveRampConsentMetadata() {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  return encodeBase64JsonCookie({
+    iat: issuedAt,
+    exp: issuedAt + 31536000,
+  });
+}
+
+function readLiveRampJsonState(key) {
+  return (
+    decodeBase64JsonCookie(readCookie(key)) ??
+    decodeBase64JsonCookie(safeLocalStorageGet(key))
+  );
+}
+
+function liveRampConsentMatches(prefs) {
+  const ketch = readLiveRampJsonState('_ketch_consent_v1_');
+  const swb = readLiveRampJsonState('_swb_consent_');
+  if (!ketch || !swb) return false;
+
+  const analyticsEnabled = Boolean(prefs?.analytics);
+  const advertisingEnabled = Boolean(prefs?.advertising);
+  const essentialServicesEnabled = true;
+
+  return (
+    ketch.analytics?.status === (analyticsEnabled ? 'granted' : 'denied') &&
+    ketch.behavioral_advertising?.status === (advertisingEnabled ? 'granted' : 'denied') &&
+    ketch.essential_services?.status === (essentialServicesEnabled ? 'granted' : 'denied') &&
+    swb.purposes?.analytics?.allowed === String(analyticsEnabled) &&
+    swb.purposes?.behavioral_advertising?.allowed === String(advertisingEnabled) &&
+    swb.purposes?.essential_services?.allowed === String(essentialServicesEnabled)
+  );
+}
+
+function suppressLiveRampBanner(durationMs = 15000) {
+  const selectors = [
+    '#ketch-banner',
+    '#ketch-consent-banner',
+    '#ketch-modal',
+    '#ketch-purposes-modal',
+    '#ketch-preferences',
+    '#ketch-preference-panel',
+  ];
+
+  const hideOnce = () => {
+    let changed = false;
+    for (const selector of selectors) {
+      for (const el of deepQuerySelectorAll(selector)) {
+        if (!(el instanceof HTMLElement)) continue;
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.setAttribute('aria-hidden', 'true');
+        changed = true;
+      }
+    }
+
+    for (const el of deepQuerySelectorAll('[id^="ketch-banner-button"]')) {
+      if (!(el instanceof HTMLElement)) continue;
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('visibility', 'hidden', 'important');
+      changed = true;
+    }
+
+    try {
+      document.body?.style?.setProperty('overflow', '', 'important');
+      document.documentElement?.style?.setProperty('overflow', '', 'important');
+    } catch (_) {}
+
+    return changed;
+  };
+
+  hideOnce();
+  const observer = new MutationObserver(() => {
+    hideOnce();
+  });
+  try {
+    observer.observe(document.documentElement ?? document, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
+    setTimeout(() => observer.disconnect(), durationMs);
+  } catch (_) {}
+}
+
+function decodeBase64JsonCookie(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(atob(value));
+  } catch (_) {
+    try {
+      return JSON.parse(atob(decodeURIComponent(value)));
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+function encodeBase64JsonCookie(value) {
+  try {
+    return btoa(JSON.stringify(value));
   } catch (_) {
     return null;
   }
@@ -2935,6 +3542,61 @@ async function reportAction(method, preference) {
     method,
     preference,
   });
+}
+
+async function reportDomResult(result, prefs) {
+  await syncPlatformSupportWarning(result, prefs);
+  return reportAction(result.method, prefs.globalPreference);
+}
+
+async function syncPlatformSupportWarning(result, prefs) {
+  const warning = getPlatformSupportWarning(result, prefs);
+  if (warning) {
+    await chrome.runtime.sendMessage({
+      type: 'REPORT_UNSUPPORTED_SITE',
+      site,
+      reason: warning.reason,
+      allowAcceptOverride: Boolean(warning.allowAcceptOverride),
+    });
+    return;
+  }
+
+  if (!shouldManagePlatformSupportWarning(result)) return;
+  await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+}
+
+function shouldManagePlatformSupportWarning(result) {
+  const method = result?.method ?? '';
+  return method.startsWith('dom:woocommercestorenotice') ||
+    method.startsWith('dom:magentocookie') ||
+    method.startsWith('dom:bigcommercecatalyst');
+}
+
+function getPlatformSupportWarning(result, prefs) {
+  const method = result?.method ?? '';
+
+  if (method.startsWith('dom:woocommercestorenotice')) {
+    return {
+      reason: 'WooCommerce store notices are only dismissible banners, not full consent managers. Eat My Cookies can close the notice, but it cannot apply accept, reject, custom, or CCPA preferences generically on this storefront.',
+      allowAcceptOverride: false,
+    };
+  }
+
+  if (method.startsWith('dom:magentocookie')) {
+    if (prefs.globalPreference === 'accept_all' && prefs.ccpaDoNotSell === false) {
+      return null;
+    }
+    return {
+      reason: 'Magento’s native cookie notice only exposes an allow-or-close flow. Eat My Cookies used the closest safe path for this visit, but custom category choices and standalone CCPA sell/share controls are not available generically on this storefront. If you want this warning to stop here, switch this site to Accept All.',
+      allowAcceptOverride: true,
+    };
+  }
+
+  if (method.startsWith('dom:bigcommercecatalyst')) {
+    return null;
+  }
+
+  return null;
 }
 
 function showToast(message) {

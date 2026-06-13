@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Complianz Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    .hidden { display: none !important; }
+    #cmplz-cookiebanner-container {
+      position: fixed;
+      inset: auto 24px 24px 24px;
+      z-index: 9999;
+    }
+    .cmplz-cookiebanner {
+      max-width: 640px;
+      background: #fff;
+      color: #111827;
+      border: 1px solid #d1d5db;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+      padding: 20px;
+    }
+    .cmplz-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .cmplz-category {
+      border-top: 1px solid #e5e7eb;
+      padding-top: 12px;
+      margin-top: 12px;
+    }
+    button {
+      cursor: pointer;
+      padding: 10px 14px;
+      border: 1px solid #111827;
+      background: #fff;
+      color: #111827;
+    }
+    .cmplz-accept {
+      background: #84cc16;
+      border-color: #84cc16;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Complianz Fixture</h1>
+    <p>Local fixture used to validate generic Complianz handling.</p>
+  </main>
+
+  <div id="cmplz-cookiebanner-container">
+    <div class="cmplz-cookiebanner banner-a optin cmplz-show cmplz-categories-type-view-preferences" role="dialog" aria-modal="true">
+      <div class="cmplz-body">
+        <div class="cmplz-message" id="cmplz-message-1-optin">
+          <p>We and third-party providers use cookies and other technologies to improve the user experience.</p>
+        </div>
+        <div class="cmplz-categories hidden" id="cmplz-categories">
+          <details class="cmplz-category cmplz-functional" open>
+            <summary><span class="cmplz-category-title">Functional</span></summary>
+            <label class="cmplz-label" for="cmplz-preferences-optin">Functional cookies</label>
+            <input type="checkbox" id="cmplz-preferences-optin" checked>
+          </details>
+          <details class="cmplz-category cmplz-statistics" open>
+            <summary><span class="cmplz-category-title">Statistics</span></summary>
+            <label class="cmplz-label" for="cmplz-statistics-optin">Statistics</label>
+            <input type="checkbox" id="cmplz-statistics-optin" checked>
+          </details>
+          <details class="cmplz-category cmplz-marketing" open>
+            <summary><span class="cmplz-category-title">Marketing</span></summary>
+            <label class="cmplz-label" for="cmplz-marketing-optin">Marketing</label>
+            <input type="checkbox" id="cmplz-marketing-optin" checked>
+          </details>
+        </div>
+      </div>
+      <div class="cmplz-buttons">
+        <button class="cmplz-btn cmplz-accept">Accept</button>
+        <button class="cmplz-btn cmplz-deny">Deny</button>
+        <button class="cmplz-btn cmplz-view-preferences">View preferences</button>
+        <button class="cmplz-btn cmplz-save-preferences hidden">Save preferences</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const container = document.getElementById('cmplz-cookiebanner-container');
+      const categories = document.getElementById('cmplz-categories');
+      const save = document.querySelector('.cmplz-save-preferences');
+      const open = document.querySelector('.cmplz-view-preferences');
+      const functional = document.getElementById('cmplz-preferences-optin');
+      const analytics = document.getElementById('cmplz-statistics-optin');
+      const advertising = document.getElementById('cmplz-marketing-optin');
+
+      window.__fixtureState = {
+        mode: null,
+        functional: functional.checked,
+        analytics: analytics.checked,
+        advertising: advertising.checked,
+        bannerVisible: true,
+      };
+
+      function finish(mode) {
+        window.__fixtureState = {
+          mode,
+          functional: functional.checked,
+          analytics: analytics.checked,
+          advertising: advertising.checked,
+          bannerVisible: false,
+        };
+        container.remove();
+      }
+
+      function setAll(next) {
+        functional.checked = next;
+        analytics.checked = next;
+        advertising.checked = next;
+      }
+
+      document.querySelector('.cmplz-accept').addEventListener('click', () => {
+        setAll(true);
+        finish('accept_all');
+      });
+      document.querySelector('.cmplz-deny').addEventListener('click', () => {
+        setAll(false);
+        finish('reject_all');
+      });
+      open.addEventListener('click', () => {
+        categories.classList.remove('hidden');
+        save.classList.remove('hidden');
+      });
+      save.addEventListener('click', () => finish('custom'));
+    })();
+  </script>
+</body>
+</html>

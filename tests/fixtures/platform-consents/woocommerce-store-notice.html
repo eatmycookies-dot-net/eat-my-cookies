@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>WooCommerce Store Notice Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    .woocommerce-store-notice {
+      position: fixed;
+      inset: 0 0 auto 0;
+      background: #111827;
+      color: #fff;
+      padding: 14px 16px;
+      z-index: 9999;
+    }
+    .woocommerce-store-notice__dismiss-link {
+      color: #fbbf24;
+      margin-left: 12px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>WooCommerce Store Notice Fixture</h1>
+    <p>Local fixture used to validate the extension's generic WooCommerce store notice dismissal.</p>
+  </main>
+
+  <div class="woocommerce-store-notice" id="wc-notice">
+    Storewide notice for storefront visitors.
+    <a class="woocommerce-store-notice__dismiss-link" href="#">Dismiss</a>
+  </div>
+
+  <script>
+    (() => {
+      const notice = document.getElementById('wc-notice');
+      const dismiss = document.querySelector('.woocommerce-store-notice__dismiss-link');
+
+      window.__fixtureState = {
+        dismissed: false,
+        bannerVisible: true,
+      };
+
+      dismiss.addEventListener('click', (event) => {
+        event.preventDefault();
+        window.__fixtureState = {
+          dismissed: true,
+          bannerVisible: false,
+        };
+        notice.remove();
+      });
+    })();
+  </script>
+</body>
+</html>

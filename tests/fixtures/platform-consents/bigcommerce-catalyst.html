@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="platform" content="bigcommerce.catalyst">
+  <title>BigCommerce Catalyst Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    .consent-dialog {
+      position: fixed;
+      inset: auto 24px 24px auto;
+      width: min(420px, calc(100vw - 48px));
+      background: #ffffff;
+      color: #111827;
+      border: 1px solid #d1d5db;
+      border-radius: 16px;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24);
+      padding: 20px;
+      z-index: 9999;
+    }
+    .consent-dialog.hidden {
+      display: none !important;
+    }
+    .consent-actions,
+    .consent-save {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+    }
+    .outline { background: #e5e7eb; }
+    .primary { background: #111827; color: #fff; }
+    .secondary { background: #cbd5e1; }
+    .consent-pref {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>BigCommerce Catalyst Fixture</h1>
+    <p>Local fixture used to validate generic BigCommerce Catalyst consent handling.</p>
+  </main>
+
+  <section class="consent-dialog" id="bc-banner" role="dialog" aria-modal="true" aria-label="Cookie banner">
+    <h2>We value your privacy</h2>
+    <p>This site uses cookies to improve your browsing experience, analyze site traffic, and show personalized content.</p>
+    <div class="consent-actions">
+      <button class="outline" type="button">Reject All</button>
+      <button class="primary" type="button">Accept All</button>
+    </div>
+    <div class="consent-save">
+      <button class="secondary" type="button">Customize</button>
+    </div>
+  </section>
+
+  <section class="consent-dialog hidden" id="bc-prefs" role="dialog" aria-modal="true" aria-label="Privacy settings">
+    <h2>Privacy Settings</h2>
+    <p>Customize your privacy settings here. You can choose which types of cookies and tracking technologies you would like to allow.</p>
+    <div class="consent-pref">
+      <span>Strictly Necessary</span>
+      <input type="checkbox" checked disabled>
+    </div>
+    <div class="consent-pref">
+      <span>Functionality</span>
+      <input id="bc-functional" type="checkbox" checked>
+    </div>
+    <div class="consent-pref">
+      <span>Marketing</span>
+      <input id="bc-marketing" type="checkbox" checked>
+    </div>
+    <div class="consent-pref">
+      <span>Analytics</span>
+      <input id="bc-analytics" type="checkbox" checked>
+    </div>
+    <div class="consent-actions">
+      <button class="outline" type="button">Reject All</button>
+      <button class="primary" type="button">Accept All</button>
+    </div>
+    <div class="consent-save">
+      <button class="secondary" type="button">Save Settings</button>
+    </div>
+  </section>
+
+  <script>
+    (() => {
+      const banner = document.getElementById('bc-banner');
+      const prefs = document.getElementById('bc-prefs');
+      const originalFetch = window.fetch.bind(window);
+
+      window.__fixtureState = {
+        requests: [],
+        bannerVisible: true,
+      };
+
+      function finish(payload) {
+        window.__fixtureState = {
+          requests: [...window.__fixtureState.requests, payload],
+          bannerVisible: false,
+        };
+        banner.remove();
+        prefs.remove();
+      }
+
+      banner.querySelector('.secondary').addEventListener('click', () => {
+        prefs.classList.remove('hidden');
+      });
+
+      window.fetch = async (input, init = {}) => {
+        const url = typeof input === 'string' ? input : input?.url ?? '';
+        if (url.endsWith('/api/storefront/consent') && String(init.method || 'GET').toUpperCase() === 'POST') {
+          const payload = JSON.parse(init.body || '{}');
+          finish(payload);
+          return new Response('{}', {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return originalFetch(input, init);
+      };
+    })();
+  </script>
+</body>
+</html>

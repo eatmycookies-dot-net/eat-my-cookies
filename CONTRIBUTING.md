@@ -207,7 +207,7 @@ npm run test:vpn-setup
 
    A browser window opens. Turn the VPN on manually if the script cannot do it automatically, then close the window. The connected session is saved to `.tmp-vpn-profile/` (gitignored).
 
-**Subsequent runs** reuse the saved profile and reconnect automatically:
+**Subsequent runs** clone the saved connected profile into a fresh temporary run profile, so VPN auth is preserved without carrying over stale cookie-consent state from previous validations:
 
 ```bash
 npm run test:e2e:vpn                          # full suite via VPN

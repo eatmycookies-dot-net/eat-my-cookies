@@ -167,6 +167,71 @@ What matters:
 
 No sites currently in the validated inventory — coverage is generic.
 
+### Complianz
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `qualityminds.com` | US/global | Single-site e2e passes June 6, 2026 with and without VPN. `Accept`, `Deny`, and `Custom` are now covered through the visible `View preferences` flow. |
+
+### Pandectes
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `cluse.com` | EU/global | Human-validated June 6, 2026. Public site uses Pandectes rather than Shopify Customer Privacy, so Shopify regressions should not be inferred from this target. |
+
+### Consentmo
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `barebiology.com` | EU/global | Human-validated June 7, 2026. Public site uses Consentmo inside an open shadow-root custom element. The custom path now relies on the logical switch state (`aria-checked` / nested checkbox) rather than just the visual accept/reject half styling. |
+
+### Cookie Information
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `cookieinformation.com` | US/global | Single-site e2e passes June 6, 2026 with and without VPN using the visible `Decline all` path. |
+
+### Borlabs Cookie
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+Public live target still needed for stable regression coverage. Generic preference-save support is implemented.
+
+### Cookie Wow
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+Public live target still needed for stable regression coverage. Generic analytics/marketing toggle handling is implemented.
+
+### Cookie Control by Civic
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `cookiecontrol.com` | US/global | Public banner is visible and the generic handler is implemented, but automated validation currently hits an anti-bot challenge. |
+
+### Truendo
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+`truendo.com` exposes a visible consent dialog. Generic preference-save handling is implemented; a stable automated regression target still needs to be pinned down.
+
+### Clickio
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+Generic preference-save handling is implemented. Public live target still needed for regression coverage.
+
+### cookiesjsr
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+Generic settings-panel handling is implemented via tab traversal (`performance`, `tracking`, `video`). Public live target still needed for stable regression coverage.
+
+### privacymanager.io
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+Generic slider-based handling is implemented. Public live target still needed for stable regression coverage.
+
 ### Iubenda
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
 
@@ -211,6 +276,9 @@ Sites marked 🔵 are lower risk but worth a spot-check if time allows.
 | `dom-handler.js` | reuters.com, bloomberg.com, forbes.com, cnbc.com, schwab.com, ceespronkstore.com | euronews.com, dw.com |
 | `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, disney.com | ft.com |
 | `rules/cmps.json` (Shopify entry) | ceespronkstore.com | — |
+| `rules/cmps.json` (Complianz entry) | qualityminds.com | — |
+| `rules/cmps.json` (Cookie Information entry) | cookieinformation.com | — |
+| `rules/cmps.json` (Cookie Control by Civic entry) | cookiecontrol.com | — |
 | `rules/cmps.json` (Sourcepoint entry) | nytimes.com, theverge.com | spiegel.de |
 | `rules/cmps.json` (Didomi entry) | euronews.com | — |
 | `rules/cmps.json` (ConsentManager entry) | dw.com, bernstein-sanitarios.pt | — |
@@ -408,6 +476,11 @@ Verified in a live headed browser session with a mixed custom profile
 (`functional=true`, `analytics=false`, `advertising=false`, `ccpaDoNotSell=true`):
 `OptanonConsent` was written with `groups=C0004:0,C0003:1,C0002:0,C0001:1`.
 
-**Remaining caveat:** the footer `Your Privacy Choices` / `Cookies Settings` reopen path has been
-inconsistent during manual testing, so CCPA verification is still provisional even though the
-reject and custom flows now close reliably.
+**Footer reopen-path update (June 12, 2026):** Zoom's footer openers are
+`#ot-do-not-sell.ot-sdk-show-settings` (`Your Privacy Choices`) and a second
+`.ot-sdk-show-settings` link (`Cookie Preferences`). The old Zoom-specific cleanup path was too
+destructive: it removed `#onetrust-pc-sdk` plus broad `.ot-sdk-container` / `.ot-sdk-row`
+scaffolding after consent handling, which could break those footer reopen links even though the
+banner itself had been dismissed successfully. Fixed by narrowing Zoom cleanup to remove only
+currently visible OneTrust surfaces, leaving the hidden reusable preference-center structure intact
+for later footer-triggered reopens.

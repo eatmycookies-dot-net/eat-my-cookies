@@ -164,12 +164,141 @@
       }
     },
     {
+      "id": "complianz",
+      "name": "Complianz",
+      "note": "Complianz can expose a simple banner or a preferences drawer with category toggles.",
+      "detectors": [
+        { "type": "css_selector", "value": "#cmplz-cookiebanner-container" },
+        { "type": "css_selector", "value": ".cmplz-cookiebanner" },
+        { "type": "css_selector", "value": ".cmplz-view-preferences" },
+        { "type": "css_selector", "value": ".cmplz-save-preferences" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".cmplz-btn.cmplz-deny" },
+          { "type": "click", "selector": ".cmplz-deny" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".cmplz-btn.cmplz-accept" },
+          { "type": "click", "selector": ".cmplz-accept" }
+        ]
+      }
+    },
+    {
+      "id": "borlabs",
+      "name": "Borlabs Cookie",
+      "note": "Borlabs usually needs the preferences panel for reliable non-accept flows.",
+      "detectors": [
+        { "type": "css_selector", "value": "#BorlabsCookieBox" },
+        { "type": "css_selector", "value": ".show-cookie-box" },
+        { "type": "css_selector", "value": "#CookiePrefSave" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".cookie-box ._brlbs-btn-accept-only-essential" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".cookie-box ._brlbs-btn-accept-all" }
+        ]
+      }
+    },
+    {
+      "id": "cookieinformation",
+      "name": "Cookie Information",
+      "note": "Cookie Information often renders a summary banner that opens into a toggle-based preferences page.",
+      "detectors": [
+        { "type": "css_selector", "value": "#coiOverlay" },
+        { "type": "css_selector", "value": "#ccb-coiOverlay" },
+        { "type": "css_selector", "value": "#coiConsentBanner" },
+        { "type": "css_selector", "value": "#ccb-coiConsentBanner" },
+        { "type": "css_selector", "value": "#coi-banner-wrapper" },
+        { "type": "css_selector", "value": "#ccb-coi-banner-wrapper" },
+        { "type": "css_selector", "value": ".coi-consent-summary" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#ccb-coiConsentBanner #ccb-declineButton" },
+          { "type": "click", "selector": "#ccb-coiOverlay #ccb-declineButton" },
+          { "type": "click", "selector": "#ccb-declineButton" },
+          { "type": "click", "selector": "#coiConsentBanner #declineButton" },
+          { "type": "click", "selector": "#coiOverlay #declineButton" },
+          { "type": "click", "selector": "#declineButton" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#ccb-coiOverlay button.coi-banner__accept" },
+          { "type": "click", "selector": "#ccb-coiConsentBanner .bottom-bar__update-consent" },
+          { "type": "click", "selector": "#ccb-coiConsentBanner #ccb-updateButton" },
+          { "type": "click", "selector": "#ccb-coiOverlay #ccb-updateButton" },
+          { "type": "click", "selector": "#ccb-updateButton" },
+          { "type": "click", "selector": "#coiOverlay button.coi-banner__accept" },
+          { "type": "click", "selector": "#coiConsentBanner .bottom-bar__update-consent" },
+          { "type": "click", "selector": "#coiConsentBanner #updateButton" },
+          { "type": "click", "selector": "#coiOverlay #updateButton" },
+          { "type": "click", "selector": "#updateButton" }
+        ]
+      }
+    },
+    {
+      "id": "cookiewow",
+      "name": "Cookie Wow",
+      "note": "Cookie Wow exposes per-category switches behind a settings button.",
+      "detectors": [
+        { "type": "css_selector", "value": ".cwc-banner-container" },
+        { "type": "css_selector", "value": ".cwc-consent-summary-container" },
+        { "type": "css_selector", "value": ".cwc-setting-button" },
+        { "type": "css_selector", "value": ".cwc-save-setting-wrapper button" }
+      ],
+      "actions": {
+        "accept_all": [
+          { "type": "click", "selector": ".cwc-accept-button" }
+        ]
+      }
+    },
+    {
+      "id": "glowcookies",
+      "name": "GlowCookies",
+      "detectors": [
+        { "type": "css_selector", "value": "#glowCookies-banner" },
+        { "type": "css_selector", "value": ".glowCookies__banner" },
+        { "type": "css_selector", "value": "#acceptCookies" },
+        { "type": "css_selector", "value": "#rejectCookies" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#rejectCookies" },
+          { "type": "click", "selector": "button#rejectCookies" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#acceptCookies" },
+          { "type": "click", "selector": "button#acceptCookies" }
+        ]
+      }
+    },
+    {
+      "id": "cookiecontrolcivic",
+      "name": "Cookie Control by Civic",
+      "note": "Cookie Control can render either a compact notify banner or a full preference dialog with category-level toggles.",
+      "detectors": [
+        { "type": "css_selector", "value": "#ccc-notify .ccc-notify-button" },
+        { "type": "css_selector", "value": "#ccc-content" },
+        { "type": "css_selector", "value": "#ccc[open]" }
+      ],
+      "actions": {
+        "accept_all": [
+          { "type": "click", "selector": "#ccc-recommended-settings" }
+        ]
+      }
+    },
+    {
       "id": "cookieyes",
       "name": "CookieYes",
       "detectors": [
         { "type": "css_selector", "value": "#cookie-law-info-bar" },
         { "type": "css_selector", "value": ".cky-banner-element" },
-        { "type": "css_selector", "value": "#cky-consent-handler" }
+        { "type": "css_selector", "value": "#cky-consent-handler" },
+        { "type": "css_selector", "value": ".cky-consent-container" },
+        { "type": "css_selector", "value": ".cky-btn-customize" },
+        { "type": "css_selector", "value": "button[data-cky-tag='settings-button']" }
       ],
       "actions": {
         "reject_all": [
@@ -179,6 +308,115 @@
         "accept_all": [
           { "type": "click", "selector": ".cky-btn-accept" },
           { "type": "click", "selector": "#cookie_action_close_header" }
+        ]
+      }
+    },
+    {
+      "id": "wordpressgdpr",
+      "name": "WordPress GDPR",
+      "note": "The older WordPress GDPR plugin exposes a banner plus a modal with per-category checkboxes and a Save action.",
+      "detectors": [
+        { "type": "css_selector", "value": ".wpgdprc-consent-bar" },
+        { "type": "css_selector", "value": ".wpgdprc-consent-modal" },
+        { "type": "css_selector", "value": ".wpgdprc-consent-bar__settings" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".wpgdprc-consent-bar__settings" },
+          { "type": "click", "selector": ".wpgdprc-button" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".wpgdprc-consent-bar__button" },
+          { "type": "click", "selector": ".wpgdprc-button" }
+        ]
+      }
+    },
+    {
+      "id": "woocommercestorenotice",
+      "name": "WooCommerce Store Notice",
+      "note": "Not a full CMP, but a common ecommerce storefront notice that blocks content until dismissed.",
+      "detectors": [
+        { "type": "css_selector", "value": ".woocommerce-store-notice" },
+        { "type": "css_selector", "value": ".woocommerce-store-notice__dismiss-link" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".woocommerce-store-notice__dismiss-link" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".woocommerce-store-notice__dismiss-link" }
+        ]
+      }
+    },
+    {
+      "id": "magentocookie",
+      "name": "Magento Cookie Notice",
+      "note": "Magento storefronts often render a lightweight cookie restriction notice rather than a full CMP. When a reject path exists we use it; otherwise we close the notice.",
+      "detectors": [
+        { "type": "css_selector", "value": ".message.global.cookie" },
+        { "type": "css_selector", "value": ".cookie.message" },
+        { "type": "css_selector", "value": "[data-role='cookie-settings']" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".message.global.cookie .action.close" },
+          { "type": "click", "selector": ".cookie.message .action.close" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".message.global.cookie .action.allow" },
+          { "type": "click", "selector": ".message.global.cookie .action.accept" },
+          { "type": "click", "selector": ".cookie.message .action.allow" },
+          { "type": "click", "selector": ".cookie.message .action.accept" }
+        ]
+      }
+    },
+    {
+      "id": "pandectes",
+      "name": "Pandectes GDPR Compliance",
+      "note": "Pandectes exposes a CookieConsent-style banner with a first-party preferences modal and category toggles.",
+      "detectors": [
+        { "type": "css_selector", "value": "#pandectes-banner" },
+        { "type": "css_selector", "value": ".pd-cookie-banner-window" },
+        { "type": "css_selector", "value": "#pd-cp-preferences" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".cc-btn.cc-deny" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".cc-btn.cc-allow" }
+        ]
+      }
+    },
+    {
+      "id": "consentmo",
+      "name": "Consentmo GDPR Compliance",
+      "note": "Consentmo often renders inside a csm-cookie-consent custom element with an open shadow root and CookieConsent-style controls.",
+      "detectors": [
+        { "type": "css_selector", "value": "csm-cookie-consent" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "wait", "selector": "csm-cookie-consent" }
+        ],
+        "accept_all": [
+          { "type": "wait", "selector": "csm-cookie-consent" }
+        ]
+      }
+    },
+    {
+      "id": "bigcommercecatalyst",
+      "name": "BigCommerce Catalyst",
+      "note": "Catalyst storefronts expose a same-origin storefront consent API and render a c15t-powered consent dialog. We persist category choices through the API and only use the DOM for safe dismissal.",
+      "detectors": [
+        { "type": "css_selector", "value": "meta[name='platform'][content='bigcommerce.catalyst']" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "wait", "selector": "meta[name='platform'][content='bigcommerce.catalyst']" }
+        ],
+        "accept_all": [
+          { "type": "wait", "selector": "meta[name='platform'][content='bigcommerce.catalyst']" }
         ]
       }
     },
@@ -195,6 +433,26 @@
         ],
         "accept_all": [
           { "type": "click", "selector": "[data-tid='banner-accept']" }
+        ]
+      }
+    },
+    {
+      "id": "truendo",
+      "name": "Truendo",
+      "detectors": [
+        { "type": "css_selector", "value": "#truendo_container div[class*='tru_cookie-dialog']" },
+        { "type": "css_selector", "value": "#truendo_container #tru_options_btn" },
+        { "type": "css_selector", "value": "#truendo_container [data-cy='action-button-save']" },
+        { "type": "css_selector", "value": "#truendo_container #truendo_fab" },
+        { "type": "css_selector", "value": "#truendo_container [data-cy='tru-fab']" }
+      ],
+      "actions": {
+        "accept_all": [
+          { "type": "click", "selector": "#truendo_container [data-cy='action-button-accept']" }
+        ],
+        "reject_all": [
+          { "type": "click", "selector": "#truendo_container [data-cy='action-button-reject']" },
+          { "type": "click", "selector": "#truendo_container .tru-reject-btn" }
         ]
       }
     },
@@ -353,6 +611,50 @@
         "accept_all": [
           { "type": "click", "selector": ".klaro .cm-btn-success" },
           { "type": "click", "selector": ".klaro .cn-ok" }
+        ]
+      }
+    },
+    {
+      "id": "clickio",
+      "name": "Clickio",
+      "detectors": [
+        { "type": "css_selector", "value": "#cl-consent" },
+        { "type": "css_selector", "value": ".cl-consent__inner" },
+        { "type": "css_selector", "value": ".cl-consent__btn--outline" }
+      ],
+      "actions": {
+        "accept_all": [
+          { "type": "click", "selector": ".cl-consent__btn:not(.cl-consent__btn--outline)" },
+          { "type": "click", "selector": ".cl-consent__btn--primary" }
+        ]
+      }
+    },
+    {
+      "id": "cookiesjsr",
+      "name": "cookiesjsr",
+      "detectors": [
+        { "type": "css_selector", "value": "#cookiesjsr" },
+        { "type": "css_selector", "value": ".cookiesjsr--app" },
+        { "type": "css_selector", "value": ".cookiesjsr-settings" }
+      ],
+      "actions": {
+        "accept_all": [
+          { "type": "click", "selector": ".cookiesjsr-btn.allowAll" },
+          { "type": "click", "selector": ".cookiesjsr-layer--actions .allow-all" }
+        ]
+      }
+    },
+    {
+      "id": "privacymanager",
+      "name": "privacymanager.io",
+      "detectors": [
+        { "type": "css_selector", "value": ".notice-title" },
+        { "type": "css_selector", "value": "#manageSettings" },
+        { "type": "css_selector", "value": "#saveAndExit" }
+      ],
+      "actions": {
+        "accept_all": [
+          { "type": "click", "selector": "#saveAndExit" }
         ]
       }
     }

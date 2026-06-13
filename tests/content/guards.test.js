@@ -336,6 +336,21 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain("if (!siteSpecificWatchStarted && isKetchSite()) scheduleDynamicSiteSpecificWatch();");
   });
 
+  it('reports partial WooCommerce and Magento platform support through the existing site-warning path', () => {
+    expect(source).toContain('async function reportDomResult(result, prefs) {');
+    expect(source).toContain('async function syncPlatformSupportWarning(result, prefs) {');
+    expect(source).toContain('function shouldManagePlatformSupportWarning(result) {');
+    expect(source).toContain('function getPlatformSupportWarning(result, prefs) {');
+    expect(source).toContain("method.startsWith('dom:woocommercestorenotice')");
+    expect(source).toContain("method.startsWith('dom:magentocookie')");
+    expect(source).toContain("method.startsWith('dom:bigcommercecatalyst')");
+    expect(source).toContain("type: 'REPORT_UNSUPPORTED_SITE'");
+    expect(source).toContain("type: 'CLEAR_UNSUPPORTED_SITE'");
+    expect(source).toContain('WooCommerce store notices are only dismissible banners, not full consent managers.');
+    expect(source).toContain('Magento’s native cookie notice only exposes an allow-or-close flow.');
+    expect(source).toContain('switch this site to Accept All.');
+  });
+
   it('has a dedicated config for The RealReal (privacy-page-only Ketch, no banner)', () => {
     expect(source).toContain("'www.therealreal.com'");
     expect(source).toContain("'therealreal.com'");
@@ -363,6 +378,50 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('function findButtonByNavAction(action)');
     expect(source).toContain("JSON.parse(atob(raw))");
     expect(source).toContain("decoded?.action === action");
+  });
+
+  it('fails Ketch flows if the privacy center cannot actually be exited and keeps LiveRamp rooted on the homepage', () => {
+    expect(source).toContain("'liveramp.com': {");
+    expect(source).toContain("'www.liveramp.com': {");
+    expect(source).toContain("homeUrl: 'https://liveramp.com/'");
+    expect(source).toContain("homeUrl: 'https://www.liveramp.com/'");
+    expect(source).toContain("consentCookieName: '_ketch_consent_v1_'");
+    expect(source).toContain('if (shouldUseDirectKetchCookieFlow(config)) {');
+    expect(source).toContain("await handleKetchViaConsentCookie(siteOverrides, prefs, config, { persistOnly: true });");
+    expect(source).toContain('const { persistOnly = false } = options;');
+    expect(source).toContain("analytics: buildLiveRampKetchPurpose('analytics', Boolean(prefs?.analytics))");
+    expect(source).toContain('const essentialServicesEnabled = true;');
+    expect(source).toContain("essential_services: buildLiveRampKetchPurpose('essential_services', essentialServicesEnabled)");
+    expect(source).toContain("behavioral_advertising: buildLiveRampKetchPurpose('behavioral_advertising', Boolean(prefs?.advertising))");
+    expect(source).toContain('const cookieOptions = {');
+    expect(source).toContain("writeCookie('_swb_consent_', payloads.swb, cookieOptions)");
+    expect(source).toContain("writeCookie('_swb_consent__metadata', payloads.metadata, cookieOptions)");
+    expect(source).toContain('safeLocalStorageSet(config.consentCookieName, payloads.ketch)');
+    expect(source).toContain("safeLocalStorageSet('_swb_consent_', payloads.swb)");
+    expect(source).toContain("safeLocalStorageSet('_swb_consent__metadata', payloads.metadata)");
+    expect(source).toContain("behavioral_advertising: buildLiveRampSwbPurpose('behavioral_advertising', Boolean(prefs?.advertising), 'consent_optin')");
+    expect(source).toContain("essential_services: buildLiveRampSwbPurpose('essential_services', essentialServicesEnabled, 'consent_optout')");
+    expect(source).toContain('function createLiveRampConsentMetadata() {');
+    expect(source).toContain('function readLiveRampJsonState(key) {');
+    expect(source).toContain("decodeBase64JsonCookie(safeLocalStorageGet(key))");
+    expect(source).toContain('function liveRampConsentMatches(prefs) {');
+    expect(source).toContain("swb.purposes?.essential_services?.allowed === String(essentialServicesEnabled)");
+    expect(source).toContain('function suppressLiveRampBanner(durationMs = 15000) {');
+    expect(source).toContain("domain: '.liveramp.com'");
+    expect(source).toContain("sameSite: 'None'");
+    expect(source).toContain('return btoa(JSON.stringify(value));');
+    expect(source).toContain('site_specific:ketch:cookie');
+    expect(source).toContain('postSaveWaitMs: 5000');
+    expect(source).toContain('skipExitAfterSave: true');
+    expect(source).toContain("'data-nav-action:close'");
+    expect(source).toContain("'data-nav-action:back'");
+    expect(source).toContain('const postSaveWaitMs = config.postSaveWaitMs ?? 2000;');
+    expect(source).toContain('const dismissed = await waitForSelectorsToDisappear(config.bannerWatchSelectors, postSaveWaitMs);');
+    expect(source).toContain("} else if (!(await exitKetchPrivacyCenter(config))) {");
+    expect(source).toContain('async function exitKetchPrivacyCenter(config) {');
+    expect(source).toContain('if (!isKetchPrivacyCenterPage(config)) return true;');
+    expect(source).toContain('location.reload();');
+    expect(source).toContain('return !isKetchPrivacyCenterPage(config);');
   });
 
   it('watches late-rendering Bloomberg and Forbes site-specific flows', () => {
@@ -422,6 +481,78 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain("'#shopify-pc__prefs__header-save'");
     expect(source).toContain("intervalId = setInterval(() => {");
     expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: redispatchPrefs }));");
+  });
+});
+
+describe('dom-handler.js — platform/CMP coverage', () => {
+  const source = readSource('content/dom-handler.js');
+
+  it('includes Pandectes handlers for accept, reject, custom, and CCPA-style custom flows', () => {
+    expect(source).toContain('PANDECTES_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain("cmp.id === 'pandectes'");
+    expect(source).toContain('executePandectesFlow');
+    expect(source).toContain('platformCustomMethodForPrefs(\'pandectes\'');
+    expect(source).toContain('#pandectes-banner');
+    expect(source).toContain('#pd-cp-preferences');
+  });
+
+  it('includes Consentmo shadow-root handling for custom category flows', () => {
+    expect(source).toContain('CONSENTMO_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain("cmp.id === 'consentmo'");
+    expect(source).toContain('executeConsentmoFlow');
+    expect(source).toContain('findConsentmoHost');
+    expect(source).toContain('consentmoShadowRoot');
+    expect(source).toContain('waitForConsentmoDismissal');
+    expect(source).toContain('setConsentmoCategoryState');
+    expect(source).toContain('setConsentmoSwitchState');
+    expect(source).toContain('csm-cookie-consent');
+  });
+
+  it('hardens Complianz for view-preferences layouts with category rows and save buttons', () => {
+    expect(source).toContain('COMPLIANZ_OPEN_SELECTORS');
+    expect(source).toContain('COMPLIANZ_SAVE_SELECTORS');
+    expect(source).toContain('setComplianzCategoryState');
+    expect(source).toContain('.cmplz-category');
+    expect(source).toContain('view preferences|manage consent|preferences');
+  });
+
+  it('keeps CookieYes advertising separate from CCPA sell-share choices and syncs Borlabs consent cookies', () => {
+    expect(source).toContain("'#ccb-coiOverlay'");
+    expect(source).toContain("'#ccb-coi-banner-wrapper'");
+    expect(source).toContain("'#ccb-show_details'");
+    expect(source).toContain("'#show_details'");
+    expect(source).toContain('function wantsAdvertisingCategoryConsent(prefs) {');
+    expect(source).toContain('return Boolean(prefs?.advertising);');
+    expect(source).toContain('const desiredAdvertising = wantsAdvertisingCategoryConsent(flowPrefs);');
+    expect(source).not.toContain("const desiredAdvertising = Boolean(flowPrefs.advertising) && flowPrefs.ccpaDoNotSell === false;");
+    expect(source).toContain("['switch-cookie_cat_marketing', 'cookie_cat_marketing'],");
+    expect(source).toContain('syncBorlabsGoogleConsentCookie(flowPrefs);');
+    expect(source).toContain('function syncBorlabsGoogleConsentCookie(prefs) {');
+    expect(source).toContain("analytics_storage: prefs.analytics ? 'granted' : 'denied'");
+    expect(source).toContain("functionality_storage: prefs.functional ? 'granted' : 'denied'");
+    expect(source).toContain("ad_storage: wantsAdvertisingCategoryConsent(prefs) ? 'granted' : 'denied'");
+    expect(source).toContain("document.dispatchEvent(new Event('borlabs-cookie-consent-saved'));");
+  });
+
+  it('uses Truendo consent-state APIs and cookie sync before falling back to the panel UI', () => {
+    expect(source).toContain('const apiResult = await executeTruendoApiFlow(prefs);');
+    expect(source).toContain('async function executeTruendoApiFlow(prefs) {');
+    expect(source).toContain('buildTruendoDesiredState(flowPrefs);');
+    expect(source).toContain('syncTruendoConsentCookie(desiredState);');
+    expect(source).toContain('window.Truendo[methodName]();');
+    expect(source).toContain("`truendo_cmp=${encodeURIComponent(JSON.stringify(next))}`");
+    expect(source).toContain('await waitForTruendoConsentState(desiredState, 2500)');
+  });
+
+  it('waits for Truendo transient panels to close instead of treating the floating fab as a blocking banner', () => {
+    expect(source).toContain('async function waitForTruendoTransientSurfacesToClose(timeoutMs = 5000) {');
+    expect(source).toContain("'#truendo_container [data-cy=\"tru-panel\"]'");
+    expect(source).toContain("'#truendo_container [data-cy=\"tru-panel-close\"]'");
+    expect(source).toContain("'#truendo_container button.tru_title__close'");
+    expect(source).toContain("'#truendo_container div[class*=\"tru_cookie-dialog\"]'");
+    expect(source).toContain('if (await waitForTruendoTransientSurfacesToClose(5000)) {');
+    expect(source).toContain('if (!(await waitForTruendoTransientSurfacesToClose(5000))) return false;');
+    expect(source).not.toContain('waitForDismissal(cmp, selectorActions(truendoDismissSelectors()), 5000)');
   });
 });
 
@@ -583,6 +714,13 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain("'#cookiescript_manage_wrap'");
     expect(source).not.toContain("instance.acceptAction(categories);");
   });
+
+  it('treats the Truendo cookie as the primary consent source and returns success after dispatch', () => {
+    expect(source).toContain("document.cookie.split('; ').find((entry) => entry.startsWith('truendo_cmp='))");
+    expect(source).toContain('const verified = await waitForTruendoConsentState(w, desiredState, 4000);');
+    expect(source).toContain("method: prefs.globalPreference === 'custom'");
+    expect(source).toContain('return true;');
+  });
 });
 
 describe('dom-handler.js — BBC onetrust save guard', () => {
@@ -709,6 +847,33 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
     expect(source).toContain("'cookiescript_category_targeting'");
     expect(source).toContain("'cookiescript_category_unclassified'");
     expect(source).toContain('Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false');
+  });
+
+  it('includes generic WordPress, WooCommerce, Magento, and BigCommerce storefront consent flows', () => {
+    expect(source).toContain("if (cmp.id === 'wordpressgdpr') {");
+    expect(source).toContain('executeWordPressGdprFlow');
+    expect(source).toContain('WORDPRESSGDPR_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain('setWordPressGdprCategoryState');
+    expect(source).toContain('findWordPressGdprCategoryToggle');
+    expect(source).toContain("'.wpgdprc-consent-bar'");
+    expect(source).toContain("'.wpgdprc-consent-bar__settings'");
+    expect(source).toContain("'.wpgdprc-consent-bar__button'");
+    expect(source).toContain("'.woocommerce-store-notice'");
+    expect(source).toContain("'.woocommerce-store-notice__dismiss-link'");
+    expect(source).toContain("if (cmp.id === 'bigcommercecatalyst') {");
+    expect(source).toContain('executeBigCommerceCatalystFlow');
+    expect(source).toContain('BIGCOMMERCE_CATALYST_PLATFORM_SELECTOR');
+    expect(source).toContain("meta[name=\"platform\"][content=\"bigcommerce.catalyst\"]");
+    expect(source).toContain('persistBigCommerceCatalystConsent');
+    expect(source).toContain('buildBigCommerceCatalystConsentPayload');
+    expect(source).toContain("fetch('/api/storefront/consent'");
+    expect(source).toContain("if (cmp.id === 'magentocookie') {");
+    expect(source).toContain('executeMagentoCookieFlow');
+    expect(source).toContain('MAGENTO_COOKIE_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain('MAGENTO_COOKIE_ACCEPT_SELECTORS');
+    expect(source).toContain('MAGENTO_COOKIE_REJECT_SELECTORS');
+    expect(source).toContain("'.message.global.cookie'");
+    expect(source).toContain("'.cookie.message'");
   });
 });
 
