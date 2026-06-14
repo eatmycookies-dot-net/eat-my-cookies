@@ -334,12 +334,14 @@ const COOKIECONTROLCIVIC_ACTIONABLE_SURFACE_SELECTORS = [
   '#ccc-content',
   '#ccc[open]',
   '#ccc-close',
+  '.ccc-close-button',
   '#ccc-dismiss-button',
   '#ccc-recommended-settings',
 ];
 const COOKIECONTROLCIVIC_PREFERENCE_SELECTORS = [
   '#ccc-recommended-settings',
   '#ccc-dismiss-button',
+  '.ccc-close-button',
   '#ccc-end',
   '#cc-end',
   '#ccc-optional-categories .optional-cookie',
@@ -349,11 +351,12 @@ const COOKIECONTROLCIVIC_PREFERENCE_SELECTORS = [
   '#iab-special-purpose-options .checkbox-toggle-input',
   '#ccc-optional-categories .checkbox-toggle-input',
   '#ccc-close',
-  '#ccc-icon',
 ];
 const COOKIECONTROLCIVIC_OPEN_SELECTORS = [
-  '#ccc #ccc-notify .ccc-notify-button',
-  '#ccc-notify .ccc-notify-button',
+  '#ccc #ccc-notify .ccc-notify-link',
+  '#ccc-notify .ccc-notify-link',
+  '#ccc #ccc-notify .ccc-notify-button.ccc-notify-link',
+  '#ccc-notify .ccc-notify-button.ccc-notify-link',
   '#ccc-icon',
 ];
 const TRUENDO_ACTIONABLE_SURFACE_SELECTORS = [
@@ -1515,8 +1518,8 @@ async function executeCookieControlCivicFlow(cmp, prefs) {
 
   const flowPrefs = normalizeImportedFlowPrefs(prefs);
   const closeBannerIfPresent = async () => {
-    const closed = clickFirstVisibleNative(['#ccc-close']) ||
-      clickFirstVisible(['#ccc-close']);
+    const closed = clickFirstVisibleNative(['#ccc-close', '.ccc-close-button']) ||
+      clickFirstVisible(['#ccc-close', '.ccc-close-button']);
     if (!closed) return false;
     return waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 5000);
   };
@@ -1537,13 +1540,7 @@ async function executeCookieControlCivicFlow(cmp, prefs) {
     }
   }
   const preferencesVisible = hasVisibleSelector(COOKIECONTROLCIVIC_PREFERENCE_SELECTORS);
-  const opened = preferencesVisible ||
-    openCookieControlCivicPreferenceCenter() ||
-    clickButtonByTextWithinNative(document, /(?:cookie preferences|settings)/i) ||
-    clickButtonByTextWithin(document, /(?:cookie preferences|settings)/i) ||
-    clickFirstVisible(COOKIECONTROLCIVIC_OPEN_SELECTORS);
-  if (!opened) return false;
-  if (!(await waitForAnyVisible(COOKIECONTROLCIVIC_PREFERENCE_SELECTORS, 4000))) return false;
+  if (!preferencesVisible && !(await ensureCookieControlCivicPreferenceCenterVisible())) return false;
 
   const desiredFunctional = Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept';
   const desiredAnalytics = Boolean(flowPrefs.analytics);
@@ -1578,6 +1575,7 @@ async function executeCookieControlCivicFlow(cmp, prefs) {
     advertising: desiredAdvertising,
     uncategorized: flowPrefs.uncategorized,
   });
+  await expandCookieControlCivicIabSections();
   const appliedIabInputs = await setCookieControlCivicIabPurposeStates({
     functional: desiredFunctional,
     analytics: desiredAnalytics,
@@ -1589,9 +1587,7 @@ async function executeCookieControlCivicFlow(cmp, prefs) {
   if (appliedCount === 0 || appliedResults.includes(false)) return false;
 
   await delay(250);
-  if (!(clickFirstVisibleNative(['#ccc-dismiss-button', '#ccc-close']) ||
-        clickFirstVisible(['#ccc-dismiss-button', '#ccc-close']))) return false;
-  if (!(await waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 5000))) return false;
+  if (!(await finalizeCookieControlCivicPreferences(cmp))) return false;
 
   return prefs.globalPreference === 'custom' ? 'dom:cookiecontrolcivic:custom' : `dom:cookiecontrolcivic:${prefs.globalPreference}`;
 }
@@ -3095,6 +3091,7 @@ function cookieControlCivicDismissSelectors() {
     '#ccc-content',
     '#ccc[open]',
     '#ccc-close',
+    '.ccc-close-button',
     '#ccc-dismiss-button',
     '#ccc-recommended-settings',
   ];
@@ -3806,6 +3803,77 @@ function openCookieControlCivicPreferenceCenter() {
   return false;
 }
 
+async function ensureCookieControlCivicPreferenceCenterVisible() {
+  if (hasVisibleSelector(COOKIECONTROLCIVIC_PREFERENCE_SELECTORS)) return true;
+
+  if (openCookieControlCivicPreferenceCenter() &&
+      (await waitForAnyVisible(COOKIECONTROLCIVIC_PREFERENCE_SELECTORS, 2500))) {
+    return true;
+  }
+
+  if ((clickButtonByTextWithinNative(document, /(?:cookie preferences|settings|cookie mix|customi[sz]e)/i) ||
+       clickButtonByTextWithin(document, /(?:cookie preferences|settings|cookie mix|customi[sz]e)/i) ||
+       clickFirstVisible(COOKIECONTROLCIVIC_OPEN_SELECTORS)) &&
+      (await waitForAnyVisible(COOKIECONTROLCIVIC_PREFERENCE_SELECTORS, 2500))) {
+    return true;
+  }
+
+  return hasVisibleSelector(COOKIECONTROLCIVIC_PREFERENCE_SELECTORS);
+}
+
+async function expandCookieControlCivicIabSections() {
+  const selectors = [
+    '#iab-purpose button[aria-controls]',
+    '#iab-special-purpose button[aria-controls]',
+    '#iab-feature button[aria-controls]',
+    '#iab-specialFeatureOptins button[aria-controls]',
+  ];
+
+  let expandedAny = false;
+  for (const selector of selectors) {
+    const button = firstVisibleElement([selector]);
+    if (!button) continue;
+    if (button.getAttribute('aria-expanded') === 'true') continue;
+    const controlsId = button.getAttribute('aria-controls');
+    const target = controlsId ? document.getElementById(controlsId) : null;
+    if (dispatchNativeClick(button) || dispatchSyntheticClick(button)) {
+      expandedAny = true;
+      await delay(150);
+      if (target && !isVisible(target)) {
+        await waitForAnyVisible([`#${controlsId} .checkbox-toggle-input`, `#${controlsId} .optional-cookie`, `#${controlsId}`], 1200);
+      }
+    }
+  }
+
+  return expandedAny;
+}
+
+async function finalizeCookieControlCivicPreferences(cmp) {
+  const controller = window.ClickControl ?? window.CookieControl;
+  const saved = clickFirstVisibleNative(['#ccc-dismiss-button', '.ccc-close-button']) ||
+    clickFirstVisible(['#ccc-dismiss-button', '.ccc-close-button']);
+  if (!saved) return false;
+
+  if (await waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 1500)) {
+    return true;
+  }
+
+  if (controller && typeof controller.hide === 'function') {
+    try {
+      controller.hide();
+      if (await waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 2500)) {
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  const closed = clickFirstVisibleNative(['#ccc-close']) ||
+    clickFirstVisible(['#ccc-close']);
+  if (!closed) return false;
+
+  return waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 5000);
+}
+
 async function setCookieControlCivicOptionalInputs(flowPrefs) {
   const toggles = Array.from(document.querySelectorAll('#ccc-optional-categories .checkbox-toggle-input'));
   if (toggles.length === 0) return null;
@@ -3834,30 +3902,57 @@ async function setCookieControlCivicOptionalInputs(flowPrefs) {
 }
 
 async function setCookieControlCivicIabPurposeStates(flowPrefs) {
-  const toggles = Array.from(document.querySelectorAll('#iab-purpose .checkbox-toggle-input[id^="object-purpose-"], #iab-purpose input.checkbox-toggle-input[id^="purpose-"]'));
-  if (toggles.length === 0) return null;
-
-  const advertisingIds = new Set(['2', '3', '4', '5', '6', '8']);
+  const advertisingIds = new Set(['2', '3', '4', '5', '6', '8', '11']);
   const analyticsIds = new Set(['7', '9', '10']);
   const functionalIds = new Set(['1']);
   const results = [];
 
-  for (const toggle of toggles) {
-    if (!(toggle instanceof HTMLInputElement)) continue;
-    const match = toggle.id.match(/(?:object-purpose-|purpose-)(\d+)/);
-    if (!match) continue;
-    const purposeId = match[1];
-    let desired = false;
+  const readDesiredPurposeState = (purposeId) => {
+    if (!purposeId) return false;
     if (analyticsIds.has(purposeId)) {
-      desired = Boolean(flowPrefs.analytics);
-    } else if (advertisingIds.has(purposeId)) {
-      desired = Boolean(flowPrefs.advertising);
-    } else if (functionalIds.has(purposeId)) {
-      desired = Boolean(flowPrefs.functional);
-    } else {
-      desired = false;
+      return Boolean(flowPrefs.analytics);
     }
-    results.push(await setCheckboxState(toggle, desired));
+    if (advertisingIds.has(purposeId)) {
+      return Boolean(flowPrefs.advertising);
+    }
+    if (functionalIds.has(purposeId)) {
+      return Boolean(flowPrefs.functional);
+    }
+    return false;
+  };
+
+  const sections = Array.from(document.querySelectorAll('#iab-purpose .optional-cookie--iab.iab-purpose, #iab-purpose .optional-cookie.iab-purpose'));
+  for (const section of sections) {
+    if (!isVisible(section)) continue;
+
+    const consentToggle = section.querySelector('.checkbox-toggle-label input.checkbox-toggle-input:not([id])');
+    if (consentToggle instanceof HTMLInputElement) {
+      const consentLabel = section.querySelector('.checkbox-toggle-text')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      const consentMatch = consentLabel.match(/\bpurpose\s+(\d+)\b/i);
+      const purposeId = consentMatch ? `${Number(consentMatch[1]) + 1}` : '';
+      const desired = readDesiredPurposeState(purposeId);
+      results.push(await setCheckboxState(consentToggle, desired));
+    }
+
+    const legitimateInterestToggle = section.querySelector('.iab-object input.checkbox-toggle-input[id^="object-purpose-"], .iab-object input.checkbox-toggle-input[id^="purpose-"]');
+    if (legitimateInterestToggle instanceof HTMLInputElement) {
+      const match = legitimateInterestToggle.id.match(/(?:object-purpose-|purpose-)(\d+)/);
+      const purposeId = `${legitimateInterestToggle.value || match?.[1] || ''}`.trim();
+      const desired = readDesiredPurposeState(purposeId);
+      results.push(await setCheckboxState(legitimateInterestToggle, desired));
+    }
+  }
+
+  if (results.length === 0) {
+    const toggles = Array.from(document.querySelectorAll('#iab-purpose .checkbox-toggle-input[id^="object-purpose-"], #iab-purpose input.checkbox-toggle-input[id^="purpose-"]'));
+    for (const toggle of toggles) {
+      if (!(toggle instanceof HTMLInputElement)) continue;
+      const match = toggle.id.match(/(?:object-purpose-|purpose-)(\d+)/);
+      const purposeId = `${toggle.value || match?.[1] || ''}`.trim();
+      if (!purposeId) continue;
+      const desired = readDesiredPurposeState(purposeId);
+      results.push(await setCheckboxState(toggle, desired));
+    }
   }
 
   if (results.length === 0) return null;

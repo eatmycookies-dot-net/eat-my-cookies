@@ -24,26 +24,38 @@
     _pendingCallbacks = [];
   }, { once: true });
 
+  function invokeCallback(callback, ...args) {
+    if (typeof callback !== 'function') return false;
+    callback(...args);
+    return true;
+  }
+
   window.__tcfapi = function (command, version, callback, parameter) {
     switch (command) {
       case 'getTCData':
       case 'addEventListener':
         if (_prefs) {
-          callback(buildTCData(_prefs), true);
-        } else {
+          invokeCallback(callback, buildTCData(_prefs), true);
+          return buildTCData(_prefs);
+        }
+        if (typeof callback === 'function') {
           // Prefs not yet loaded — queue until the event arrives
           _pendingCallbacks.push(callback);
         }
         break;
       case 'removeEventListener':
         _pendingCallbacks = _pendingCallbacks.filter((cb) => cb !== callback);
-        callback(true);
-        break;
+        invokeCallback(callback, true);
+        return true;
       case 'ping':
-        callback({ gdprApplies: true, cmpLoaded: true, cmpStatus: 'loaded', displayStatus: 'hidden', apiVersion: '2.2', cmpVersion: 1, cmpId: 0, gvlVersion: 0, tcfPolicyVersion: 2 }, true);
-        break;
+        {
+          const pingResult = { gdprApplies: true, cmpLoaded: true, cmpStatus: 'loaded', displayStatus: 'hidden', apiVersion: '2.2', cmpVersion: 1, cmpId: 0, gvlVersion: 0, tcfPolicyVersion: 2 };
+          invokeCallback(callback, pingResult, true);
+          return pingResult;
+        }
       default:
-        callback(null, false);
+        invokeCallback(callback, null, false);
+        return null;
     }
   };
 

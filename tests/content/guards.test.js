@@ -534,6 +534,22 @@ describe('dom-handler.js — platform/CMP coverage', () => {
     expect(source).toContain("document.dispatchEvent(new Event('borlabs-cookie-consent-saved'));");
   });
 
+  it('uses Civic purpose values for IAB custom toggles and accepts the dedicated close button class', () => {
+    expect(source).toContain("'.ccc-close-button'");
+    expect(source).toContain('.ccc-notify-link');
+    expect(source).toContain('/(?:cookie preferences|settings|cookie mix|customi[sz]e)/i');
+    expect(source).toContain('async function ensureCookieControlCivicPreferenceCenterVisible() {');
+    expect(source).toContain('async function expandCookieControlCivicIabSections() {');
+    expect(source).toContain('async function finalizeCookieControlCivicPreferences(cmp) {');
+    expect(source).toContain('const controller = window.ClickControl ?? window.CookieControl;');
+    expect(source).toContain("if (controller && typeof controller.hide === 'function') {");
+    expect(source).toContain("'#iab-purpose button[aria-controls]'");
+    expect(source).toContain("const purposeId = `${toggle.value || match?.[1] || ''}`.trim();");
+    expect(source).toContain("const advertisingIds = new Set(['2', '3', '4', '5', '6', '8', '11']);");
+    expect(source).toContain("const analyticsIds = new Set(['7', '9', '10']);");
+    expect(source).toContain("const functionalIds = new Set(['1']);");
+  });
+
   it('uses Truendo consent-state APIs and cookie sync before falling back to the panel UI', () => {
     expect(source).toContain('const apiResult = await executeTruendoApiFlow(prefs);');
     expect(source).toContain('async function executeTruendoApiFlow(prefs) {');
@@ -1326,5 +1342,39 @@ describe('tcf-interceptor.js — guardian hostname: __tcfapi NOT defined', () =>
     vm.runInContext(source, context);
 
     expect(typeof sandbox.window.__tcfapi).toBe('function');
+  });
+
+  it('tolerates __tcfapi calls without a callback on non-guardian hosts', () => {
+    const source = readSource('content/tcf-interceptor.js');
+
+    const listeners = new Map();
+    const sandbox = {
+      window: {
+        location: { hostname: 'www.bbc.com' },
+        __tcfapi: undefined,
+        __tcfapiBuffer: undefined,
+      },
+      document: {
+        addEventListener: vi.fn((name, handler) => listeners.set(name, handler)),
+      },
+      console: { log: vi.fn(), warn: vi.fn() },
+    };
+
+    const context = vm.createContext(sandbox);
+    vm.runInContext(source, context);
+
+    listeners.get('__emc_prefs__')?.({
+      detail: {
+        globalPreference: 'custom',
+        functional: true,
+        analytics: false,
+        advertising: false,
+      },
+    });
+
+    expect(() => sandbox.window.__tcfapi('ping', 2)).not.toThrow();
+    expect(() => sandbox.window.__tcfapi('getTCData', 2)).not.toThrow();
+    expect(() => sandbox.window.__tcfapi('removeEventListener', 2)).not.toThrow();
+    expect(() => sandbox.window.__tcfapi('unsupportedCommand', 2)).not.toThrow();
   });
 });

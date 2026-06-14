@@ -1666,7 +1666,7 @@
       "categoryPreferences": {
         "functional": true,
         "analytics": false,
-        "advertising": true,
+        "advertising": false,
         "ccpaDoNotSell": true,
         "uncategorized": "reject"
       },
@@ -1677,6 +1677,7 @@
       ],
       "consentSelectors": [
         "#ccc-dismiss-button",
+        ".ccc-close-button",
         "#ccc-close",
         "#ccc-notify .ccc-notify-button"
       ]
@@ -1704,6 +1705,7 @@
       ],
       "consentSelectors": [
         "#ccc-dismiss-button",
+        ".ccc-close-button",
         "#ccc-close",
         "#ccc-notify .ccc-notify-button"
       ]
@@ -1731,6 +1733,7 @@
       ],
       "consentSelectors": [
         "#ccc-dismiss-button",
+        ".ccc-close-button",
         "#ccc-close",
         "#ccc-notify .ccc-notify-button"
       ]
