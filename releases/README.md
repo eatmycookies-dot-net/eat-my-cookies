@@ -10,6 +10,45 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ---
 
+## v1.2.1
+
+### GitHub Cookie Preferences
+
+- Added a dedicated `github.com` site-specific handler for GitHub's cookie-preferences dialog instead of relying on fragile text-only matching.
+- The handler now sets each visible radio group deliberately, saves through the dialog's real `Save changes` path, and records the outcome as a site-specific action.
+- Excluded GitHub from incidental ConsentManager frame handling so unrelated frame patterns do not steal the flow or over-count activity.
+
+### Ketch / LiveRamp Stabilization
+
+- Hardened generic and site-specific Ketch handling so the extension distinguishes between:
+  - full privacy-center flows that must be saved through the UI
+  - US-style cookie-write flows where consent can be persisted directly and the page reloaded safely
+- Fixed `liveramp.com` custom handling so the extension no longer treats an existing-but-incomplete Ketch consent cookie as success and now uses the correct Ketch flow per surface.
+- Added a manual-open guard for Ketch privacy centers so if a user opens the panel themselves from footer or in-page controls, the extension does not immediately fight that interaction and re-apply consent.
+- Tightened `ketch.com` handling specifically:
+  - removed false-positive privacy-center detection caused by homepage marketing sections like `#analytics`
+  - stopped using banner paths that actually navigate to product pages instead of dismissing consent UI
+  - added safer save/auto-close behavior for overlays that should dismiss without an explicit exit click
+- Improved validator reliability for Ketch-powered sites by:
+  - strengthening extension preference writes when multiple service workers are present
+  - falling back to the extension popup page when Playwright cannot reach the extension service worker directly
+  - adding a dedicated `tests/test-ketch.js` helper for focused Ketch regression runs
+
+### Cookie Control by Civic
+
+- Fixed Cookie Control by Civic custom handling to better support full preference-center deployments, not just compact notify banners.
+- Added support for the dedicated Civic close/save button class `.ccc-close-button` and broader preference-center opening selectors such as `.ccc-notify-link`.
+- Expanded Civic custom handling to:
+  - open the real preference center before applying settings
+  - expand IAB purpose sections before touching their toggles
+  - map custom decisions from the actual Civic input values instead of relying only on numeric suffixes in ids
+- Adjusted Civic advertising purpose coverage to include purpose id `11`, which was missing from the prior mapping.
+- Hardened the final save path so Civic custom flows can fall back to the platform API when a simple button click does not dismiss the modal cleanly.
+- Fixed the shared TCF interceptor so callback-less `__tcfapi` calls no longer throw during Civic save/hide flows, which was blocking consent persistence on some sites.
+- Updated Civic regression targets in `tests/sites.json`, including the Peterborough custom expectation (`advertising: false`) and selector coverage for Civic close/save buttons.
+
+---
+
 ## v1.2.0
 
 ### OneTrust Follow-Ups

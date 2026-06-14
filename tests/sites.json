@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "sites": [
     {
       "name": "The Guardian (EU/GDPR)",
@@ -623,7 +623,7 @@
       "consentSelectors": []
     },
     {
-      "name": "El Pa\u00eds",
+      "name": "El País",
       "url": "https://elpais.com/",
       "region": "EU",
       "locale": "es-ES",
@@ -658,7 +658,7 @@
       ]
     },
     {
-      "name": "ABC Espa\u00f1a",
+      "name": "ABC España",
       "url": "https://www.abc.es/",
       "region": "EU",
       "locale": "es-ES",
@@ -673,7 +673,7 @@
         ".evolok-agree-button",
         "#didomi-notice-agree-button"
       ],
-      "note": "Evolok paywall. Reject requires paid subscription (\u20ac3.99+/month). Accept is the only free path. Extension handles accept_all only."
+      "note": "Evolok paywall. Reject requires paid subscription (€3.99+/month). Accept is the only free path. Extension handles accept_all only."
     },
     {
       "name": "La Vanguardia",
@@ -761,7 +761,7 @@
       "consentSelectors": []
     },
     {
-      "name": "P\u00fablico",
+      "name": "Público",
       "url": "https://www.publico.pt/",
       "region": "EU",
       "locale": "pt-PT",
@@ -1146,7 +1146,7 @@
       "acceptLanguage": "en-GB,en;q=0.9",
       "cmp": "Didomi",
       "tier": "site-specific",
-      "note": "Didomi detected by script fingerprint but banner not found in e2e \u2014 may use a delayed or iframe-based Didomi variant. Requires --vpn to load (bot-protected). Needs human validation to confirm banner selectors.",
+      "note": "Didomi detected by script fingerprint but banner not found in e2e — may use a delayed or iframe-based Didomi variant. Requires --vpn to load (bot-protected). Needs human validation to confirm banner selectors.",
       "bannerSelectors": [
         "#didomi-host",
         "#didomi-popup",
@@ -1159,7 +1159,7 @@
       ]
     },
     {
-      "name": "Econom\u00eda Digital",
+      "name": "Economía Digital",
       "url": "https://www.economiadigital.es/",
       "region": "EU",
       "locale": "es-ES",
@@ -1201,7 +1201,7 @@
       "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
       "cmp": "OneTrust",
       "tier": "dom",
-      "note": "No reject-all button \u2014 GDPR toggle-style banner with Functional/Targeting/Performance groups. Needs manage-preferences path. Requires --vpn to load (bot-protected).",
+      "note": "No reject-all button — GDPR toggle-style banner with Functional/Targeting/Performance groups. Needs manage-preferences path. Requires --vpn to load (bot-protected).",
       "bannerSelectors": [
         "#onetrust-banner-sdk"
       ],
