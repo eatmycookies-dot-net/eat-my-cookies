@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>gov.br cookie bar fixture</title>
+    <style>
+      .br-cookiebar {
+        position: fixed;
+        inset: auto 0 0 0;
+        background: #f2f6fb;
+        border-top: 1px solid #9fb5cc;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="br-cookiebar">
+      <p>Para melhorar a sua experiencia na plataforma, utilizamos cookies.</p>
+      <button class="br-button small btn-manage manage">Gerenciar cookies</button>
+      <button class="br-button secondary small reject-all">Rejeitar cookies</button>
+      <button class="br-button secondary small btn-accept">Aceitar cookies</button>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('.reject-all').addEventListener('click', () => {
+        document.querySelector('.br-cookiebar').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'reject' };
+      });
+      document.querySelector('.btn-accept').addEventListener('click', () => {
+        document.querySelector('.br-cookiebar').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+    </script>
+  </body>
+</html>

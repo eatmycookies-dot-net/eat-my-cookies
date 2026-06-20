@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Netshoes cookie fixture</title>
+    <style>
+      .cookie-notification {
+        position: fixed;
+        inset: auto 0 0 0;
+        background: #111;
+        color: #fff;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cookie-notification">
+      <div class="cookie-notification__content">
+        <p class="cookie-notification__content__message">
+          Cookies: a gente guarda estatisticas de visitas para melhorar sua experiencia.
+        </p>
+        <button class="cookie-notification__content__button">CONCORDAR E FECHAR</button>
+      </div>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('.cookie-notification__content__button').addEventListener('click', () => {
+        document.querySelector('.cookie-notification').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'close' };
+      });
+    </script>
+  </body>
+</html>

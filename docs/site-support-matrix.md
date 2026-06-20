@@ -81,17 +81,8 @@ The extension should guide users honestly instead of pretending reject/custom tr
 | --- | --- | --- |
 | `abc.es` | Site-specific choice | Reject path leads to a subscription-style wall after initial handling. |
 | `lavanguardia.com` | Site-specific choice | Evolok paywall. Reject = "Rechazar y suscribirse" — requires paid subscription. Accept is the only free path. Confirmed via EU VPN (NL) manual test. |
-| `abc.es` | Site-specific choice | Evolok paywall. Reject leads to a subscription page (€3.99+/month for cookie-free browsing). Accept is the only free path. Confirmed via EU VPN (NL) manual test. |
 | `corriere.it` | Site-specific choice | RCS flow behaves like paid-or-accept / consentless-subscription. |
 | `lastampa.it` | Site-specific choice | Accept works; reject loops back into a paid-style banner. |
-
-## Needs Investigation
-
-These sites have observed problems but the root cause is not fully understood yet.
-
-| Site | Status | Notes |
-| --- | --- | --- |
-| `euronews.com` | Automation-covered | EU VPN single-site test passes (site_specific:didomi:reject_all). Full-run failures are timing artifacts from a 42-site sequential run, not real regressions. |
 
 ## Needs Implementation
 
@@ -121,6 +112,76 @@ These CMP families were added to the generic handler during the June 6, 2026 cov
 ## Newly Added — Pending Human Validation
 
 Detected via automated VPN scan (Browsec → Germany/Lithuania EU IP) on 2026-05-29. CMP family confirmed by script fingerprinting; consent flows have **not** been human-validated yet.
+
+## Brazil / LGPD Coverage Pass
+
+Reviewed on June 13, 2026 from live public homepages and user-supplied DOM screenshots. This pass prioritised high-traffic Brazilian publisher / finance targets and mapped them to the actual banner family visible on first load.
+
+Non-VPN live e2e revalidation on June 14, 2026 now passes for `globo.com`, `sbt.com.br`, `e-core.com`, `terra.com.br`, `exame.com` (accept path), `americanas.com.br`, `banco.bradesco`, and `netshoes.com.br`. VPN-backed validation is still blocked by the current Browsec harness/runtime issue: the page banners render, but the extension never records activity in the VPN browser context (`recorded=none`, `emcPref=n/a`).
+
+| Site | CMP / banner family | Current status | Notes |
+| --- | --- | --- | --- |
+| `globo.com` | Globo custom LGPD banner | Fixture-covered | Single-button `Prosseguir` banner. Added direct selector coverage for `#cookie-banner-lgpd` / `.cookie-banner-lgpd_accept-button`. |
+| `sbt.com.br` | SBT custom LGPD banner | Fixture-covered | CSS-module banner with visible `OK` action and privacy-policy link. Added direct selector coverage for the visible banner shell plus `button.sbt-button`. |
+| `e-core.com` | HubSpot Cookie Banner | Fixture-covered | User screenshot confirmed HubSpot IDs. Added direct support for `#hs-eu-cookie-confirmation`, Accept, and Decline. |
+| `americanas.com.br` | Privacy Tools banner (`privacytools.com.br`) | Fixture-covered | Public homepage renders `#privacytools-banner-consent` / `.cc-window.cc-banner` with `Aceitar` plus a close affordance. Added dedicated coverage for this lightweight storefront banner family. |
+| `banco.bradesco` | Bradesco custom LGPD banner | Fixture-covered | Public homepage shows explicit `#rejeitarCookiesNaoNecessarios` and `#aceitarCookies` actions inside `#cookies.cookie-banner`. Added first-class accept and reject handling. |
+| `netshoes.com.br` | Netshoes custom cookie notice | Fixture-covered | Homepage notice currently exposes `.cookie-notification` with a single `CONCORDAR E FECHAR` action. Added lightweight notice coverage so it can be dismissed consistently. |
+| `gov.br` | gov.br shared cookie bar | Fixture-covered | Live homepage exposes `.br-cookiebar` with explicit `Gerenciar cookies`, `Rejeitar cookies`, and `Aceitar cookies` actions. Added dedicated accept/reject coverage for the shared government shell. |
+| `sp.gov.br` | Sao Paulo state custom LGPD modal | Fixture-covered | Public homepage currently shows `#lgpdModal` with a single accept button `#cadastrar.lgpd-btn`. Added accept-only coverage for this essential-cookies notice. |
+| `correios.com.br` | Correios custom cookie notice | Fixture-covered | Public homepage shows `#cookiesId` / `.cookiesCorreios` with a single `Aceito` action (`#btnCookie`). Added lightweight accept-only coverage. |
+| `tim.com.br` | Privacy Tools-style lightweight banner | Live-validated | Public homepage currently renders `.cc-window.cc-banner` with `Aceitar`, `Dispensar`, and `Alterar preferências`. In live e2e on June 15, 2026 it was handled successfully through the `privacytoolsbanner` path. |
+| `xpi.com.br` | XP custom LGPD component | Fixture-covered | User screenshot confirmed `data-testid='lgpd-cookies-id'` / `#cookies-policy-container` plus explicit accept/reject buttons. |
+| `uol.com.br` | `privacymanager.io` simple LGPD banner | Fixture-covered | Public homepage currently shows a simple `OK` banner (`.banner-lgpd-consent__accept`) rather than the older slider dialog. |
+| `folha.uol.com.br` | UOL-family simple LGPD banner | Expected-covered | Same visible `banner-lgpd-consent` family as `uol.com.br`. Coverage piggybacks on the same simple-banner path. |
+| `terra.com.br` | `privacymanager.io` simple LGPD banner | Expected-covered | Public homepage currently shows the Terra `dialog.push-notification.is-cookies` / `.push-notification--accept-button` flow. |
+| `exame.com` | AdOpt banner on top of Launchpad / Liveramp stack | Fixture-covered | Public homepage exposes `#cookie-banner`, `#adopt-accept-all-button`, and a visible `Do not sell` path. Added handling through the updated PrivacyManager flow. |
+| `itau.com.br` | OneTrust | Already covered | Live homepage still exposes a OneTrust shell. Existing OneTrust coverage should apply here without special handling. |
+| `estadao.com.br` | Launchpad / Liveramp stack observed | Needs more live validation | Launchpad scripts were present during the June 13, 2026 probe, but the visible actionable shell was not stable enough in that session to claim full live validation yet. |
+
+Additional live probes during the same pass:
+
+- `caixa.gov.br`: AdOpt banner is visible and matches the existing AdOpt support path; good regression target but no new handler was needed.
+- `abril.com.br` and `estadao.com.br`: both loaded `launchpad.privacymanager.io` / LiveRamp scripts during the June 15, 2026 sweep, but the visible banner shell was not stable enough in-session to promote to first-class live validation yet.
+- `mercadolivre.com.br`, `olx.com.br`, `vivo.com.br`, `bb.com.br`, `santander.com.br`, `casasbahia.com.br`, `magazineluiza.com.br`, `extra.com.br`, `pontofrio.com.br`, and `claro.com.br`: blocked, errored, or challenge-gated in the sampled session, so they were not strong automation targets for this round.
+- `nubank.com.br`: visible `Aceitar` / `Continuar` controls plus privacy-policy links were present, but the public shell was not yet specific enough to claim durable first-class handling without a tighter selector pass.
+- `shopee.com.br`: the sampled session exposed a cookie banner on top of an unavailable / verification shell, so it remains a possible follow-up target rather than a stable regression case.
+- `magazineluiza.com.br`: homepage probe returned an access-blocked / unavailable shell in the sampled session, so it was not a good immediate regression target.
+
+## Canada / PIPEDA Coverage Pass
+
+Reviewed on June 15, 2026 against Similarweb's Canada ranking for May 2026, last updated June 1, 2026. This pass prioritised high-traffic Canadian banking, commerce, government, and media properties that exposed automatable consent surfaces in live public sessions.
+
+| Site | CMP / banner family | Current status | Notes |
+| --- | --- | --- | --- |
+| `rbcroyalbank.com` | OneTrust | Live-validated | Public homepage exposed a standard OneTrust banner with visible `Accept All Cookies` and privacy-center entry points. Both `Accept All` and `Reject All` passed targeted e2e on June 15, 2026. |
+| `nhl.com` | OneTrust | Live-validated | Canadian traffic cohort still surfaced a standard OneTrust shell on the public homepage. Targeted reject-path e2e passed on June 15, 2026. |
+| `theweathernetwork.com` | Didomi / `privacy-center.org` preferences modal | Live-validated | Public homepage exposed a `Manage My Consent` entry point instead of the basic notice layer. Generic Didomi support was extended to open and handle the full preferences modal, and both `Accept All` and `Reject All` passed targeted e2e on June 15, 2026. |
+| `td.com` | OneTrust scripts observed | Pending live banner validation | OneTrust scripts were present during the June 15, 2026 probe, but no visible banner surfaced in the validation run, so the current status is an honest skip rather than a claimed pass. |
+| `canadiantire.ca` | OneTrust | Pending live banner validation | The site exposes a persistent `Cookie Settings` entry point, but the validation rerun on June 15, 2026 did not show a dismissible first-load banner. Target remains useful, but current automated result is a skip rather than a pass. |
+
+Additional Canadian probes during the same pass:
+
+- `canada.ca` and `weather.gc.ca`: no fresh dismissible cookie banner surfaced in the sampled sessions.
+- `lapresse.ca`: a Quebec-specific `bootstrapConsent` script was observed, making it the strongest candidate for a dedicated Quebec / Law 25 follow-up. Deeper probing showed a public `nuglif.consentHandler` object, but in the sampled anonymous session it behaved like a no-op wrapper and did not mount a consent UI when `show()` was invoked. It remains research-backed rather than claimed coverage.
+- `amazon.ca`, `interac.ca`, and `ctvnews.ca`: privacy links were visible, but no automatable first-load consent surface was stable in-session.
+- `cbc.ca`, `homedepot.ca`, `walmart.ca`, and `realtor.ca`: errored, blocked, or otherwise did not present a stable public automation target in the sampled run.
+
+## Quebec / Law 25 Coverage Pass
+
+Reviewed on June 15, 2026 from live public Quebec-facing sessions with `fr-CA` locale and `fr-CA,fr;q=0.9,en-CA;q=0.8` request headers. This pass focused on major Quebec public-service and media properties that exposed privacy surfaces aligned with Quebec expectations around transparency and consent.
+
+| Site | CMP / banner family | Current status | Notes |
+| --- | --- | --- | --- |
+| `hydroquebec.com` | OneTrust | Live-validated | Public homepage exposed a visible French OneTrust banner with `Tout accepter` and `Gérer mes préférences`. Both `Accept All` and `Reject All` passed targeted e2e on June 15, 2026. |
+| `ici.radio-canada.ca` | Radio-Canada custom cookie alert | Live-validated | Public homepage exposed a visible French privacy alert in `#js-legal-disclaimer` with `ACCEPTER ET FERMER L'ALERTE`. Added first-class support for this custom alert and validated it live on June 15, 2026. |
+
+Additional Quebec probes during the same pass:
+
+- `lapresse.ca`: the site loads a Quebec-specific `bootstrapConsent` script, writes `lp.consent.currentConsent` to `localStorage`, and exposes `window.nuglif.consentHandler`. In the sampled anonymous public session, invoking `show()` still did not mount a visible consent surface, so support is not being claimed yet.
+- `ledevoir.com`: the public homepage loaded the Didomi SDK and a hidden `#didomi-host`, but no visible first-layer notice surfaced. The generic Didomi handler was strengthened to try the public `Didomi.preferences.show()` API for this class of site, but Le Devoir still needs a fresh live validation pass before it should be promoted to supported coverage.
+- `tvanouvelles.ca` and `journaldemontreal.com`: footer privacy links were visible, but no automatable first-load consent surface was present in the sampled sessions.
+- `quebec.ca`: no fresh dismissible cookie banner surfaced during the sampled session.
 
 ### Sourcepoint — Needs Human Validation
 

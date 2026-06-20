@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Didomi preferences fixture</title>
+    <style>
+      #entry {
+        margin: 24px;
+      }
+      #didomi-consent-popup {
+        position: fixed;
+        inset: 24px;
+        background: rgba(255, 255, 255, 0.98);
+        border: 1px solid #aaa;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="entry">Manage My Consent</button>
+    <div id="didomi-consent-popup" style="display:none">
+      <div class="didomi-consent-popup__dialog">
+        <h1>Your Weather, Your Way - Customize Your Experience</h1>
+        <div class="didomi-consent-popup-actions">
+          <button id="btn-toggle-disagree">Disagree to all</button>
+          <button id="btn-toggle-agree">Agree to all</button>
+          <button id="btn-toggle-save">Save</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.Didomi = {};
+      window.didomiOnReady = [];
+      window.__fixtureState = { bannerVisible: false, action: null };
+      const popup = document.getElementById('didomi-consent-popup');
+      document.getElementById('entry').addEventListener('click', () => {
+        popup.style.display = 'block';
+        window.__fixtureState = { bannerVisible: true, action: 'opened' };
+      });
+      document.getElementById('btn-toggle-disagree').addEventListener('click', () => {
+        popup.remove();
+        window.__fixtureState = { bannerVisible: false, action: 'reject' };
+      });
+      document.getElementById('btn-toggle-agree').addEventListener('click', () => {
+        popup.remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+    </script>
+  </body>
+</html>

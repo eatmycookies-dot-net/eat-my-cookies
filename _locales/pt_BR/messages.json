@@ -1,102 +1,399 @@
 {
-  "extensionName": { "message": "Eat My Cookies" },
-  "extensionDescription": { "message": "Lida automaticamente com banners de cookies com base nas suas preferências. Gratuito, local e sem rastreamento." },
-  "contextMenuParent": { "message": "Eat My Cookies" },
-  "contextMenuOpenPopup": { "message": "Abrir Eat My Cookies" },
-  "contextMenuDisableSite": { "message": "Desativar neste site" },
-  "contextMenuEnableSite": { "message": "Reativar neste site" },
-  "contextMenuReportProblem": { "message": "Relatar um problema" },
-  "popupSettingsAria": { "message": "Configurações" },
-  "popupCloseAria": { "message": "Fechar" },
-  "popupMilestoneCoffeeNudge": { "message": "O Eat My Cookies é gratuito. Se ele já te poupou um minuto, considere me pagar um café." },
-  "popupMilestoneBeerNudge": { "message": "Você chegou absurdamente longe. Se pulou o café, talvez já seja hora de me pagar uma cerveja." },
-  "popupMilestoneBuyCoffee": { "message": "♥ Me pague um café" },
-  "popupMilestoneBuyBeer": { "message": "♥ Me pague uma cerveja" },
-  "popupMilestoneDismiss": { "message": "Continuar →" },
-  "popupStatCookiesEaten": { "message": "cookies devorados" },
-  "popupAcrossSitesSingular": { "message": "em $1 site" },
-  "popupAcrossSitesPlural": { "message": "em $1 sites" },
-  "popupWarningAlwaysAcceptHere": { "message": "Aceitar sempre aqui" },
-  "popupDismiss": { "message": "Dispensar" },
-  "popupReenable": { "message": "Reativar" },
-  "popupRemovePermission": { "message": "Remover permissão" },
-  "popupSiteToggleLabel": { "message": "Este site" },
-  "popupDisableSite": { "message": "Desativar neste site" },
-  "popupEnableSite": { "message": "Reativar neste site" },
-  "popupPreferenceLabel": { "message": "Preferência:" },
-  "popupPreferenceRejectAll": { "message": "Rejeitar tudo" },
-  "popupPreferenceAcceptAll": { "message": "Aceitar tudo" },
-  "popupPreferenceCustom": { "message": "Personalizado" },
-  "popupEdit": { "message": "Editar →" },
-  "popupRecent": { "message": "Recentes" },
-  "popupClear": { "message": "Limpar" },
-  "popupNoActivity": { "message": "Ainda não há atividade" },
-  "popupCollectedBadges": { "message": "Conquistas" },
-  "popupNoBadges": { "message": "Ainda não há conquistas. A primeira é desbloqueada no primeiro banner tratado." },
-  "popupDonateFooter": { "message": "♥ Me pague um café" },
-  "popupSponsorFooter": { "message": "Patrocine no GitHub" },
-  "settingsTitle": { "message": "Configurações" },
-  "settingsBackAria": { "message": "Voltar" },
-  "settingsCookiePreference": { "message": "Preferência de cookies" },
-  "settingsPreferenceRejectAll": { "message": "Rejeitar tudo" },
-  "settingsRecommended": { "message": "(recomendado)" },
-  "settingsPreferenceAcceptAll": { "message": "Aceitar tudo" },
-  "settingsPreferenceCustomize": { "message": "Personalizar" },
-  "settingsFunctional": { "message": "Funcional" },
-  "settingsAnalytics": { "message": "Análises" },
-  "settingsAdvertising": { "message": "Publicidade" },
-  "settingsCcpaDoNotSell": { "message": "CCPA: Não vender/compartilhar" },
-  "settingsUncategorized": { "message": "Sem categoria / finalidades personalizadas" },
-  "settingsReject": { "message": "Rejeitar" },
-  "settingsAccept": { "message": "Aceitar" },
-  "settingsShowBadgeCounter": { "message": "Mostrar contador na barra" },
-  "settingsLanguage": { "message": "Idioma" },
-  "settingsLanguageAuto": { "message": "Auto" },
-  "settingsSiteExceptions": { "message": "Exceções por site" },
-  "settingsNoSitePermissions": { "message": "Ainda não há permissões específicas por site." },
-  "settingsData": { "message": "Dados" },
-  "settingsExport": { "message": "Exportar configurações" },
-  "settingsImport": { "message": "Importar configurações" },
-  "settingsClearOverrides": { "message": "Limpar exceções de sites" },
-  "settingsReportBug": { "message": "Relatar um bug ↗" },
-  "settingsContactSupport": { "message": "Falar com o suporte ↗" },
-  "settingsOpenSource": { "message": "Código aberto no GitHub →" },
-  "settingsRestartOnboarding": { "message": "Reiniciar onboarding" },
-  "siteWarningAutoDisabledTitle": { "message": "Desativado automaticamente para $1" },
-  "siteWarningDisabledTitle": { "message": "Desativado para $1" },
-  "siteWarningAlwaysAcceptTitle": { "message": "Aceitar sempre ativado para $1" },
-  "siteWarningNeedsChoiceTitle": { "message": "$1 precisa de uma escolha específica" },
-  "siteWarningDisabledFallback": { "message": "O Eat My Cookies continuará desativado neste site até você ativá-lo novamente." },
-  "siteWarningAlwaysAcceptFallback": { "message": "Este site está configurado para aceitar cookies automaticamente para que o bloqueio seja removido." },
-  "siteWarningNeedsChoiceFallback": { "message": "No momento, este site não oferece uma opção de rejeição compatível com as suas configurações." },
-  "siteOverrideDisabledLabel": { "message": "Desativado neste site" },
-  "siteOverrideAlwaysAcceptLabel": { "message": "Aceitar sempre neste site" },
-  "siteOverrideGenericLabel": { "message": "Exceção específica do site" },
-  "siteOverrideRemove": { "message": "Remover" },
-  "activityAccepted": { "message": "Aceito" },
-  "activityRejected": { "message": "Rejeitado" },
-  "activityCcpaHandled": { "message": "CCPA tratado" },
-  "activityCustom": { "message": "Personalizado" },
-  "activityHandled": { "message": "Tratado" },
-  "timeJustNow": { "message": "agora mesmo" },
-  "timeMinutesShort": { "message": "$1 min" },
-  "timeHoursShort": { "message": "$1 h" },
-  "timeDaysShort": { "message": "$1 d" },
-  "badgeThresholdSingular": { "message": "$1 banner tratado" },
-  "badgeThresholdPlural": { "message": "$1 banners tratados" },
-  "milestoneUnlocked": { "message": "$1 desbloqueado!" },
-  "milestoneDescSingular": { "message": "Você tratou $1 banner de cookies." },
-  "milestoneDescPlural": { "message": "Você tratou $1 banners de cookies." },
-  "onboardingPageTitle": { "message": "Boas-vindas ao Eat My Cookies" },
-  "onboardingStep1Aria": { "message": "Etapa 1: Defina suas preferências" },
-  "onboardingStep2Aria": { "message": "Etapa 2: Fixe na barra de ferramentas" },
-  "onboardingPinTitle": { "message": "Fixe na sua barra de ferramentas" },
-  "onboardingPinDesc": { "message": "Clique na <strong>peça de quebra-cabeça</strong> na barra de ferramentas do Chrome e depois no ícone de <strong>fixar</strong> ao lado do Eat My Cookies para que ele fique sempre a um clique de distância." },
-  "onboardingExtensionsTitle": { "message": "Extensões" },
-  "onboardingNoAccessNeeded": { "message": "Nenhum acesso necessário" },
-  "onboardingNoAccessNeededDesc": { "message": "Essas extensões não precisam ver nem alterar informações neste site." },
-  "onboardingManageExtensions": { "message": "Gerenciar extensões" },
-  "onboardingBack": { "message": "← Voltar" },
-  "onboardingNext": { "message": "Próximo →" },
-  "onboardingDone": { "message": "✓ Concluir" }
+  "extensionName": {
+    "message": "Eat My Cookies"
+  },
+  "extensionDescription": {
+    "message": "Lida automaticamente com banners de cookies com base nas suas preferências. Gratuito, local e sem rastreamento."
+  },
+  "contextMenuParent": {
+    "message": "Eat My Cookies"
+  },
+  "contextMenuOpenPopup": {
+    "message": "Abrir Eat My Cookies"
+  },
+  "contextMenuDisableSite": {
+    "message": "Desativar neste site"
+  },
+  "contextMenuEnableSite": {
+    "message": "Reativar neste site"
+  },
+  "contextMenuReportProblem": {
+    "message": "Relatar um problema"
+  },
+  "popupSettingsAria": {
+    "message": "Configurações"
+  },
+  "popupCloseAria": {
+    "message": "Fechar"
+  },
+  "popupMilestoneCoffeeNudge": {
+    "message": "O Eat My Cookies é gratuito. Se ele já te poupou um minuto, considere me pagar um café."
+  },
+  "popupMilestoneBeerNudge": {
+    "message": "Você chegou absurdamente longe. Se pulou o café, talvez já seja hora de me pagar uma cerveja."
+  },
+  "popupMilestoneBuyCoffee": {
+    "message": "♥ Me pague um café"
+  },
+  "popupMilestoneBuyBeer": {
+    "message": "♥ Me pague uma cerveja"
+  },
+  "popupMilestoneDismiss": {
+    "message": "Continuar →"
+  },
+  "popupStatCookiesEaten": {
+    "message": "cookies devorados"
+  },
+  "popupAcrossSitesSingular": {
+    "message": "em $1 site"
+  },
+  "popupAcrossSitesPlural": {
+    "message": "em $1 sites"
+  },
+  "popupWarningAlwaysAcceptHere": {
+    "message": "Aceitar sempre aqui"
+  },
+  "popupDismiss": {
+    "message": "Dispensar"
+  },
+  "popupReenable": {
+    "message": "Reativar"
+  },
+  "popupRemovePermission": {
+    "message": "Remover permissão"
+  },
+  "popupSiteToggleLabel": {
+    "message": "Este site"
+  },
+  "popupDisableSite": {
+    "message": "Desativar neste site"
+  },
+  "popupEnableSite": {
+    "message": "Reativar neste site"
+  },
+  "popupPreferenceLabel": {
+    "message": "Preferência:"
+  },
+  "popupPreferenceRejectAll": {
+    "message": "Rejeitar tudo"
+  },
+  "popupPreferenceAcceptAll": {
+    "message": "Aceitar tudo"
+  },
+  "popupPreferenceCustom": {
+    "message": "Personalizado"
+  },
+  "popupEdit": {
+    "message": "Editar →"
+  },
+  "popupRecent": {
+    "message": "Recentes"
+  },
+  "popupClear": {
+    "message": "Limpar"
+  },
+  "popupNoActivity": {
+    "message": "Ainda não há atividade"
+  },
+  "popupCollectedBadges": {
+    "message": "Conquistas"
+  },
+  "popupNoBadges": {
+    "message": "Ainda não há conquistas. A primeira é desbloqueada no primeiro banner tratado."
+  },
+  "popupDonateFooter": {
+    "message": "♥ Me pague um café"
+  },
+  "popupSponsorFooter": {
+    "message": "Patrocine no GitHub"
+  },
+  "settingsTitle": {
+    "message": "Configurações"
+  },
+  "settingsBackAria": {
+    "message": "Voltar"
+  },
+  "settingsCookiePreference": {
+    "message": "Preferência de cookies"
+  },
+  "settingsPreferenceRejectAll": {
+    "message": "Rejeitar tudo"
+  },
+  "settingsRecommended": {
+    "message": "(recomendado)"
+  },
+  "settingsPreferenceAcceptAll": {
+    "message": "Aceitar tudo"
+  },
+  "settingsPreferenceCustomize": {
+    "message": "Personalizar"
+  },
+  "settingsFunctional": {
+    "message": "Funcional"
+  },
+  "settingsAnalytics": {
+    "message": "Análises"
+  },
+  "settingsAdvertising": {
+    "message": "Publicidade"
+  },
+  "settingsCcpaDoNotSell": {
+    "message": "CCPA: Não vender/compartilhar"
+  },
+  "settingsUncategorized": {
+    "message": "Sem categoria / finalidades personalizadas"
+  },
+  "settingsReject": {
+    "message": "Rejeitar"
+  },
+  "settingsAccept": {
+    "message": "Aceitar"
+  },
+  "settingsShowBadgeCounter": {
+    "message": "Mostrar contador na barra"
+  },
+  "settingsLanguage": {
+    "message": "Idioma"
+  },
+  "settingsLanguageAuto": {
+    "message": "Auto"
+  },
+  "settingsSiteExceptions": {
+    "message": "Exceções por site"
+  },
+  "settingsNoSitePermissions": {
+    "message": "Ainda não há permissões específicas por site."
+  },
+  "settingsData": {
+    "message": "Dados"
+  },
+  "settingsExport": {
+    "message": "Exportar configurações"
+  },
+  "settingsImport": {
+    "message": "Importar configurações"
+  },
+  "settingsClearOverrides": {
+    "message": "Limpar exceções de sites"
+  },
+  "settingsReportBug": {
+    "message": "Relatar um bug ↗"
+  },
+  "settingsContactSupport": {
+    "message": "Falar com o suporte ↗"
+  },
+  "settingsOpenSource": {
+    "message": "Código aberto no GitHub →"
+  },
+  "settingsRestartOnboarding": {
+    "message": "Reiniciar onboarding"
+  },
+  "siteWarningAutoDisabledTitle": {
+    "message": "Desativado automaticamente para $1"
+  },
+  "siteWarningDisabledTitle": {
+    "message": "Desativado para $1"
+  },
+  "siteWarningAlwaysAcceptTitle": {
+    "message": "Aceitar sempre ativado para $1"
+  },
+  "siteWarningNeedsChoiceTitle": {
+    "message": "$1 precisa de uma escolha específica"
+  },
+  "siteWarningDisabledFallback": {
+    "message": "O Eat My Cookies continuará desativado neste site até você ativá-lo novamente."
+  },
+  "siteWarningAlwaysAcceptFallback": {
+    "message": "Este site está configurado para aceitar cookies automaticamente para que o bloqueio seja removido."
+  },
+  "siteWarningNeedsChoiceFallback": {
+    "message": "No momento, este site não oferece uma opção de rejeição compatível com as suas configurações."
+  },
+  "siteWarningNoRejectTitle": {
+    "message": "$1 exibiu apenas um aviso"
+  },
+  "siteWarningNoRejectFallback": {
+    "message": "Este banner oferecia apenas um botão. Os cookies foram aceitos automaticamente — nenhuma opção de rejeição estava disponível."
+  },
+  "popupGotIt": {
+    "message": "Entendido"
+  },
+  "siteOverrideDisabledLabel": {
+    "message": "Desativado neste site"
+  },
+  "siteOverrideAlwaysAcceptLabel": {
+    "message": "Aceitar sempre neste site"
+  },
+  "siteOverrideGenericLabel": {
+    "message": "Exceção específica do site"
+  },
+  "siteOverrideRemove": {
+    "message": "Remover"
+  },
+  "activityAccepted": {
+    "message": "Aceito"
+  },
+  "activityRejected": {
+    "message": "Rejeitado"
+  },
+  "activityCcpaHandled": {
+    "message": "CCPA tratado"
+  },
+  "activityCustom": {
+    "message": "Personalizado"
+  },
+  "activityHandled": {
+    "message": "Tratado"
+  },
+  "timeJustNow": {
+    "message": "agora mesmo"
+  },
+  "timeMinutesShort": {
+    "message": "$1 min"
+  },
+  "timeHoursShort": {
+    "message": "$1 h"
+  },
+  "timeDaysShort": {
+    "message": "$1 d"
+  },
+  "badgeThresholdSingular": {
+    "message": "$1 banner tratado"
+  },
+  "badgeThresholdPlural": {
+    "message": "$1 banners tratados"
+  },
+  "milestoneUnlocked": {
+    "message": "$1 desbloqueado!"
+  },
+  "milestoneDescSingular": {
+    "message": "Você tratou $1 banner de cookies."
+  },
+  "milestoneDescPlural": {
+    "message": "Você tratou $1 banners de cookies."
+  },
+  "onboardingPageTitle": {
+    "message": "Boas-vindas ao Eat My Cookies"
+  },
+  "onboardingStep1Aria": {
+    "message": "Etapa 1: Defina suas preferências"
+  },
+  "onboardingStep2Aria": {
+    "message": "Etapa 2: Fixe na barra de ferramentas"
+  },
+  "onboardingPinTitle": {
+    "message": "Fixe na sua barra de ferramentas"
+  },
+  "onboardingPinDesc": {
+    "message": "Clique na <strong>peça de quebra-cabeça</strong> na barra de ferramentas do Chrome e depois no ícone de <strong>fixar</strong> ao lado do Eat My Cookies para que ele fique sempre a um clique de distância."
+  },
+  "onboardingExtensionsTitle": {
+    "message": "Extensões"
+  },
+  "onboardingNoAccessNeeded": {
+    "message": "Nenhum acesso necessário"
+  },
+  "onboardingNoAccessNeededDesc": {
+    "message": "Essas extensões não precisam ver nem alterar informações neste site."
+  },
+  "onboardingManageExtensions": {
+    "message": "Gerenciar extensões"
+  },
+  "onboardingBack": {
+    "message": "← Voltar"
+  },
+  "onboardingNext": {
+    "message": "Próximo →"
+  },
+  "onboardingDone": {
+    "message": "✓ Concluir"
+  },
+  "badgeNameFirstBite": {
+    "message": "Primeira mordida",
+    "description": "Badge name: 1 banner handled"
+  },
+  "badgeNameBakersDozen": {
+    "message": "Dúzia do padeiro",
+    "description": "Badge name: 12 banners handled"
+  },
+  "badgeNameQuarterCrunch": {
+    "message": "Quarto crocante",
+    "description": "Badge name: 25 banners handled"
+  },
+  "badgeNameFiftyStack": {
+    "message": "Pilha de cinquenta",
+    "description": "Badge name: 50 banners handled"
+  },
+  "badgeNameSnackAttack": {
+    "message": "Ataque de lanche",
+    "description": "Badge name: 75 banners handled"
+  },
+  "badgeNameCenturyCrumbler": {
+    "message": "Esfarelador do século",
+    "description": "Badge name: 100 banners handled"
+  },
+  "badgeNameDoubleDip": {
+    "message": "Dupla mergulhada",
+    "description": "Badge name: 200 banners handled"
+  },
+  "badgeNameTrayTracker": {
+    "message": "Rastreador de bandeja",
+    "description": "Badge name: 300 banners handled"
+  },
+  "badgeNameOvenRegular": {
+    "message": "Frequentador do forno",
+    "description": "Badge name: 400 banners handled"
+  },
+  "badgeNameCookieCrusher": {
+    "message": "Triturador de cookies",
+    "description": "Badge name: 500 banners handled"
+  },
+  "badgeNameTerminator": {
+    "message": "Terminator",
+    "description": "Badge name: 1,000 banners handled"
+  },
+  "badgeNameJarRaider": {
+    "message": "Saqueador de pote",
+    "description": "Badge name: 2,000 banners handled"
+  },
+  "badgeNameBatchBoss": {
+    "message": "Chefe da fornada",
+    "description": "Badge name: 3,000 banners handled"
+  },
+  "badgeNameCrateCracker": {
+    "message": "Quebra-caixotes",
+    "description": "Badge name: 4,000 banners handled"
+  },
+  "badgeNameUnstoppable": {
+    "message": "Imparável",
+    "description": "Badge name: 5,000 banners handled"
+  },
+  "badgeNameLegend": {
+    "message": "Lenda",
+    "description": "Badge name: 10,000 banners handled"
+  },
+  "badgeNameScrollStomper": {
+    "message": "Domador de rolagem",
+    "description": "Badge name: 25,000 banners handled"
+  },
+  "badgeNameBannerbreaker": {
+    "message": "Quebrador de banners",
+    "description": "Badge name: 50,000 banners handled"
+  },
+  "badgeNameConsentCartographer": {
+    "message": "Cartógrafo do consentimento",
+    "description": "Badge name: 100,000 banners handled"
+  },
+  "badgeNameWallWhisperer": {
+    "message": "Sussurrador de muros",
+    "description": "Badge name: 250,000 banners handled"
+  },
+  "badgeNameCrumbColossus": {
+    "message": "Colosso das migalhas",
+    "description": "Badge name: 500,000 banners handled"
+  },
+  "badgeNameMythicMuncher": {
+    "message": "Devorador mítico",
+    "description": "Badge name: 1,000,000 banners handled"
+  }
 }

@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .claude/
+AGENTS.md
+CLAUDE.md
 .cursor/
 .windsurf/
 .copilot/
@@ -12,6 +14,7 @@ __pycache__/
 .aider/
 .roo/
 .llm/
+skills/
 node_modules/
 dist/
 private/

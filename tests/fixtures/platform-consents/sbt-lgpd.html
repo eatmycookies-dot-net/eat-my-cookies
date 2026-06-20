@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>SBT LGPD fixture</title>
+    <style>
+      div[class*='cookiesBanner__'][class*='visible'] { position: fixed; inset: auto 0 0 0; background: #fff8e1; padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <div class="cookies-banner_cookiesBanner__bgtLL cookies-banner_visible__8OcQG">
+      <p>Utilizamos cookies e tecnologias semelhantes.</p>
+      <a class="cookies-banner_cookiesBannerLink__4doQP">Politica de Privacidade</a>
+      <button class="sbt-button sbt-button--medium sbt-button--action">OK</button>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('button.sbt-button').addEventListener('click', () => {
+        document.querySelector("div[class*='cookiesBanner__'][class*='visible']").remove();
+        window.__fixtureState = { bannerVisible: false, action: 'ok' };
+      });
+    </script>
+  </body>
+</html>

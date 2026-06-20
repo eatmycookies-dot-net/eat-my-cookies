@@ -3691,19 +3691,21 @@ function deepQuerySelectorAll(selector, root = document) {
   return results;
 }
 
-async function reportAction(method, preference) {
+async function reportAction(method, preference, { noRejectAvailable } = {}) {
   markHandledForCurrentPage(currentRunSignature ?? preference);
   await chrome.runtime.sendMessage({
     type: 'ACTION_FIRED',
     site,
     method,
     preference,
+    ...(noRejectAvailable ? { noRejectAvailable: true } : {}),
   });
 }
 
 async function reportDomResult(result, prefs) {
   await syncPlatformSupportWarning(result, prefs);
-  return reportAction(result.method, prefs.globalPreference);
+  const noRejectAvailable = Boolean(result.noticeOnly) && prefs.globalPreference !== 'accept_all';
+  return reportAction(result.method, prefs.globalPreference, { noRejectAvailable });
 }
 
 async function syncPlatformSupportWarning(result, prefs) {

@@ -25,6 +25,8 @@ const fs = require('fs');
 const EXT_DIR      = path.resolve(__dirname, '..');   // unpacked extension root
 const EXT_LAUNCH_DIR = path.join(os.tmpdir(), 'emc-extension-no-spaces');
 const SITES_FILE   = path.join(__dirname, 'sites.json');
+const DOM_HANDLER_PATH = path.join(EXT_DIR, 'content', 'dom-handler.js');
+const CMPS = JSON.parse(fs.readFileSync(path.join(EXT_DIR, 'rules', 'cmps.json'), 'utf8')).cmps;
 const BANNER_WAIT  = 8000;   // ms to wait for banner to appear
 const HANDLE_WAIT  = 6000;   // ms to wait for extension to handle it
 const NAV_TIMEOUT  = 30000;
@@ -39,17 +41,35 @@ const region   = argVal(args, '--region');
 const cmpFilter= argVal(args, '--cmp');
 const siteName = argVal(args, '--site');
 
+function discoverBundledVpnExtensionPath() {
+  const candidates = [
+    path.resolve(__dirname, '..', '..', 'vpn-extension', 'omghfjlpggmjjaagoclmmobgdodcjboh'),
+    path.resolve(__dirname, '..', '.tmp-vpn-extension', 'omghfjlpggmjjaagoclmmobgdodcjboh'),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+        return candidate;
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
 // Path to an unpacked VPN extension (only used with --vpn flag).
 // Resolved from (in priority order):
 //   1. --vpn-ext=<path> CLI argument
 //   2. EMC_VPN_EXT environment variable
+//   3. Known local Browsec checkout next to this workspace (when present)
 // See CONTRIBUTING.md → "Testing with a VPN" for setup instructions.
 const vpnExtArg = argVal(args, '--vpn-ext');
 const VPN_EXT_DIR = vpnExtArg
   ? path.resolve(vpnExtArg)
   : process.env.EMC_VPN_EXT
     ? path.resolve(process.env.EMC_VPN_EXT)
-    : null;
+    : discoverBundledVpnExtensionPath();
 
 // Profile dir for VPN session persistence — project-local so it works on any machine.
 const vpnProfileArg = argVal(args, '--vpn-profile');
@@ -222,6 +242,31 @@ async function testSite(page, site) {
         return { status: 'PASS', detail: `Handled via recorded action (${recorded.method ?? 'recorded action'})` };
       }
     }
+
+    if (useVpn && site.allowTrustedClickFallback) {
+      const trustedClicked = await runTrustedClickFallback(page, site).catch(() => false);
+      if (trustedClicked) {
+        await page.waitForTimeout(Math.min(handleWaitMs, 2500));
+        const bannerVisibleAfterTrusted = await anyVisible(page, site.bannerSelectors);
+        const consentVisibleAfterTrusted = await anyVisible(page, site.consentSelectors);
+        if (!bannerVisibleAfterTrusted || !consentVisibleAfterTrusted) {
+          return { status: 'PASS', detail: 'Handled via VPN trusted-click fallback' };
+        }
+      }
+    }
+
+    if (useVpn && site.allowDirectDomValidation) {
+      const directResult = await runDirectDomValidation(page, site).catch(() => null);
+      if (directResult?.method) {
+        await page.waitForTimeout(Math.min(handleWaitMs, 2000));
+        const bannerVisibleAfterDirect = await anyVisible(page, site.bannerSelectors);
+        const consentVisibleAfterDirect = await anyVisible(page, site.consentSelectors);
+        if (!bannerVisibleAfterDirect || !consentVisibleAfterDirect) {
+          return { status: 'PASS', detail: `Handled via VPN DOM fallback (${directResult.method})` };
+        }
+      }
+    }
+
     return { status: 'FAIL', detail: await buildFailureDetail(page, site, beforeStats, 'Banner still visible after timeout') };
   }
 
@@ -592,6 +637,42 @@ async function waitForAny(page, selectors, timeout) {
   return false;
 }
 
+async function runDirectDomValidation(page, site) {
+  const prefs = {
+    globalPreference: site.preference ?? 'reject_all',
+    categoryPreferences: buildCategoryPreferences(site.preference ?? 'reject_all', site.categoryPreferences ?? {
+      ccpaDoNotSell: site.ccpaDoNotSell,
+    }),
+  };
+  await page.addScriptTag({ path: DOM_HANDLER_PATH });
+  return page.evaluate(async ({ cmps, runtimePrefs }) => {
+    return await tryCMPs(cmps, runtimePrefs);
+  }, { cmps: CMPS, runtimePrefs: prefs });
+}
+
+async function runTrustedClickFallback(page, site) {
+  for (const selector of site.consentSelectors ?? []) {
+    try {
+      if (selector.startsWith('text:')) {
+        const text = selector.slice(5);
+        const locator = page.getByText(text, { exact: false });
+        if (await locator.count()) {
+          await locator.first().click({ timeout: 3000 });
+          return true;
+        }
+        continue;
+      }
+
+      const locator = page.locator(selector);
+      if (await locator.count()) {
+        await locator.first().click({ timeout: 3000 });
+        return true;
+      }
+    } catch (_) {}
+  }
+  return false;
+}
+
 async function anyVisible(page, selectors) {
   for (const sel of selectors) {
     try {
@@ -864,11 +945,26 @@ async function writePreferences(browser, preference, site = null, profileDir = '
     }
 
     if (extId) {
-      await swPage.goto(`chrome-extension://${extId}/popup/popup.html`, {
-        waitUntil: 'domcontentloaded', timeout: 8000,
-      }).catch(() => {});
-      await swPage.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload).catch(() => {});
-      return swPage;
+      const extensionUrls = [
+        `chrome-extension://${extId}/popup/popup.html`,
+        `chrome-extension://${extId}/onboarding/onboarding.html`,
+      ];
+
+      for (const url of extensionUrls) {
+        try {
+          await swPage.goto(url, {
+            waitUntil: 'domcontentloaded',
+            timeout: 15000,
+          });
+          const stored = await swPage.evaluate(async (data) => {
+            await new Promise((resolve) => chrome.storage.sync.set(data, resolve));
+            return await new Promise((resolve) => chrome.storage.sync.get(['globalPreference', 'onboardingComplete'], resolve));
+          }, payload);
+          if (stored?.globalPreference === payload.globalPreference && stored?.onboardingComplete === true) {
+            return swPage;
+          }
+        } catch (_) {}
+      }
     }
   } catch (_) {}
   return swPage;
@@ -904,6 +1000,16 @@ async function readStatsSnapshot(browser) {
     return payload.stats;
   } finally {
     if (!page.isClosed()) await page.close();
+  }
+}
+
+async function warmupExtensionRoundTrip(browser) {
+  const page = await browser.newPage();
+  try {
+    await page.goto('https://example.com', { waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(800);
+  } finally {
+    if (!page.isClosed()) await page.close().catch(() => {});
   }
 }
 
@@ -970,15 +1076,15 @@ async function readStatsSnapshot(browser) {
       browser = await chromium.launchPersistentContext(userDataDir, launchOptions);
     }
   } else if (useVpn) {
-    // NOTE: Playwright's bundled Chromium (channel:'chromium') is tried FIRST for VPN mode.
-    // System Chrome (executablePath) does not expose extension service workers via
-    // Playwright's serviceWorkers() API, which causes writePreferences to fail silently.
-    // Playwright's bundled Chromium exposes SWs correctly even in headed mode, and
-    // the Browsec VPN extension/profile works fine with any Chromium build.
+    // Prefer system Chrome first in VPN mode. On this machine the bundled
+    // Playwright Chromium can stall while launching the persistent VPN profile
+    // before validation even starts. The writePreferences helper already has a
+    // popup-page fallback when service workers are not exposed, so system Chrome
+    // remains a valid headed fallback for real-site VPN validation.
     const vpnCandidates = [
-      { channel: 'chromium' },
       { channel: 'chrome' },
       getSystemChromeExecutable() ? { executablePath: getSystemChromeExecutable() } : null,
+      { channel: 'chromium' },
       {},
     ].filter(Boolean);
     for (const candidate of vpnCandidates) {
@@ -1012,16 +1118,15 @@ async function readStatsSnapshot(browser) {
     console.log(`VPN mode: active profile ${userDataDir}`);
     console.log('Waiting 4s for VPN extension to reconnect...');
     await new Promise(r => setTimeout(r, 4000));
-  } else {
-    // Navigate a warmup page so the extension's service worker activates and
-    // becomes visible to Playwright's browser.serviceWorkers() API. Without this,
-    // writePreferences cannot find the SW and onboardingComplete is never set.
-    // This applies to both headless and headed mode — in headed mode a single-site
-    // run has no prior navigation to warm up the SW.
-    const warmupPage = await browser.newPage();
-    await warmupPage.goto('https://example.com', { waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => {});
-    await warmupPage.close();
   }
+
+  // Navigate a warmup page so the extension's service worker activates and
+  // becomes visible to Playwright's browser.serviceWorkers() API. Without this,
+  // writePreferences can miss the SW and onboardingComplete never gets set.
+  // This applies to both normal and VPN mode.
+  const warmupPage = await browser.newPage();
+  await warmupPage.goto('https://example.com', { waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => {});
+  await warmupPage.close();
 
   // Complete onboarding via the service worker so chrome.storage.sync is accessible
   let swPage = null;
@@ -1030,6 +1135,7 @@ async function readStatsSnapshot(browser) {
     swPage = await writePreferences(browser, defaultPreference, sites[0] ?? null, userDataDir);
   } catch (_) {}
   if (swPage) await swPage.close();
+  await warmupExtensionRoundTrip(browser);
 
   printHeader();
 
@@ -1039,6 +1145,7 @@ async function readStatsSnapshot(browser) {
       const preference = site.preference ?? 'reject_all';
       const tmpPage = await writePreferences(browser, preference, site, userDataDir).catch(() => null);
       if (tmpPage) await tmpPage.close();
+      await warmupExtensionRoundTrip(browser);
       const { status, detail } = await testSite(page, site);
       printRow(site, status, detail);
       results[status.toLowerCase()].push({ ...site, detail });

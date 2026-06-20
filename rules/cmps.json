@@ -2,6 +2,211 @@
   "version": "1.1.0",
   "cmps": [
     {
+      "id": "hubspotcookiebanner",
+      "name": "HubSpot Cookie Banner",
+      "detectors": [
+        { "type": "css_selector", "value": "#hs-eu-cookie-confirmation" },
+        { "type": "css_selector", "value": "#hs-eu-cookie-settings-button" },
+        { "type": "css_selector", "value": "#hs-eu-confirmation-button" },
+        { "type": "css_selector", "value": "#hs-eu-decline-button" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#hs-eu-decline-button" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#hs-eu-confirmation-button" }
+        ]
+      }
+    },
+    {
+      "id": "globolgpd",
+      "name": "Globo LGPD Banner",
+      "notice_only": true,
+      "detectors": [
+        { "type": "css_selector", "value": "#cookie-banner-lgpd" },
+        { "type": "css_selector", "value": ".cookie-banner-lgpd-visible" },
+        { "type": "css_selector", "value": ".cookie-banner-lgpd_accept-button" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".cookie-banner-lgpd_accept-button" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".cookie-banner-lgpd_accept-button" }
+        ]
+      }
+    },
+    {
+      "id": "sbtlgpd",
+      "name": "SBT LGPD Banner",
+      "notice_only": true,
+      "detectors": [
+        { "type": "css_selector", "value": "div[class*='cookiesBanner__'][class*='visible']" },
+        { "type": "css_selector", "value": "div[class*='fixed'][class*='pointer-events-auto'] a.font-bold.underline.text-brand-color[href='https://www.sbt.com.br/politica-de-privacidade']" },
+        { "type": "css_selector", "value": "div[class*='fixed'][class*='pointer-events-auto'] button[class*='bg-brand-color']" },
+        { "type": "css_selector", "value": "a[class*='cookiesBannerLink']" },
+        { "type": "css_selector", "value": "button.sbt-button" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "button.sbt-button" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "button.sbt-button" }
+        ]
+      }
+    },
+    {
+      "id": "xplgpd",
+      "name": "XP LGPD Banner",
+      "detectors": [
+        { "type": "css_selector", "value": "[data-testid='lgpd-cookies-id']" },
+        { "type": "css_selector", "value": "#cookies-policy-container" },
+        { "type": "css_selector", "value": "cookies-policy" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "button[aria-label*='rejeitar todos os cookies' i]" },
+          { "type": "click", "selector": "button[aria-label*='rejeitar cookies' i]" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "button[aria-label*='aceitar todos os cookies' i]" },
+          { "type": "click", "selector": "button[aria-label*='aceitar cookies' i]" }
+        ]
+      }
+    },
+    {
+      "id": "privacytoolsbanner",
+      "name": "Privacy Tools Banner",
+      "note": "Brazilian storefronts such as Americanas use a lightweight Privacy Tools cookie banner with an accept button plus a close affordance but no explicit reject-all path.",
+      "detectors": [
+        { "type": "script_src", "value": "privacytools.com.br" },
+        { "type": "css_selector", "value": "#privacytools-banner-consent" },
+        { "type": "css_selector", "value": ".cc-window.cc-banner" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#privacytools-banner-consent .cc-close" },
+          { "type": "click", "selector": ".cc-window.cc-banner .cc-close" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#privacytools-banner-consent .cc-btn.cc-dismiss" },
+          { "type": "click", "selector": ".cc-window.cc-banner .cc-btn.cc-dismiss" }
+        ]
+      }
+    },
+    {
+      "id": "bradescolgpd",
+      "name": "Bradesco LGPD Banner",
+      "detectors": [
+        { "type": "css_selector", "value": "#cookies.cookie-banner" },
+        { "type": "css_selector", "value": "#rejeitarCookiesNaoNecessarios" },
+        { "type": "css_selector", "value": "#aceitarCookies" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#rejeitarCookiesNaoNecessarios" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#aceitarCookies" }
+        ]
+      }
+    },
+    {
+      "id": "netshoescookie",
+      "name": "Netshoes Cookie Notice",
+      "notice_only": true,
+      "note": "Netshoes currently exposes an informational cookie notice with a single agree-and-close action.",
+      "detectors": [
+        { "type": "css_selector", "value": ".cookie-notification" },
+        { "type": "css_selector", "value": ".cookie-notification__content__button" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".cookie-notification__content__button" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".cookie-notification__content__button" }
+        ]
+      }
+    },
+    {
+      "id": "govbrcookiebar",
+      "name": "gov.br Cookie Bar",
+      "note": "Brazil government properties expose a shared LGPD cookie bar with explicit accept, reject, and manage actions.",
+      "detectors": [
+        { "type": "css_selector", "value": ".br-cookiebar" },
+        { "type": "css_selector", "value": ".btn-accept" },
+        { "type": "css_selector", "value": ".reject-all" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".br-cookiebar .reject-all" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".br-cookiebar .btn-accept" }
+        ]
+      }
+    },
+    {
+      "id": "spgovlgpd",
+      "name": "Sao Paulo State LGPD Banner",
+      "notice_only": true,
+      "note": "The SP state portal currently shows an accept-only essential-cookies notice inside #lgpdModal.",
+      "detectors": [
+        { "type": "css_selector", "value": "#lgpdModal" },
+        { "type": "css_selector", "value": "#cadastrar.lgpd-btn" },
+        { "type": "css_selector", "value": ".lgpd-modal.show" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#cadastrar.lgpd-btn" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#cadastrar.lgpd-btn" }
+        ]
+      }
+    },
+    {
+      "id": "correioscookie",
+      "name": "Correios Cookie Notice",
+      "notice_only": true,
+      "note": "Correios exposes a lightweight accept-only statistics cookie notice.",
+      "detectors": [
+        { "type": "css_selector", "value": "#cookiesId" },
+        { "type": "css_selector", "value": ".cookiesCorreios" },
+        { "type": "css_selector", "value": ".cookiesBotaoAceitar #btnCookie" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": ".cookiesBotaoAceitar #btnCookie" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": ".cookiesBotaoAceitar #btnCookie" }
+        ]
+      }
+    },
+    {
+      "id": "radiocanadacookie",
+      "name": "Radio-Canada Cookie Alert",
+      "notice_only": true,
+      "note": "Radio-Canada currently exposes an accept-and-close privacy alert tied to the RC_NOTIFICATION_VIE_PRIVEE cookie.",
+      "detectors": [
+        { "type": "css_selector", "value": "#js-legal-disclaimer" },
+        { "type": "css_selector", "value": ".g-alert-cookie" },
+        { "type": "css_selector", "value": "button[title*=\"Accepter et fermer l'alerte\" i]" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "button[title*=\"Accepter et fermer l'alerte\" i]" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "button[title*=\"Accepter et fermer l'alerte\" i]" }
+        ]
+      }
+    },
+    {
       "id": "sourcepoint",
       "name": "Sourcepoint",
       "note": "Sourcepoint renders its UI inside a cross-origin iframe. Detection here is for reporting only — the actual click happens in sp-frame-handler.js which runs with all_frames:true.",
@@ -70,9 +275,13 @@
       "id": "didomi",
       "name": "Didomi",
       "detectors": [
+        { "type": "script_src",    "value": "sdk.privacy-center.org" },
+        { "type": "script_src",    "value": "didomi.io" },
         { "type": "js_global",    "value": "window.Didomi" },
         { "type": "css_selector", "value": "#didomi-popup" },
-        { "type": "css_selector", "value": "#didomi-notice" }
+        { "type": "css_selector", "value": "#didomi-notice" },
+        { "type": "css_selector", "value": "#didomi-consent-popup" },
+        { "type": "css_selector", "value": ".didomi-consent-popup__dialog" }
       ],
       "actions": {
         "reject_all": [
@@ -80,6 +289,7 @@
           { "type": "click", "selector": ".didomi-notice-disagree-button" },
           { "type": "click", "selector": "[data-didomi-action='disagree']" },
           { "type": "click", "selector": "[didomi-notice-action='disagree']" },
+          { "type": "click", "selector": "#btn-toggle-disagree" },
           { "type": "click", "selector": ".didomi-components-button--ghost:not([aria-label*='all' i])" },
           { "type": "click", "selector": "button[aria-label*='Reject' i]" },
           { "type": "click", "selector": "button[aria-label*='Refuser' i]" }
@@ -87,7 +297,8 @@
         "accept_all": [
           { "type": "click", "selector": "#didomi-notice-agree-button" },
           { "type": "click", "selector": ".didomi-notice-agree-button" },
-          { "type": "click", "selector": "[data-didomi-action='agree']" }
+          { "type": "click", "selector": "[data-didomi-action='agree']" },
+          { "type": "click", "selector": "#btn-toggle-agree" }
         ]
       }
     },
@@ -650,7 +861,14 @@
       "detectors": [
         { "type": "css_selector", "value": ".notice-title" },
         { "type": "css_selector", "value": "#manageSettings" },
-        { "type": "css_selector", "value": "#saveAndExit" }
+        { "type": "css_selector", "value": "#saveAndExit" },
+        { "type": "css_selector", "value": ".banner-lgpd-consent" },
+        { "type": "css_selector", "value": ".banner-lgpd-consent__accept" },
+        { "type": "css_selector", "value": "dialog.push-notification.is-cookies" },
+        { "type": "css_selector", "value": ".push-notification--accept-button" },
+        { "type": "css_selector", "value": "#cookie-banner" },
+        { "type": "css_selector", "value": "#adopt-accept-all-button" },
+        { "type": "css_selector", "value": "#adopt-preferences-button" }
       ],
       "actions": {
         "accept_all": [

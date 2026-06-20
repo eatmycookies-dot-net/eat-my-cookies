@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr-CA">
+  <head>
+    <meta charset="utf-8">
+    <title>Didomi API-open fixture</title>
+    <style>
+      #didomi-consent-popup {
+        position: fixed;
+        inset: 24px;
+        background: rgba(255, 255, 255, 0.98);
+        border: 1px solid #aaa;
+        padding: 16px;
+      }
+    </style>
+    <script src="https://sdk.privacy-center.org/example/loader.js?target_type=notice&amp;target=fixture"></script>
+  </head>
+  <body>
+    <div id="didomi-host" style="display:none"></div>
+    <main>
+      <h1>Le consentement est disponible via l'API Didomi</h1>
+      <p>Aucun point d'entree visible n'est rendu avant l'appel a l'API.</p>
+    </main>
+    <script>
+      window.__fixtureState = { bannerVisible: false, action: null, openedViaApi: false };
+
+      function closePopup(action) {
+        const popup = document.getElementById('didomi-consent-popup');
+        if (popup) popup.remove();
+        window.__fixtureState = { bannerVisible: false, action, openedViaApi: true };
+      }
+
+      window.Didomi = {
+        preferences: {
+          show() {
+            if (document.getElementById('didomi-consent-popup')) return;
+            const popup = document.createElement('div');
+            popup.id = 'didomi-consent-popup';
+            popup.innerHTML = `
+              <div class="didomi-consent-popup__dialog">
+                <h2>Centre de preferences</h2>
+                <div class="didomi-consent-popup-actions">
+                  <button id="btn-toggle-disagree">Tout refuser</button>
+                  <button id="btn-toggle-agree">Tout accepter</button>
+                  <button id="btn-toggle-save">Enregistrer</button>
+                </div>
+              </div>
+            `;
+            document.body.appendChild(popup);
+            window.__fixtureState = { bannerVisible: true, action: 'opened', openedViaApi: true };
+            document.getElementById('btn-toggle-disagree').addEventListener('click', () => closePopup('reject'));
+            document.getElementById('btn-toggle-agree').addEventListener('click', () => closePopup('accept'));
+          },
+        },
+      };
+    </script>
+  </body>
+</html>

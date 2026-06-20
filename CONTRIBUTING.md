@@ -217,6 +217,40 @@ npm run test:detect-cmp                        # CMP discovery scan
 
 Prefer `npm run verify` during normal iteration, `npm run test` before opening a PR when code behavior changed, and targeted `npm run test:e2e` when you touched a supported site or CMP flow.
 
+## Public Repo Hygiene
+
+This is a public open source repo. Local paths, secrets, private operational notes, agent-specific local state, and machine-specific artifacts should not be committed.
+
+Run the hygiene check manually:
+
+```bash
+npm run check:hygiene
+```
+
+To check only staged files:
+
+```bash
+npm run check:hygiene:staged
+```
+
+To install local git hooks for this repo:
+
+```bash
+npm run hooks:install
+```
+
+That installs:
+
+- `pre-commit`: runs the hygiene check against staged files
+- `pre-push`: runs the hygiene check plus the structural support-drift check
+
+Recommended workflow before opening a PR:
+
+1. `npm run check:hygiene:staged`
+2. `npm run check:support-drift`
+3. `npm run verify`
+4. request a review using the diff-review workflow
+
 ### Ketch-specific testing notes
 
 Ketch needs extra care because banner actions and custom settings are not always equivalent:

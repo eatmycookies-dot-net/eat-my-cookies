@@ -41,6 +41,17 @@ Recent live-validated examples include:
 - `barebiology.com` → Consentmo
 - `qualityminds.com` → Complianz
 - `guidepostgrowth.com` → OneTrust custom category mapping
+- `globo.com` → Globo custom LGPD banner
+- `americanas.com.br` → Privacy Tools lightweight banner
+- `banco.bradesco` → custom LGPD banner
+- `gov.br` → shared government cookie bar
+- `sp.gov.br` → Sao Paulo state LGPD modal
+- `correios.com.br` → custom cookie notice
+- `rbcroyalbank.com` → OneTrust
+- `nhl.com` → OneTrust
+- `theweathernetwork.com` → Didomi preferences modal
+- `hydroquebec.com` → OneTrust
+- `ici.radio-canada.ca` → custom cookie alert
 
 ## Philosophy
 

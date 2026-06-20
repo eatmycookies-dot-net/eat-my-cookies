@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>AdOpt banner fixture</title>
+    <style>
+      #cookie-banner { position: fixed; inset: auto 0 0 0; background: #f7f7f7; padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <div id="cookie-banner">
+      <h3 id="cookie-banner-title">Control your privacy</h3>
+      <small id="cookie-banner-content">Our website uses cookies to improve navigation.</small>
+      <div>
+        <button id="adopt-preferences-button">My options</button>
+        <button>Do not sell</button>
+        <button id="adopt-accept-all-button">Accept</button>
+      </div>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.getElementById('adopt-accept-all-button').addEventListener('click', () => {
+        document.getElementById('cookie-banner').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+      document.querySelector('#cookie-banner button:not([id])').addEventListener('click', () => {
+        document.getElementById('cookie-banner').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'do-not-sell' };
+      });
+    </script>
+  </body>
+</html>

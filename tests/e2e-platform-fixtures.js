@@ -12,6 +12,440 @@ const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'platform-consents');
 
 const CASES = [
   {
+    name: 'Globo LGPD accept_all',
+    path: '/globo-lgpd.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:globolgpd' &&
+      state?.action === 'continue' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'SBT LGPD reject_all',
+    path: '/sbt-lgpd.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:sbtlgpd' &&
+      state?.action === 'ok' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'SBT TV LGPD custom',
+    path: '/sbt-tv-lgpd.html',
+    prefs: {
+      globalPreference: 'custom',
+      functional: true,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:sbtlgpd' &&
+      state?.action === 'ok' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'HubSpot cookie banner reject_all',
+    path: '/hubspot-cookie-banner.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:hubspotcookiebanner' &&
+      state?.action === 'decline' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'XP LGPD accept_all',
+    path: '/xpi-lgpd.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:xplgpd' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'XP LGPD reject_all',
+    path: '/xpi-lgpd.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:xplgpd' &&
+      state?.action === 'reject' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Privacy Tools banner accept_all',
+    path: '/privacytools-banner.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:privacytoolsbanner' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Privacy Tools banner reject_all',
+    path: '/privacytools-banner.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:privacytoolsbanner' &&
+      state?.action === 'close' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Bradesco LGPD accept_all',
+    path: '/bradesco-lgpd.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:bradescolgpd' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Bradesco LGPD reject_all',
+    path: '/bradesco-lgpd.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:bradescolgpd' &&
+      state?.action === 'reject' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Netshoes cookie notice accept_all',
+    path: '/netshoes-cookie.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:netshoescookie' &&
+      state?.action === 'close' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Netshoes cookie notice reject_all',
+    path: '/netshoes-cookie.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:netshoescookie' &&
+      state?.action === 'close' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'gov.br cookie bar accept_all',
+    path: '/govbr-cookiebar.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:govbrcookiebar' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'gov.br cookie bar reject_all',
+    path: '/govbr-cookiebar.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:govbrcookiebar' &&
+      state?.action === 'reject' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'SP gov LGPD accept_all',
+    path: '/spgov-lgpd.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:spgovlgpd' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'SP gov LGPD reject_all',
+    path: '/spgov-lgpd.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:spgovlgpd' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Correios cookie accept_all',
+    path: '/correios-cookie.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:correioscookie' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Correios cookie reject_all',
+    path: '/correios-cookie.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:correioscookie' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Didomi preferences accept_all',
+    path: '/didomi-preferences.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:didomi:accept_all' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Didomi preferences reject_all',
+    path: '/didomi-preferences.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:didomi:reject_all' &&
+      state?.action === 'reject' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Didomi API-open accept_all',
+    path: '/didomi-api-open.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:didomi:accept_all' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false &&
+      state?.openedViaApi === true,
+  },
+  {
+    name: 'Didomi API-open reject_all',
+    path: '/didomi-api-open.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:didomi:reject_all' &&
+      state?.action === 'reject' &&
+      state?.bannerVisible === false &&
+      state?.openedViaApi === true,
+  },
+  {
+    name: 'Radio-Canada cookie alert accept_all',
+    path: '/radio-canada-cookie.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:radiocanadacookie' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Radio-Canada cookie alert reject_all',
+    path: '/radio-canada-cookie.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:radiocanadacookie' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'PrivacyManager simple reject_all',
+    path: '/privacymanager-simple.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:privacymanager:reject_all' &&
+      state?.action === 'continue' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'AdOpt reject_all',
+    path: '/adopt-banner.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:privacymanager:reject_all' &&
+      state?.action === 'do-not-sell' &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'AdOpt accept_all',
+    path: '/adopt-banner.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:privacymanager:accept_all' &&
+      state?.action === 'accept' &&
+      state?.bannerVisible === false,
+  },
+  {
     name: 'BigCommerce Catalyst accept_all',
     path: '/bigcommerce-catalyst.html',
     prefs: {

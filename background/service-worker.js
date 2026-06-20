@@ -135,7 +135,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.type === 'CLEAR_UNSUPPORTED_SITE') {
-    clearUnsupportedSiteAndRefresh(message.domain, sender).then(() => sendResponse({ ok: true }));
+    clearUnsupportedSiteAndRefresh(message.domain, sender, message.tabId).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (message.type === 'ACCEPT_SITE_AND_RELOAD') {
+    handleAcceptSiteAndReload(message.domain, message.tabId).then(() => sendResponse({ ok: true }));
     return true;
   }
   if (message.type === 'REMOVE_SITE_OVERRIDE') {
@@ -148,7 +152,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function handleActionFired({ site, method, preference, actionToken }, sender) {
+async function handleActionFired({ site, method, preference, actionToken, noRejectAvailable }, sender) {
   site = normalizeSite(site, sender);
   const tabId = sender.tab?.id;
   const overrides = await getSiteOverrides();
@@ -196,9 +200,23 @@ async function handleActionFired({ site, method, preference, actionToken }, send
     recordSite(site),
     clearUnsupportedSite(site),
   ]);
-  await updateBadge(stats.totalActionsCount, settings.showBadgeCount, tabId);
 
-  if (tabId) {
+  if (noRejectAvailable) {
+    await setUnsupportedSite(site, {
+      site,
+      allowAcceptOverride: false,
+      informationalOnly: true,
+      timestamp: new Date().toISOString(),
+    });
+    if (tabId) {
+      await chrome.action.setBadgeText({ text: '!', tabId });
+      await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR, tabId });
+    }
+  } else {
+    await updateBadge(stats.totalActionsCount, settings.showBadgeCount, tabId);
+  }
+
+  if (tabId && !noRejectAvailable) {
     animateIcon(tabId, triggeredMilestones.length > 0);
   }
 
@@ -511,13 +529,29 @@ async function reportUnsupportedSite({ site, reason, allowAcceptOverride }, send
   return { ok: true };
 }
 
-async function clearUnsupportedSiteAndRefresh(domain, sender) {
+async function clearUnsupportedSiteAndRefresh(domain, sender, tabIdOverride) {
   await clearUnsupportedSite(domain);
   const [{ stats }, settings] = await Promise.all([
     chrome.storage.local.get({ stats: { totalActionsCount: 0 } }),
     getSettings(),
   ]);
-  await updateBadge(stats.totalActionsCount ?? 0, settings.showBadgeCount, sender.tab?.id);
+  const tabId = sender.tab?.id ?? tabIdOverride;
+  await updateBadge(stats.totalActionsCount ?? 0, settings.showBadgeCount, tabId);
+}
+
+async function handleAcceptSiteAndReload(domain, tabId) {
+  await setSiteOverride(domain, { alwaysAccept: true, disabled: false });
+  await clearUnsupportedSite(domain);
+  const [{ stats }, settings] = await Promise.all([
+    chrome.storage.local.get({ stats: { totalActionsCount: 0 } }),
+    getSettings(),
+  ]);
+  await updateBadge(stats.totalActionsCount ?? 0, settings.showBadgeCount, tabId);
+  if (tabId) {
+    try {
+      await chrome.tabs.reload(tabId);
+    } catch (_) {}
+  }
 }
 
 async function updateBadge(count, showBadgeCount, tabId) {

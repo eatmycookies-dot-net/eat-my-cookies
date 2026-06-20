@@ -101,7 +101,7 @@ const SITES = [
 // CMP fingerprints — scripts/globals/elements loaded by each platform
 const CMP_FINGERPRINTS = [
   { name: 'Ketch',          scripts: ['ketchcdn.com'],                              globals: ['ketch', 'semaphore'],            selectors: ['#ketch-banner', '#ketch-consent-banner', '#ketch-preferences-navigation-purposes-tab'] },
-  { name: 'Didomi',         scripts: ['sdk.privacy-center.org', 'didomi.io'],       globals: ['Didomi', 'didomiOnReady'],       selectors: ['#didomi-notice', '#didomi-popup', '.didomi-notice-banner'] },
+  { name: 'Didomi',         scripts: ['sdk.privacy-center.org', 'didomi.io'],       globals: ['Didomi', 'didomiOnReady'],       selectors: ['#didomi-notice', '#didomi-popup', '.didomi-notice-banner', '#didomi-consent-popup', '.didomi-consent-popup__dialog'] },
   { name: 'OneTrust',       scripts: ['cdn.cookielaw.org', 'optanon'],              globals: ['OneTrust', 'OptanonWrapper'],    selectors: ['#onetrust-banner-sdk', '#onetrust-accept-btn-handler', '.optanon-alert-box-wrapper'] },
   { name: 'Sourcepoint',    scripts: ['sourcepoint.com', '_sp_'],                   globals: ['_sp_', '__tcfapi'],              selectors: ['[id^="sp_message_container"]', '[id^="sp_message_iframe"]'] },
   { name: 'TrustArc',       scripts: ['consent.trustarc.com', 'truste.com'],        globals: ['truste', 'TrustArcConsent'],     selectors: ['.truste_overlay', '#truste-consent-track'] },
@@ -130,6 +130,17 @@ const CMP_FINGERPRINTS = [
   { name: 'Clickio',        scripts: ['clickio'],                                   globals: ['clickio'],                      selectors: ['#cl-consent', '.cl-consent__inner'] },
   { name: 'cookiesjsr',     scripts: ['cookiesjsr'],                                globals: ['cookiesjsr'],                   selectors: ['#cookiesjsr', '.cookiesjsr--app', '.cookiesjsr-settings'] },
   { name: 'privacymanager.io', scripts: ['privacymanager'],                         globals: ['PrivacyManagerAPI'],            selectors: ['.notice-title', '#manageSettings', '#saveAndExit'] },
+  { name: 'HubSpot Cookie Banner', scripts: ['js.hs-scripts.com', 'hubspot.com'],   globals: [],                               selectors: ['#hs-eu-cookie-confirmation', '#hs-eu-confirmation-button', '#hs-eu-decline-button'] },
+  { name: 'Globo LGPD',     scripts: [],                                             globals: [],                               selectors: ['#cookie-banner-lgpd', '.cookie-banner-lgpd-visible', '.cookie-banner-lgpd_accept-button'] },
+  { name: 'XP LGPD',        scripts: [],                                             globals: [],                               selectors: ["[data-testid='lgpd-cookies-id']", '#cookies-policy-container', 'cookies-policy'] },
+  { name: 'Privacy Tools Banner', scripts: ['privacytools.com.br'],                 globals: [],                               selectors: ['#privacytools-banner-consent', '.cc-window.cc-banner'] },
+  { name: 'Bradesco LGPD',  scripts: [],                                             globals: [],                               selectors: ['#cookies.cookie-banner', '#rejeitarCookiesNaoNecessarios', '#aceitarCookies'] },
+  { name: 'Netshoes Cookie Notice', scripts: [],                                     globals: [],                               selectors: ['.cookie-notification', '.cookie-notification__content__button'] },
+  { name: 'gov.br Cookie Bar', scripts: ['govbr.policy', 'lgpd_cookie_handling'],    globals: [],                               selectors: ['.br-cookiebar', '.btn-accept', '.reject-all'] },
+  { name: 'Sao Paulo State LGPD Banner', scripts: [],                                globals: [],                               selectors: ['#lgpdModal', '#cadastrar.lgpd-btn', '.lgpd-modal.show'] },
+  { name: 'Correios Cookie Notice', scripts: ['cookies.js'],                         globals: [],                               selectors: ['#cookiesId', '.cookiesCorreios', '.cookiesBotaoAceitar #btnCookie'] },
+  { name: 'Radio-Canada Cookie Alert', scripts: [],                                  globals: [],                               selectors: ['#js-legal-disclaimer', '.g-alert-cookie', "button[title*=\"Accepter et fermer l'alerte\" i]"] },
+  { name: 'AdOpt',          scripts: ['adopt', 'adopt.com.br'],                     globals: ['adopt'],                        selectors: ['#cookie-banner', '#adopt-accept-all-button', '#adopt-preferences-button'] },
 ];
 
 async function detectCMP(page) {

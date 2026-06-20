@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Privacy Tools banner fixture</title>
+    <style>
+      #privacytools-banner-consent {
+        position: fixed;
+        inset: auto 0 0 0;
+        background: #f7f7f7;
+        border-top: 1px solid #ccc;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="privacytools-banner-consent" role="dialog" class="cc-window cc-banner">
+      <span class="cc-close" role="button" tabindex="0">x</span>
+      <p>Cookies: usamos cookies para personalizar anuncios e melhorar sua experiencia.</p>
+      <button class="cc-btn cc-dismiss">Aceitar</button>
+      <span class="cc-link" role="button" tabindex="0">Preferencias</span>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('.cc-btn.cc-dismiss').addEventListener('click', () => {
+        document.getElementById('privacytools-banner-consent').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+      document.querySelector('.cc-close').addEventListener('click', () => {
+        document.getElementById('privacytools-banner-consent').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'close' };
+      });
+    </script>
+  </body>
+</html>

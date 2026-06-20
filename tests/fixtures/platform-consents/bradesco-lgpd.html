@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Bradesco LGPD fixture</title>
+    <style>
+      #cookies.cookie-banner {
+        position: fixed;
+        inset: auto 0 0 0;
+        background: #fff4f4;
+        border-top: 1px solid #d99;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="cookies" class="cookie-banner">
+      <p>Usamos cookies pra oferecer a melhor experiencia.</p>
+      <button id="rejeitarCookiesNaoNecessarios">Rejeitar cookies nao necessarios</button>
+      <button>Configurar cookies</button>
+      <button id="aceitarCookies">Aceitar cookies</button>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.getElementById('rejeitarCookiesNaoNecessarios').addEventListener('click', () => {
+        document.getElementById('cookies').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'reject' };
+      });
+      document.getElementById('aceitarCookies').addEventListener('click', () => {
+        document.getElementById('cookies').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+    </script>
+  </body>
+</html>

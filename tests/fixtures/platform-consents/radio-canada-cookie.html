@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr-CA">
+  <head>
+    <meta charset="utf-8">
+    <title>Radio-Canada cookie alert fixture</title>
+    <style>
+      #js-legal-disclaimer {
+        position: fixed;
+        inset: auto 0 0 0;
+        background: #1d1d1d;
+        color: #fff;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="js-legal-disclaimer" class="g-alert-cookie">
+      <p>Nous utilisons des temoins pour ameliorer votre experience.</p>
+      <button title="Accepter et fermer l'alerte" type="button">ACCEPTER ET FERMER L'ALERTE</button>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('button').addEventListener('click', () => {
+        document.cookie = 'RC_NOTIFICATION_VIE_PRIVEE=false; path=/';
+        document.getElementById('js-legal-disclaimer').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+    </script>
+  </body>
+</html>

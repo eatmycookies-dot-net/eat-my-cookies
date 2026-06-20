@@ -8,6 +8,40 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Upcoming (unreleased)
 
+### Brazil / LGPD Coverage Expansion
+
+- Expanded Brazilian LGPD coverage with first-class support for Globo, SBT, XP, `e-core.com` (HubSpot), the Privacy Tools lightweight banner family, Bradesco, Netshoes, `gov.br`, `sp.gov.br`, and Correios.
+- Added fixture coverage for the new Brazil-specific banner families so selector and dismissal regressions are caught locally before live-site validation.
+- Added live regression targets in `tests/sites.json` for `globo.com`, `sbt.com.br`, `e-core.com`, `americanas.com.br`, `banco.bradesco`, `netshoes.com.br`, `gov.br`, `sp.gov.br`, `correios.com.br`, and `tim.com.br`.
+- Non-VPN live e2e validation now passes for the sites above, plus previously added Brazil targets such as `terra.com.br`, `exame.com` (accept path), and `globo.com`.
+- Documented the remaining Browsec/VPN limitation more clearly: in VPN mode the extension still fails to record activity in the browser context (`recorded=none`, `emcPref=n/a`), so current Brazil VPN failures are a validator/runtime issue rather than missing LGPD selectors.
+
+### Canada / PIPEDA Initial Wave
+
+- Added a first Canadian/PIPEDA validation wave focused on high-traffic sites from Similarweb's Canada ranking for May 2026.
+- Added live regression targets for `rbcroyalbank.com`, `nhl.com`, `td.com`, `canadiantire.ca`, and `theweathernetwork.com`.
+- Non-VPN live e2e now passes for:
+  - `rbcroyalbank.com` → OneTrust (`Accept All` and `Reject All`)
+  - `nhl.com` → OneTrust (`Reject All`)
+  - `theweathernetwork.com` → Didomi / `privacy-center.org` preferences modal (`Accept All` and `Reject All`)
+- Strengthened the generic Didomi handler so sites that expose a manage/preferences entry point first, rather than the lightweight notice layer, can still be handled end to end through the full Didomi preferences modal.
+- Strengthened the generic Didomi handler again so that, when the SDK is already present but the site does not expose a visible entry point, the extension can try Didomi's public `preferences.show()` API before giving up.
+- Documented the current honest follow-up set instead of over-claiming support:
+  - `td.com` currently skips because no banner surfaced in the validation session
+  - `canadiantire.ca` currently skips because the visible `Cookie Settings` entry point is persistent, but a first-load dismissible banner was not present on rerun
+  - `lapresse.ca` exposes a public `nuglif.consentHandler`, but in sampled anonymous sessions it still behaves like a no-op wrapper
+
+### Quebec / Law 25 Initial Wave
+
+- Added the first dedicated Quebec / Law 25 validation wave with Quebec-facing locale and language settings.
+- Added live validated Quebec targets for:
+  - `hydroquebec.com` → OneTrust (`Accept All` and `Reject All`)
+  - `ici.radio-canada.ca` → custom Radio-Canada cookie alert
+- Added a first-class custom handler for Radio-Canada's French privacy alert (`#js-legal-disclaimer` / `ACCEPTER ET FERMER L'ALERTE`).
+- Documented the next honest Quebec follow-up set:
+  - `lapresse.ca` loads a Quebec-specific `bootstrapConsent` layer, writes consent state locally, and exposes `nuglif.consentHandler`, but the sampled anonymous session still did not mount a visible UI
+  - `ledevoir.com` loads Didomi / `privacy-center.org` with a hidden host and is the next live-validation candidate for the new API-open fallback
+
 ---
 
 ## v1.2.1

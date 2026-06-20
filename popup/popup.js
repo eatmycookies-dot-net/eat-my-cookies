@@ -41,6 +41,9 @@ let i18n = {
       siteWarningDisabledFallback: 'Eat My Cookies will stay off on this site until you turn it back on.',
       siteWarningAlwaysAcceptFallback: 'This site is set to allow cookies automatically so its wall can clear.',
       siteWarningNeedsChoiceFallback: 'This site currently does not expose a reject path that matches your settings.',
+      siteWarningNoRejectTitle: '$1 only showed a notice',
+      siteWarningNoRejectFallback: 'This banner only offered a single button. Cookies were accepted automatically — no reject option was available.',
+      popupGotIt: 'Got it',
       siteWarningAutoDisabledTitle: 'Auto-disabled for $1',
       siteWarningDisabledTitle: 'Disabled for $1',
       siteWarningAlwaysAcceptTitle: 'Always accept enabled for $1',
@@ -217,12 +220,15 @@ function renderBadges(milestonesShown) {
     return;
   }
 
-  list.innerHTML = badges.map((badge) => `
-    <div class="badge-chip" title="${escapeHTML(`${badge.name} — ${formatBadgeThreshold(badge.threshold)}`)}">
+  list.innerHTML = badges.map((badge) => {
+    const name = i18n.t(badge.nameKey);
+    return `
+    <div class="badge-chip" title="${escapeHTML(`${name} — ${formatBadgeThreshold(badge.threshold)}`)}">
       <img src="${badge.icon ?? '../icons/icon-16.png'}" alt="" class="badge-icon" width="22" height="22">
-      <span>${escapeHTML(badge.name)}</span>
+      <span>${escapeHTML(name)}</span>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function formatBadgeThreshold(threshold) {
@@ -268,12 +274,16 @@ function renderSiteWarning(currentDomain, warning, siteOverride) {
       : i18n.t('siteWarningDisabledTitle', [currentDomain]))
     : siteOverride?.alwaysAccept
       ? i18n.t('siteWarningAlwaysAcceptTitle', [currentDomain])
-      : i18n.t('siteWarningNeedsChoiceTitle', [currentDomain]);
+      : warning?.informationalOnly
+        ? i18n.t('siteWarningNoRejectTitle', [currentDomain])
+        : i18n.t('siteWarningNeedsChoiceTitle', [currentDomain]);
   document.getElementById('site-warning-text').textContent = siteOverride?.disabled
     ? (warning?.reason ?? i18n.t('siteWarningDisabledFallback'))
     : siteOverride?.alwaysAccept
       ? i18n.t('siteWarningAlwaysAcceptFallback')
-      : (warning?.reason ?? i18n.t('siteWarningNeedsChoiceFallback'));
+      : warning?.informationalOnly
+        ? i18n.t('siteWarningNoRejectFallback')
+        : (warning?.reason ?? i18n.t('siteWarningNeedsChoiceFallback'));
 
   const acceptBtn = document.getElementById('site-accept-btn');
   acceptBtn.classList.toggle('hidden', Boolean(siteOverride?.alwaysAccept) || Boolean(siteOverride?.disabled) || !warning?.allowAcceptOverride);
@@ -281,7 +291,9 @@ function renderSiteWarning(currentDomain, warning, siteOverride) {
     ? i18n.t('popupReenable')
     : siteOverride?.alwaysAccept
       ? i18n.t('popupRemovePermission')
-      : i18n.t('popupDismiss');
+      : warning?.informationalOnly
+        ? i18n.t('popupGotIt')
+        : i18n.t('popupDismiss');
 }
 
 function findDomainRecord(records, domain) {
@@ -324,7 +336,7 @@ function showMilestoneCard(milestone) {
       : '🍪';
   }
 
-  document.getElementById('milestone-name').textContent = i18n.t('milestoneUnlocked', [milestone.name]);
+  document.getElementById('milestone-name').textContent = i18n.t('milestoneUnlocked', [i18n.t(milestone.nameKey)]);
   const n = milestone.threshold;
   document.getElementById('milestone-desc').textContent = i18n.t(
     n === 1 ? 'milestoneDescSingular' : 'milestoneDescPlural',
@@ -389,14 +401,18 @@ function bindSettingsPanel(settings, currentDomain) {
       return;
     }
 
-    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: currentDomain });
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: currentDomain, tabId: activeTab?.id });
     document.getElementById('site-warning').classList.add('hidden');
   });
   document.getElementById('site-accept-btn').addEventListener('click', async () => {
     if (!currentDomain) return;
-    await setSiteOverride(currentDomain, { alwaysAccept: true, disabled: false });
-    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: currentDomain });
-    await reloadActiveTab();
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    chrome.runtime.sendMessage({
+      type: 'ACCEPT_SITE_AND_RELOAD',
+      domain: currentDomain,
+      tabId: activeTab?.id,
+    });
     window.close();
   });
   document.getElementById('site-toggle-btn').addEventListener('click', async () => {

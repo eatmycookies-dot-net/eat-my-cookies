@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>PrivacyManager simple fixture</title>
+    <style>
+      .banner-lgpd-consent { position: fixed; inset: auto 0 0 0; background: #f4f4f4; padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <div class="banner-lgpd-consent banner-lgpd-consent--show">
+      <p>Utilizamos cookies essenciais e tecnologias semelhantes.</p>
+      <button class="banner-lgpd-consent__accept">OK</button>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('.banner-lgpd-consent__accept').addEventListener('click', () => {
+        document.querySelector('.banner-lgpd-consent').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'continue' };
+      });
+    </script>
+  </body>
+</html>

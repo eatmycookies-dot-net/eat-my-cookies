@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Globo LGPD fixture</title>
+    <style>
+      body { font-family: sans-serif; margin: 0; }
+      #cookie-banner-lgpd {
+        position: fixed;
+        inset: auto 0 0 0;
+        background: #eef4ff;
+        border-top: 1px solid #9cb5e8;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>Fixture</main>
+    <div id="cookie-banner-lgpd" class="cookie-banner-lgpd-visible">
+      <p>Nos usamos cookies para melhorar a sua experiencia.</p>
+      <button class="cookie-banner-lgpd_accept-button">Prosseguir</button>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('.cookie-banner-lgpd_accept-button').addEventListener('click', () => {
+        document.getElementById('cookie-banner-lgpd').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'continue' };
+      });
+    </script>
+  </body>
+</html>

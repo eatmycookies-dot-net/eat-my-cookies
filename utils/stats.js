@@ -2,29 +2,33 @@ import { getStats, setStats } from './storage.js';
 
 const RECENT_ACTIVITY_LIMIT = 20;
 
+// `name` is the English fallback (also used by tests/static-checks.js and
+// tests/unit/stats.test.js). `nameKey` is the _locales/*/messages.json key
+// popup.js looks up via i18n.t() to display the badge name in the user's
+// chosen UI language.
 export const MILESTONES = [
-  { id: 'first_action',          threshold: 1,        name: 'First Bite',           icon: '../icons/badges/first-bite.png' },
-  { id: 'dozen',                 threshold: 12,       name: "Baker's Dozen",        icon: '../icons/badges/bakers-dozen.png' },
-  { id: 'quarter_crunch',        threshold: 25,       name: 'Quarter Crunch',       icon: '../icons/badges/quarter-crunch.png' },
-  { id: 'fifty_stack',           threshold: 50,       name: 'Fifty Stack',          icon: '../icons/badges/fifty-stack.png' },
-  { id: 'seventy_five',          threshold: 75,       name: 'Snack Attack',         icon: '../icons/badges/snack-attack.png' },
-  { id: 'century',               threshold: 100,      name: 'Century Crumbler',     icon: '../icons/badges/century-crumbler.png' },
-  { id: 'two_hundred',           threshold: 200,      name: 'Double Dip',           icon: '../icons/badges/double-dip.png' },
-  { id: 'three_hundred',         threshold: 300,      name: 'Tray Tracker',         icon: '../icons/badges/tray-tracker.png' },
-  { id: 'four_hundred',          threshold: 400,      name: 'Oven Regular',         icon: '../icons/badges/oven-regular.png' },
-  { id: 'five_hundred',          threshold: 500,      name: 'Cookie Crusher',       icon: '../icons/badges/cookie-crusher.png' },
-  { id: 'thousand',              threshold: 1000,     name: 'Terminator',           icon: '../icons/badges/terminator.png' },
-  { id: 'two_thousand',          threshold: 2000,     name: 'Jar Raider',           icon: '../icons/badges/jar-raider.png' },
-  { id: 'three_thousand',        threshold: 3000,     name: 'Batch Boss',           icon: '../icons/badges/batch-boss.png' },
-  { id: 'four_thousand',         threshold: 4000,     name: 'Crate Cracker',        icon: '../icons/badges/crate-cracker.png' },
-  { id: 'five_thousand',         threshold: 5000,     name: 'Unstoppable',          icon: '../icons/badges/unstoppable.png' },
-  { id: 'ten_thousand',          threshold: 10000,    name: 'Legend',               icon: '../icons/badges/legend.png' },
-  { id: 'twenty_five_thousand',  threshold: 25000,    name: 'Scroll Stomper',       icon: '../icons/badges/scroll-stomper.png' },
-  { id: 'fifty_thousand',        threshold: 50000,    name: 'Bannerbreaker',        icon: '../icons/badges/bannerbreaker.png' },
-  { id: 'hundred_thousand',      threshold: 100000,   name: 'Consent Cartographer', icon: '../icons/badges/consent-cartographer.png' },
-  { id: 'quarter_million',       threshold: 250000,   name: 'Wall Whisperer',       icon: '../icons/badges/wall-whisperer.png' },
-  { id: 'half_million',          threshold: 500000,   name: 'Crumb Colossus',       icon: '../icons/badges/crumb-colossus.png' },
-  { id: 'million',               threshold: 1000000,  name: 'Mythic Muncher',       icon: '../icons/badges/mythic-muncher.png' },
+  { id: 'first_action',          threshold: 1,        name: 'First Bite',           nameKey: 'badgeNameFirstBite',           icon: '../icons/badges/first-bite.png' },
+  { id: 'dozen',                 threshold: 12,       name: "Baker's Dozen",        nameKey: 'badgeNameBakersDozen',         icon: '../icons/badges/bakers-dozen.png' },
+  { id: 'quarter_crunch',        threshold: 25,       name: 'Quarter Crunch',       nameKey: 'badgeNameQuarterCrunch',       icon: '../icons/badges/quarter-crunch.png' },
+  { id: 'fifty_stack',           threshold: 50,       name: 'Fifty Stack',          nameKey: 'badgeNameFiftyStack',          icon: '../icons/badges/fifty-stack.png' },
+  { id: 'seventy_five',          threshold: 75,       name: 'Snack Attack',         nameKey: 'badgeNameSnackAttack',         icon: '../icons/badges/snack-attack.png' },
+  { id: 'century',               threshold: 100,      name: 'Century Crumbler',     nameKey: 'badgeNameCenturyCrumbler',     icon: '../icons/badges/century-crumbler.png' },
+  { id: 'two_hundred',           threshold: 200,      name: 'Double Dip',           nameKey: 'badgeNameDoubleDip',           icon: '../icons/badges/double-dip.png' },
+  { id: 'three_hundred',         threshold: 300,      name: 'Tray Tracker',         nameKey: 'badgeNameTrayTracker',         icon: '../icons/badges/tray-tracker.png' },
+  { id: 'four_hundred',          threshold: 400,      name: 'Oven Regular',         nameKey: 'badgeNameOvenRegular',         icon: '../icons/badges/oven-regular.png' },
+  { id: 'five_hundred',          threshold: 500,      name: 'Cookie Crusher',       nameKey: 'badgeNameCookieCrusher',       icon: '../icons/badges/cookie-crusher.png' },
+  { id: 'thousand',              threshold: 1000,     name: 'Terminator',           nameKey: 'badgeNameTerminator',          icon: '../icons/badges/terminator.png' },
+  { id: 'two_thousand',          threshold: 2000,     name: 'Jar Raider',           nameKey: 'badgeNameJarRaider',           icon: '../icons/badges/jar-raider.png' },
+  { id: 'three_thousand',        threshold: 3000,     name: 'Batch Boss',           nameKey: 'badgeNameBatchBoss',           icon: '../icons/badges/batch-boss.png' },
+  { id: 'four_thousand',         threshold: 4000,     name: 'Crate Cracker',        nameKey: 'badgeNameCrateCracker',        icon: '../icons/badges/crate-cracker.png' },
+  { id: 'five_thousand',         threshold: 5000,     name: 'Unstoppable',          nameKey: 'badgeNameUnstoppable',         icon: '../icons/badges/unstoppable.png' },
+  { id: 'ten_thousand',          threshold: 10000,    name: 'Legend',               nameKey: 'badgeNameLegend',              icon: '../icons/badges/legend.png' },
+  { id: 'twenty_five_thousand',  threshold: 25000,    name: 'Scroll Stomper',       nameKey: 'badgeNameScrollStomper',       icon: '../icons/badges/scroll-stomper.png' },
+  { id: 'fifty_thousand',        threshold: 50000,    name: 'Bannerbreaker',        nameKey: 'badgeNameBannerbreaker',       icon: '../icons/badges/bannerbreaker.png' },
+  { id: 'hundred_thousand',      threshold: 100000,   name: 'Consent Cartographer', nameKey: 'badgeNameConsentCartographer', icon: '../icons/badges/consent-cartographer.png' },
+  { id: 'quarter_million',       threshold: 250000,   name: 'Wall Whisperer',       nameKey: 'badgeNameWallWhisperer',       icon: '../icons/badges/wall-whisperer.png' },
+  { id: 'half_million',          threshold: 500000,   name: 'Crumb Colossus',       nameKey: 'badgeNameCrumbColossus',       icon: '../icons/badges/crumb-colossus.png' },
+  { id: 'million',               threshold: 1000000,  name: 'Mythic Muncher',       nameKey: 'badgeNameMythicMuncher',       icon: '../icons/badges/mythic-muncher.png' },
 ];
 
 export async function recordAction({ site, method, preference }) {

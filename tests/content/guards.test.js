@@ -578,7 +578,15 @@ describe('service-worker.js — unsupported-site badge clearing', () => {
   it('refreshes the tab badge when unsupported-site state is cleared', () => {
     expect(source).toContain('clearUnsupportedSiteAndRefresh');
     expect(source).toContain("if (message.type === 'CLEAR_UNSUPPORTED_SITE')");
-    expect(source).toContain('await updateBadge(stats.totalActionsCount ?? 0, settings.showBadgeCount, sender.tab?.id);');
+    expect(source).toContain('await updateBadge(stats.totalActionsCount ?? 0, settings.showBadgeCount, tabId);');
+    expect(source).toContain('sender.tab?.id ?? tabIdOverride');
+  });
+
+  it('handles always-accept override and tab reload atomically in the service worker', () => {
+    expect(source).toContain("if (message.type === 'ACCEPT_SITE_AND_RELOAD')");
+    expect(source).toContain('handleAcceptSiteAndReload(message.domain, message.tabId)');
+    expect(source).toContain('async function handleAcceptSiteAndReload(domain, tabId)');
+    expect(source).toContain('await setSiteOverride(domain, { alwaysAccept: true, disabled: false })');
   });
 
   it('dedupes repeated actions by page and preference even if different handlers report success', () => {

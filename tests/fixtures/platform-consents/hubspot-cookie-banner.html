@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>HubSpot cookie banner fixture</title>
+    <style>
+      #hs-eu-cookie-confirmation { position: fixed; inset: auto 0 0 0; background: #fff; border-top: 1px solid #ccc; padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <div id="hs-eu-cookie-confirmation">
+      <p>This website stores cookies on your computer.</p>
+      <div id="hs-eu-cookie-confirmation-buttons-area">
+        <button id="hs-eu-cookie-settings-button">Customize Settings</button>
+        <button id="hs-eu-confirmation-button">Accept</button>
+        <button id="hs-eu-decline-button">Decline</button>
+      </div>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.getElementById('hs-eu-confirmation-button').addEventListener('click', () => {
+        document.getElementById('hs-eu-cookie-confirmation').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+      document.getElementById('hs-eu-decline-button').addEventListener('click', () => {
+        document.getElementById('hs-eu-cookie-confirmation').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'decline' };
+      });
+    </script>
+  </body>
+</html>

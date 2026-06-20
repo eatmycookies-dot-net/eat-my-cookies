@@ -279,6 +279,19 @@
     "message": "This site currently does not expose a reject path that matches your settings.",
     "description": "Unsupported site warning body"
   },
+  "siteWarningNoRejectTitle": {
+    "message": "$1 only showed a notice",
+    "description": "Warning title when a banner had no reject option",
+    "placeholders": { "1": { "content": "$1" } }
+  },
+  "siteWarningNoRejectFallback": {
+    "message": "This banner only offered a single button. Cookies were accepted automatically — no reject option was available.",
+    "description": "Warning body when a banner had no reject option"
+  },
+  "popupGotIt": {
+    "message": "Got it",
+    "description": "Dismiss button for informational-only notices"
+  },
   "siteOverrideDisabledLabel": {
     "message": "Disabled on this site",
     "description": "Site override label"
@@ -398,5 +411,93 @@
   "onboardingDone": {
     "message": "✓ Done",
     "description": "Onboarding done button label"
+  },
+  "badgeNameFirstBite": {
+    "message": "First Bite",
+    "description": "Badge name: 1 banner handled"
+  },
+  "badgeNameBakersDozen": {
+    "message": "Baker's Dozen",
+    "description": "Badge name: 12 banners handled"
+  },
+  "badgeNameQuarterCrunch": {
+    "message": "Quarter Crunch",
+    "description": "Badge name: 25 banners handled"
+  },
+  "badgeNameFiftyStack": {
+    "message": "Fifty Stack",
+    "description": "Badge name: 50 banners handled"
+  },
+  "badgeNameSnackAttack": {
+    "message": "Snack Attack",
+    "description": "Badge name: 75 banners handled"
+  },
+  "badgeNameCenturyCrumbler": {
+    "message": "Century Crumbler",
+    "description": "Badge name: 100 banners handled"
+  },
+  "badgeNameDoubleDip": {
+    "message": "Double Dip",
+    "description": "Badge name: 200 banners handled"
+  },
+  "badgeNameTrayTracker": {
+    "message": "Tray Tracker",
+    "description": "Badge name: 300 banners handled"
+  },
+  "badgeNameOvenRegular": {
+    "message": "Oven Regular",
+    "description": "Badge name: 400 banners handled"
+  },
+  "badgeNameCookieCrusher": {
+    "message": "Cookie Crusher",
+    "description": "Badge name: 500 banners handled"
+  },
+  "badgeNameTerminator": {
+    "message": "Terminator",
+    "description": "Badge name: 1,000 banners handled"
+  },
+  "badgeNameJarRaider": {
+    "message": "Jar Raider",
+    "description": "Badge name: 2,000 banners handled"
+  },
+  "badgeNameBatchBoss": {
+    "message": "Batch Boss",
+    "description": "Badge name: 3,000 banners handled"
+  },
+  "badgeNameCrateCracker": {
+    "message": "Crate Cracker",
+    "description": "Badge name: 4,000 banners handled"
+  },
+  "badgeNameUnstoppable": {
+    "message": "Unstoppable",
+    "description": "Badge name: 5,000 banners handled"
+  },
+  "badgeNameLegend": {
+    "message": "Legend",
+    "description": "Badge name: 10,000 banners handled"
+  },
+  "badgeNameScrollStomper": {
+    "message": "Scroll Stomper",
+    "description": "Badge name: 25,000 banners handled"
+  },
+  "badgeNameBannerbreaker": {
+    "message": "Bannerbreaker",
+    "description": "Badge name: 50,000 banners handled"
+  },
+  "badgeNameConsentCartographer": {
+    "message": "Consent Cartographer",
+    "description": "Badge name: 100,000 banners handled"
+  },
+  "badgeNameWallWhisperer": {
+    "message": "Wall Whisperer",
+    "description": "Badge name: 250,000 banners handled"
+  },
+  "badgeNameCrumbColossus": {
+    "message": "Crumb Colossus",
+    "description": "Badge name: 500,000 banners handled"
+  },
+  "badgeNameMythicMuncher": {
+    "message": "Mythic Muncher",
+    "description": "Badge name: 1,000,000 banners handled"
   }
 }

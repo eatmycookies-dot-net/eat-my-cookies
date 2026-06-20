@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Correios cookie fixture</title>
+    <style>
+      #cookiesId {
+        position: fixed;
+        inset: auto 0 0 0;
+        background: #ffde59;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="cookiesId" class="cookiesCorreios">
+      <div class="cookiesConteudo">
+        <div class="cookiesCorreiosDescricao">
+          <p>Coletamos cookies exclusivamente com a finalidade de manter estatisticas de experiencia dos clientes.</p>
+        </div>
+        <div class="cookiesBotaoAceitar">
+          <a id="btnCookie" class="botaoAceitarCookie">Aceito</a>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.getElementById('btnCookie').addEventListener('click', () => {
+        document.getElementById('cookiesId').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+    </script>
+  </body>
+</html>

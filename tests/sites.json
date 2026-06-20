@@ -2019,6 +2019,641 @@
       "consentSelectors": [
         "#ketch-consent-banner"
       ]
+    },
+    {
+      "name": "Globo (BR/LGPD)",
+      "url": "https://www.globo.com/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "Globo LGPD",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#cookie-banner-lgpd",
+        ".cookie-banner-lgpd-visible"
+      ],
+      "consentSelectors": [
+        ".cookie-banner-lgpd_accept-button"
+      ]
+    },
+    {
+      "name": "SBT (BR/LGPD)",
+      "url": "https://www.sbt.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "SBT LGPD",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "div[class*='cookiesBanner__'][class*='visible']"
+      ],
+      "consentSelectors": [
+        "button.sbt-button"
+      ]
+    },
+    {
+      "name": "e-Core (HubSpot Cookie Banner)",
+      "url": "https://www.e-core.com/",
+      "region": "BR",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "HubSpot Cookie Banner",
+      "tier": "dom",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#hs-eu-cookie-confirmation"
+      ],
+      "consentSelectors": [
+        "#hs-eu-decline-button",
+        "#hs-eu-confirmation-button"
+      ]
+    },
+    {
+      "name": "Americanas (BR/Privacy Tools)",
+      "url": "https://www.americanas.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "Privacy Tools Banner",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#privacytools-banner-consent",
+        ".cc-window.cc-banner"
+      ],
+      "consentSelectors": [
+        ".cc-window.cc-banner .cc-btn.cc-dismiss"
+      ]
+    },
+    {
+      "name": "Bradesco (BR/LGPD Reject)",
+      "url": "https://banco.bradesco/html/classic/index.shtm",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "Bradesco LGPD",
+      "tier": "dom",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#cookies.cookie-banner",
+        "#rejeitarCookiesNaoNecessarios",
+        "#aceitarCookies"
+      ],
+      "consentSelectors": [
+        "#rejeitarCookiesNaoNecessarios"
+      ]
+    },
+    {
+      "name": "Bradesco (BR/LGPD Accept)",
+      "url": "https://banco.bradesco/html/classic/index.shtm",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "Bradesco LGPD",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#cookies.cookie-banner",
+        "#rejeitarCookiesNaoNecessarios",
+        "#aceitarCookies"
+      ],
+      "consentSelectors": [
+        "#aceitarCookies"
+      ]
+    },
+    {
+      "name": "Netshoes (BR/Cookie Notice)",
+      "url": "https://www.netshoes.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "Netshoes Cookie Notice",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        ".cookie-notification",
+        ".cookie-notification__content__button"
+      ],
+      "consentSelectors": [
+        ".cookie-notification__content__button"
+      ]
+    },
+    {
+      "name": "GOV.BR (BR/Cookie Bar Reject)",
+      "url": "https://www.gov.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "gov.br Cookie Bar",
+      "tier": "dom",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        ".br-cookiebar",
+        ".reject-all",
+        ".btn-accept"
+      ],
+      "consentSelectors": [
+        ".br-cookiebar .reject-all"
+      ]
+    },
+    {
+      "name": "GOV.BR (BR/Cookie Bar Accept)",
+      "url": "https://www.gov.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "gov.br Cookie Bar",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        ".br-cookiebar",
+        ".reject-all",
+        ".btn-accept"
+      ],
+      "consentSelectors": [
+        ".br-cookiebar .btn-accept"
+      ]
+    },
+    {
+      "name": "SP.GOV.BR (BR/LGPD)",
+      "url": "https://www.sp.gov.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "Sao Paulo State LGPD Banner",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#lgpdModal",
+        ".lgpd-modal.show",
+        "#cadastrar.lgpd-btn"
+      ],
+      "consentSelectors": [
+        "#cadastrar.lgpd-btn"
+      ]
+    },
+    {
+      "name": "Correios (BR/Cookie Notice)",
+      "url": "https://www.correios.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "Correios Cookie Notice",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#cookiesId",
+        ".cookiesCorreios",
+        ".cookiesBotaoAceitar #btnCookie"
+      ],
+      "consentSelectors": [
+        ".cookiesBotaoAceitar #btnCookie"
+      ]
+    },
+    {
+      "name": "TIM (BR/CookiesJSR)",
+      "url": "https://www.tim.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "Privacy Tools Banner",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        ".cc-window.cc-banner",
+        ".cc-btn.cc-allow",
+        "#securitiCmpCookiePrefBtn"
+      ],
+      "consentSelectors": [
+        ".cc-btn.cc-allow"
+      ]
+    },
+    {
+      "name": "XP Investimentos (BR/LGPD Accept)",
+      "url": "https://www.xpi.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "XP LGPD",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "[data-testid='lgpd-cookies-id']",
+        "#cookies-policy-container",
+        "cookies-policy"
+      ],
+      "consentSelectors": [
+        "button[aria-label*='aceitar todos os cookies' i]",
+        "button[aria-label*='aceitar cookies' i]"
+      ]
+    },
+    {
+      "name": "XP Investimentos (BR/LGPD Reject)",
+      "url": "https://www.xpi.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "XP LGPD",
+      "tier": "dom",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "[data-testid='lgpd-cookies-id']",
+        "#cookies-policy-container",
+        "cookies-policy"
+      ],
+      "consentSelectors": [
+        "button[aria-label*='rejeitar todos os cookies' i]",
+        "button[aria-label*='rejeitar cookies' i]"
+      ]
+    },
+    {
+      "name": "UOL (BR/LGPD)",
+      "url": "https://www.uol.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "privacymanager.io",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        ".banner-lgpd-consent",
+        ".banner-lgpd-consent__accept"
+      ],
+      "consentSelectors": [
+        ".banner-lgpd-consent__accept"
+      ]
+    },
+    {
+      "name": "Terra (BR/LGPD)",
+      "url": "https://www.terra.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "privacymanager.io",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "dialog.push-notification.is-cookies",
+        ".push-notification--accept-button"
+      ],
+      "consentSelectors": [
+        ".push-notification--accept-button"
+      ]
+    },
+    {
+      "name": "Exame (BR/AdOpt Reject)",
+      "url": "https://exame.com/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "AdOpt",
+      "tier": "dom",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#cookie-banner",
+        "#adopt-accept-all-button",
+        "#adopt-preferences-button"
+      ],
+      "consentSelectors": [
+        "#adopt-accept-all-button",
+        "text:do not sell"
+      ]
+    },
+    {
+      "name": "Exame (BR/AdOpt Accept)",
+      "url": "https://exame.com/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "AdOpt",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#cookie-banner",
+        "#adopt-accept-all-button"
+      ],
+      "consentSelectors": [
+        "#adopt-accept-all-button"
+      ]
+    },
+    {
+      "name": "Itau (BR/OneTrust)",
+      "url": "https://www.itau.com.br/",
+      "region": "BR",
+      "locale": "pt-BR",
+      "acceptLanguage": "pt-BR,pt;q=0.9,en;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "dom",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 10000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "#onetrust-pc-btn-handler"
+      ]
+    },
+    {
+      "name": "RBC Royal Bank (CA/OneTrust Accept)",
+      "url": "https://www.rbcroyalbank.com/personal.html",
+      "region": "CA",
+      "locale": "en-CA",
+      "acceptLanguage": "en-CA,en;q=0.9,fr-CA;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-accept-btn-handler",
+        "#onetrust-pc-btn-handler"
+      ]
+    },
+    {
+      "name": "RBC Royal Bank (CA/OneTrust Reject)",
+      "url": "https://www.rbcroyalbank.com/personal.html",
+      "region": "CA",
+      "locale": "en-CA",
+      "acceptLanguage": "en-CA,en;q=0.9,fr-CA;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "#onetrust-pc-btn-handler"
+      ]
+    },
+    {
+      "name": "NHL (CA/OneTrust)",
+      "url": "https://www.nhl.com/",
+      "region": "CA",
+      "locale": "en-CA",
+      "acceptLanguage": "en-CA,en;q=0.9,fr-CA;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "#onetrust-pc-btn-handler"
+      ]
+    },
+    {
+      "name": "TD Canada Trust (CA/OneTrust)",
+      "url": "https://www.td.com/ca/en/personal-banking",
+      "region": "CA",
+      "locale": "en-CA",
+      "acceptLanguage": "en-CA,en;q=0.9,fr-CA;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "#onetrust-pc-btn-handler"
+      ]
+    },
+    {
+      "name": "Canadian Tire (CA/OneTrust)",
+      "url": "https://www.canadiantire.ca/en.html",
+      "region": "CA",
+      "locale": "en-CA",
+      "acceptLanguage": "en-CA,en;q=0.9,fr-CA;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "#onetrust-pc-btn-handler"
+      ]
+    },
+    {
+      "name": "The Weather Network (CA/Didomi Accept)",
+      "url": "https://www.theweathernetwork.com/ca",
+      "region": "CA",
+      "locale": "en-CA",
+      "acceptLanguage": "en-CA,en;q=0.9,fr-CA;q=0.8",
+      "cmp": "Didomi",
+      "tier": "dom",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#didomi-consent-popup",
+        ".didomi-consent-popup__dialog",
+        "#btn-toggle-agree"
+      ],
+      "consentSelectors": [
+        "#btn-toggle-agree",
+        "text:Agree to all",
+        "text:Manage My Consent"
+      ]
+    },
+    {
+      "name": "The Weather Network (CA/Didomi Reject)",
+      "url": "https://www.theweathernetwork.com/ca",
+      "region": "CA",
+      "locale": "en-CA",
+      "acceptLanguage": "en-CA,en;q=0.9,fr-CA;q=0.8",
+      "cmp": "Didomi",
+      "tier": "dom",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#didomi-consent-popup",
+        ".didomi-consent-popup__dialog",
+        "#btn-toggle-disagree"
+      ],
+      "consentSelectors": [
+        "#btn-toggle-disagree",
+        "text:Disagree to all",
+        "text:Manage My Consent"
+      ]
+    },
+    {
+      "name": "Hydro-Quebec (QC/OneTrust Accept)",
+      "url": "https://www.hydroquebec.com/",
+      "region": "CA-QC",
+      "locale": "fr-CA",
+      "acceptLanguage": "fr-CA,fr;q=0.9,en-CA;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "preference": "accept_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-accept-btn-handler",
+        "#onetrust-pc-btn-handler"
+      ]
+    },
+    {
+      "name": "Hydro-Quebec (QC/OneTrust Reject)",
+      "url": "https://www.hydroquebec.com/",
+      "region": "CA-QC",
+      "locale": "fr-CA",
+      "acceptLanguage": "fr-CA,fr;q=0.9,en-CA;q=0.8",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "#onetrust-pc-btn-handler"
+      ]
+    },
+    {
+      "name": "Radio-Canada (QC/Cookie Alert)",
+      "url": "https://ici.radio-canada.ca/",
+      "region": "CA-QC",
+      "locale": "fr-CA",
+      "acceptLanguage": "fr-CA,fr;q=0.9,en-CA;q=0.8",
+      "cmp": "Radio-Canada Cookie Alert",
+      "tier": "dom",
+      "preference": "reject_all",
+      "allowDirectDomValidation": true,
+      "allowTrustedClickFallback": true,
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#js-legal-disclaimer",
+        ".g-alert-cookie"
+      ],
+      "consentSelectors": [
+        "button[title*=\"Accepter et fermer l'alerte\" i]"
+      ]
     }
   ]
 }

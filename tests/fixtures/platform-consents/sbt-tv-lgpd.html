@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>SBT TV LGPD fixture</title>
+    <style>
+      .tv-cookie-banner {
+        position: fixed;
+        left: 5%;
+        right: 5%;
+        bottom: 32px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 25px 50px 12px rgba(16, 24, 40, 0.25);
+        padding: 16px;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tv-cookie-banner fixed pointer-events-auto">
+      <p>
+        Utilizamos cookies e tecnologias semelhantes para melhorar a sua experiência com os nossos serviços,
+        a fim de personalizar as publicidades e recomendar conteúdos de seu interesse, seguindo a nossa
+        <a class="font-bold underline text-brand-color" href="https://www.sbt.com.br/politica-de-privacidade">Política de Privacidade</a>.
+      </p>
+      <button class="rounded-full h-10 min-w-[120px] border-none text-white bg-brand-color hover:bg-brand-color/90">OK</button>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('button').addEventListener('click', () => {
+        document.querySelector('.tv-cookie-banner').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'ok' };
+      });
+    </script>
+  </body>
+</html>

@@ -47,6 +47,39 @@ const ONETRUST_ACTIONABLE_SURFACE_SELECTORS = [
   '.category-switch-handler',
   "input[id^='ot-group-id-']",
 ];
+const DIDOMI_ACTIONABLE_SURFACE_SELECTORS = [
+  '#didomi-popup',
+  '#didomi-notice',
+  '.didomi-notice-banner',
+  '#didomi-consent-popup',
+  '.didomi-consent-popup__dialog',
+  '.didomi-consent-popup-actions',
+];
+const DIDOMI_PREFERENCE_SELECTORS = [
+  '#didomi-consent-popup',
+  '.didomi-consent-popup__dialog',
+  '.didomi-consent-popup-actions',
+  '#btn-toggle-disagree',
+  '#btn-toggle-agree',
+  '#btn-toggle-save',
+];
+const DIDOMI_API_OPEN_HINT_SELECTORS = [
+  '#didomi-host',
+  '[id^="didomi-host"]',
+  '.didomi-host',
+];
+const DIDOMI_MANAGE_TEXT_PATTERNS = [
+  /manage my consent/i,
+  /manage consent/i,
+  /cookie settings/i,
+  /consent settings/i,
+  /privacy settings/i,
+  /g[ée]rer mon consentement/i,
+];
+const SBT_LGPD_BANNER_TEXT_PATTERNS = [
+  /utilizamos cookies e tecnologias semelhantes/i,
+  /pol[ií]tica de privacidade/i,
+];
 const SHOPIFY_ACTIONABLE_SURFACE_SELECTORS = [
   '#shopify-pc__banner',
   '.shopify-pc__banner__dialog',
@@ -411,11 +444,29 @@ const PRIVACYMANAGER_ACTIONABLE_SURFACE_SELECTORS = [
   '#manageSettings',
   '#saveAndExit',
   '.mat-dialog-title.confirmationDialogTitle',
+  '.banner-lgpd-consent',
+  '.banner-lgpd-consent__accept',
+  'dialog.push-notification.is-cookies',
+  '.push-notification--accept-button',
+  '#cookie-banner',
+  '#adopt-accept-all-button',
+  '#adopt-preferences-button',
 ];
 const PRIVACYMANAGER_PREFERENCE_SELECTORS = [
   'ul li',
   '#mat-slider',
   '#saveAndExit',
+];
+const PRIVACYMANAGER_SIMPLE_ACCEPT_SELECTORS = [
+  '.banner-lgpd-consent__accept',
+  'button.banner-lgpd-consent__accept',
+  '.push-notification--accept-button',
+  'button.push-notification--accept-button',
+];
+const ADOPT_ACTIONABLE_SURFACE_SELECTORS = [
+  '#cookie-banner',
+  '#adopt-accept-all-button',
+  '#adopt-preferences-button',
 ];
 const OSANO_ACTIONABLE_SURFACE_SELECTORS = [
   '.osano-cm-dialog',
@@ -567,6 +618,20 @@ async function tryCMPs(cmps, prefs) {
       }
       continue;
     }
+    if (cmp.id === 'didomi') {
+      const didomiResult = await executeDidomiFlow(cmp, prefs);
+      if (didomiResult) {
+        return { method: didomiResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'sbtlgpd') {
+      if (await executeSbtLgpdFlow()) {
+        const noticeOnly = Boolean(cmp.notice_only);
+        return { method: `dom:${cmp.id}${noticeOnly ? ':accepted_notice' : ''}`, cmpName: cmp.name, noticeOnly };
+      }
+      continue;
+    }
     if (cmp.id === 'shopify') {
       if (prefs.globalPreference === 'custom') continue;
       if (await executeShopifyFlow(cmp, prefs)) {
@@ -703,7 +768,8 @@ async function tryCMPs(cmps, prefs) {
     const actions = cmp.actions?.[method];
     if (!actions) continue;
     if (await executeActions(cmp, actions)) {
-      return { method: `dom:${cmp.id}`, cmpName: cmp.name };
+      const noticeOnly = Boolean(cmp.notice_only);
+      return { method: `dom:${cmp.id}${noticeOnly ? ':accepted_notice' : ''}`, cmpName: cmp.name, noticeOnly };
     }
   }
   return null;
@@ -736,6 +802,9 @@ function hasVisibleOneTrustPrivacyChoicesEntry(host = location.hostname) {
 function detectCMP(cmp) {
   return cmp.detectors.some((d) => {
     if (d.type === 'css_selector') return !!document.querySelector(d.value);
+    if (d.type === 'script_src') {
+      return Array.from(document.scripts).some((script) => script.src && script.src.includes(d.value));
+    }
     if (d.type === 'js_global') {
       // Can't reach page globals from ISOLATED world — check DOM signature only
       return false;
@@ -749,11 +818,18 @@ async function executeActions(cmp, actions) {
     if (action.type === 'click') {
       const el = document.querySelector(action.selector);
       if (el && isVisible(el)) {
-        dispatchSyntheticClick(el);
-        if (cmp.id === 'onetrust' && shouldForceOneTrustCleanup(location.hostname)) {
-          scheduleHostOneTrustCleanup(location.hostname);
+        if (dispatchSyntheticClick(el)) {
+          if (cmp.id === 'onetrust' && shouldForceOneTrustCleanup(location.hostname)) {
+            scheduleHostOneTrustCleanup(location.hostname);
+          }
+          if (await waitForDismissal(cmp, actions)) return true;
         }
-        if (await waitForDismissal(cmp, actions)) return true;
+        if (dispatchNativeClick(el)) {
+          if (cmp.id === 'onetrust' && shouldForceOneTrustCleanup(location.hostname)) {
+            scheduleHostOneTrustCleanup(location.hostname);
+          }
+          if (await waitForDismissal(cmp, actions)) return true;
+        }
       }
     }
     if (action.type === 'wait') {
@@ -961,6 +1037,102 @@ function clickUSNatSubmitIfPresent() {
   if (!btn || !isVisible(btn)) return false;
   if (!/\bsubmit\b/i.test(btn.textContent?.trim() ?? '')) return false;
   return dispatchSyntheticClick(btn);
+}
+
+async function executeDidomiFlow(cmp, prefs) {
+  if (prefs.globalPreference === 'custom') return false;
+
+  const directSelectors = prefs.globalPreference === 'accept_all'
+    ? [
+        '#didomi-notice-agree-button',
+        '.didomi-notice-agree-button',
+        '[data-didomi-action="agree"]',
+        '#btn-toggle-agree',
+      ]
+    : [
+        '#didomi-notice-disagree-button',
+        '.didomi-notice-disagree-button',
+        '[data-didomi-action="disagree"]',
+        '[didomi-notice-action="disagree"]',
+        '#btn-toggle-disagree',
+      ];
+
+  if (clickFirstVisible(directSelectors)) {
+    return (await waitForDismissal(cmp, selectorActions(didomiDismissSelectors()), 5000))
+      ? `dom:didomi:${prefs.globalPreference}`
+      : false;
+  }
+
+  const preferencesVisible = hasVisibleSelector(DIDOMI_PREFERENCE_SELECTORS);
+  const actionableVisible = hasVisibleSelector(DIDOMI_ACTIONABLE_SURFACE_SELECTORS);
+  const apiOpenHintPresent = hasAnySelector(DIDOMI_API_OPEN_HINT_SELECTORS);
+  const opened = preferencesVisible ||
+    clickVisibleButtonWithText(['body'], DIDOMI_MANAGE_TEXT_PATTERNS) ||
+    clickFirstVisible([
+      '#didomi-notice-learn-more-button',
+      '.didomi-notice-learn-more-button',
+      '[data-didomi-action="showPreferences"]',
+      '[didomi-notice-action="showPreferences"]',
+    ]) ||
+    (apiOpenHintPresent && openDidomiPreferencesViaApi());
+
+  if (!opened && !actionableVisible) return false;
+
+  if (!(await waitForAnyVisible(DIDOMI_PREFERENCE_SELECTORS, 5000))) {
+    return false;
+  }
+
+  const preferenceButtonSelector = prefs.globalPreference === 'accept_all'
+    ? '#btn-toggle-agree'
+    : '#btn-toggle-disagree';
+
+  if (!clickFirstVisible([preferenceButtonSelector, ...directSelectors])) {
+    return false;
+  }
+
+  return (await waitForDismissal(cmp, selectorActions(didomiDismissSelectors()), 5000))
+    ? `dom:didomi:${prefs.globalPreference}`
+    : false;
+}
+
+function openDidomiPreferencesViaApi() {
+  try {
+    const showPreferences = window.Didomi?.preferences?.show;
+    if (typeof showPreferences !== 'function') return false;
+    showPreferences.call(window.Didomi.preferences);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function executeSbtLgpdFlow() {
+  const root = findVisibleSbtLgpdBanner();
+  if (!root) return false;
+
+  const clicked =
+    clickFirstVisibleWithinNative(root, [
+      'button.sbt-button',
+      'button[class*="bg-brand-color"]',
+    ]) ||
+    clickVisibleButtonWithTextInRoot(root, [/^ok$/i]);
+
+  if (!clicked) return false;
+  return waitForElementToHideOrDisconnect(root, 5000);
+}
+
+function didomiDismissSelectors() {
+  return [
+    '#didomi-popup',
+    '#didomi-notice',
+    '.didomi-notice-banner',
+    '#didomi-consent-popup',
+    '.didomi-consent-popup__dialog',
+    '.didomi-consent-popup-actions',
+    '#btn-toggle-disagree',
+    '#btn-toggle-agree',
+    '#btn-toggle-save',
+  ];
 }
 
 async function executeShopifyFlow(cmp, prefs) {
@@ -2054,6 +2226,17 @@ async function executePrivacyManagerFlow(cmp, prefs) {
     return false;
   }
 
+  if (hasVisibleSelector(ADOPT_ACTIONABLE_SURFACE_SELECTORS)) {
+    const handled = await executeAdoptBannerFlow(cmp, prefs);
+    if (handled) return handled;
+  }
+
+  if (hasVisibleSelector(PRIVACYMANAGER_SIMPLE_ACCEPT_SELECTORS)) {
+    if (!clickFirstVisible(PRIVACYMANAGER_SIMPLE_ACCEPT_SELECTORS)) return false;
+    if (!(await waitForDismissal(cmp, selectorActions(PRIVACYMANAGER_SIMPLE_ACCEPT_SELECTORS), 5000))) return false;
+    return prefs.globalPreference === 'custom' ? 'dom:privacymanager:custom' : `dom:privacymanager:${prefs.globalPreference}`;
+  }
+
   const flowPrefs = normalizeImportedFlowPrefs(prefs);
   const preferencesVisible = hasVisibleSelector(PRIVACYMANAGER_PREFERENCE_SELECTORS);
   const opened = preferencesVisible ||
@@ -2094,6 +2277,25 @@ async function executePrivacyManagerFlow(cmp, prefs) {
   if (!(await waitForDismissal(cmp, selectorActions(privacyManagerDismissSelectors()), 5000))) return false;
 
   return prefs.globalPreference === 'custom' ? 'dom:privacymanager:custom' : `dom:privacymanager:${prefs.globalPreference}`;
+}
+
+async function executeAdoptBannerFlow(cmp, prefs) {
+  if (prefs.globalPreference === 'accept_all') {
+    if (!clickFirstVisible(['#adopt-accept-all-button'])) return false;
+    if (!(await waitForDismissal(cmp, selectorActions(['#adopt-accept-all-button', '#cookie-banner']), 5000))) return false;
+    return 'dom:privacymanager:accept_all';
+  }
+
+  if (!clickVisibleButtonWithText(['#cookie-banner'], [
+    /do not sell/i,
+    /opt out/i,
+    /não vender/i,
+    /nao vender/i,
+  ])) {
+    return false;
+  }
+  if (!(await waitForDismissal(cmp, selectorActions(['#cookie-banner', '#adopt-accept-all-button']), 5000))) return false;
+  return prefs.globalPreference === 'custom' ? 'dom:privacymanager:custom' : 'dom:privacymanager:reject_all';
 }
 
 async function executeOsanoFlow(cmp, prefs) {
@@ -4225,6 +4427,45 @@ function clickFirstVisibleWithinNative(root, selectors) {
   return false;
 }
 
+function clickVisibleButtonWithText(containerSelectors, patterns) {
+  for (const containerSelector of containerSelectors) {
+    const container = firstVisibleElement([containerSelector]);
+    if (!container) continue;
+    const buttons = container.querySelectorAll('button, [role="button"], a');
+    for (const button of buttons) {
+      if (!isVisible(button)) continue;
+      const text = button.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      if (!text) continue;
+      if (!patterns.some((pattern) => pattern.test(text))) continue;
+      return dispatchSyntheticClick(button);
+    }
+  }
+  return false;
+}
+
+function clickVisibleButtonWithTextInRoot(root, patterns) {
+  if (!root) return false;
+  const buttons = root.querySelectorAll('button, [role="button"], a');
+  for (const button of buttons) {
+    if (!isVisible(button)) continue;
+    const text = button.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!text) continue;
+    if (!patterns.some((pattern) => pattern.test(text))) continue;
+    return dispatchNativeClick(button) || dispatchSyntheticClick(button);
+  }
+  return false;
+}
+
+function hasAnySelector(selectors) {
+  return selectors.some((selector) => {
+    try {
+      return Boolean(document.querySelector(selector));
+    } catch (_) {
+      return false;
+    }
+  });
+}
+
 function hasVisibleSelector(selectors) {
   return selectors.some((selector) => document.querySelectorAll(selector).length > 0 &&
     Array.from(document.querySelectorAll(selector)).some((el) => isVisible(el)));
@@ -4296,6 +4537,16 @@ async function waitForAnyVisible(selectors, timeoutMs = 3000) {
   return false;
 }
 
+async function waitForElementToHideOrDisconnect(el, timeoutMs = 3000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (!el?.isConnected) return true;
+    if (!isVisible(el)) return true;
+    await delay(100);
+  }
+  return !el?.isConnected || !isVisible(el);
+}
+
 async function waitForDismissal(cmp, actions, timeoutMs = 4000) {
   const selectors = [
     ...cmp.detectors.filter((d) => d.type === 'css_selector').map((d) => d.value),
@@ -4349,6 +4600,20 @@ function firstVisibleElementWithin(root, selectors) {
     }
   }
   return null;
+}
+
+function findVisibleSbtLgpdBanner() {
+  const candidates = Array.from(document.querySelectorAll('div, section, dialog, aside'));
+  return candidates.find((el) => {
+    if (!isVisible(el)) return false;
+    const text = el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!SBT_LGPD_BANNER_TEXT_PATTERNS.every((pattern) => pattern.test(text))) return false;
+    return Array.from(el.querySelectorAll('button, [role="button"], a')).some((node) => {
+      if (!isVisible(node)) return false;
+      const label = node.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      return /^ok$/i.test(label);
+    });
+  }) ?? null;
 }
 
 function findVisibleElementById(id, root = document) {

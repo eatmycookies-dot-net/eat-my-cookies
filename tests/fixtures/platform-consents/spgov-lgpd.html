@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>SP gov LGPD fixture</title>
+    <style>
+      #lgpdModal {
+        position: fixed;
+        inset: auto 24px 24px 24px;
+        background: #fff;
+        border: 1px solid #ccc;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="lgpdModal" class="lgpd-modal show" role="dialog" aria-modal="true">
+      <p>Este site utiliza apenas cookies essenciais para garantir seu funcionamento.</p>
+      <button type="submit" id="cadastrar" class="lgpd-btn">Aceitar</button>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.getElementById('cadastrar').addEventListener('click', () => {
+        document.getElementById('lgpdModal').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+    </script>
+  </body>
+</html>

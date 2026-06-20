@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>XP LGPD fixture</title>
+    <style>
+      [data-testid="lgpd-cookies-id"] { position: fixed; inset: auto 0 0 0; background: #111; color: #fff; padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <div data-testid="lgpd-cookies-id">
+      <cookies-policy id="cookies-policy-container">
+        <p>Politica de cookies</p>
+        <button aria-label="botao rejeitar todos os cookies">Rejeitar cookies</button>
+        <button aria-label="botao aceitar todos os cookies">Aceitar cookies</button>
+      </cookies-policy>
+    </div>
+    <script>
+      window.__fixtureState = { bannerVisible: true, action: null };
+      document.querySelector('button[aria-label*="rejeitar"]').addEventListener('click', () => {
+        document.querySelector('[data-testid="lgpd-cookies-id"]').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'reject' };
+      });
+      document.querySelector('button[aria-label*="aceitar"]').addEventListener('click', () => {
+        document.querySelector('[data-testid="lgpd-cookies-id"]').remove();
+        window.__fixtureState = { bannerVisible: false, action: 'accept' };
+      });
+    </script>
+  </body>
+</html>
