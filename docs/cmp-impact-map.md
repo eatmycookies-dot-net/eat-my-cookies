@@ -24,7 +24,7 @@ and which sites to re-test after a change lands.
 
 | File | CMP / Sites affected |
 |------|---------------------|
-| `content/sp-frame-handler.js` | Sourcepoint: NYT, The Verge, Wired, Spiegel, Guardian, FT |
+| `content/sp-frame-handler.js` | Sourcepoint: NYT, Wired, Spiegel, Guardian, FT |
 | `content/cm-frame-handler.js` | ConsentManager: DW |
 | `content/appconsent-frame-handler.js` | AppConsent |
 | `rules/cmps.json` | All DOM-handler CMPs (see CMP family table) |
@@ -59,6 +59,7 @@ Use this to understand which sites share the same code path and will behave simi
 | `reuters.com` | US/global | GDPR + USNat | Automation-covered |
 | `forbes.com` | US/global | GDPR + USNat | Automation-covered |
 | `bloomberg.com` | US/global | GDPR + USNat | Automation-covered |
+| `theverge.com` | US/global | OneTrust + LiveRamp Launchpad | Live fingerprint on Sunday, July 19, 2026 found OneTrust SDK assets plus Launchpad / LiveRamp privacy scripts. The current non-VPN automation run recorded `dom:onetrust:ccpa`, so do not assume the older Sourcepoint path is still active here. |
 | `fifa.com` | US/global | GDPR banner + hidden preference center | Targeted custom-mode e2e added June 20, 2026. The homepage can show a simple top-level OneTrust shell while the full category PC remains hidden in the DOM. |
 | `kpmg.com` | US/global | GDPR banner + PC2 preference center | Targeted custom-mode e2e added June 24, 2026. The PC footer exposes both `Submit All Preferences` and `Agree & Proceed`; generic save selection must choose the submit/preferences button and treat agree/proceed as accept-style text. KPMG can also reopen the PC after consent is written, so the shared post-save settle watcher must close or visually hide stale OneTrust surfaces after save. |
 | `cnbc.com` | US | CCPA settings flow | Validated May 12, 2026 in headed Chromium e2e for `reject_all` and `accept_all + ccpaDoNotSell=true`. Important behavioral note: the top-level banner often shows `Continue`, but that button only dismisses the shell. The real opt-out path is the visible `Your Privacy Choices` opener into the OneTrust privacy center. |
@@ -116,11 +117,13 @@ What matters:
 | Site | Region | Special notes |
 |------|--------|--------------|
 | `nytimes.com` | US/global | GDPR + USNat; automation-covered |
-| `theverge.com` | US/global | Sourcepoint; automation-covered |
 | `wired.com` | US/global | Sourcepoint; automation-covered |
 | `spiegel.de` | EU | Sourcepoint GDPR; automation-covered |
 | `theguardian.com` | Global | USNat via `_sp_.usnat.postRejectAll`; dedicated handler |
 | `ft.com` | EU/UK | Cross-origin iframe; dedicated page-level opener + frame handler |
+
+**Live drift note (added July 19, 2026):**
+Do not treat `theverge.com` as a current Sourcepoint regression target without re-probing the live page first. A targeted live fingerprint on Sunday, July 19, 2026 found OneTrust SDK assets plus Launchpad / LiveRamp privacy scripts, and the automated US run recorded `dom:onetrust:ccpa`.
 
 ### Didomi
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json` + `main.js → handleEuronews`
@@ -233,7 +236,12 @@ Consent persistence is not yet human-validated on either layer.
 ### Borlabs Cookie
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
 
-Public live target still needed for stable regression coverage. Generic preference-save support is implemented.
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `beumergroup.com` | EU/global | Targeted live e2e passed on Sunday, July 19, 2026 (`dom:borlabs:custom`). |
+| `discover-drives.danfoss.com` | EU/global | Targeted live e2e passed on Sunday, July 19, 2026 (`dom:borlabs:custom`). |
+
+`realmaker.de` did not surface a fresh banner in the same pass, so keep additional Borlabs targets on the watch list.
 
 ### Cookie Wow
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
@@ -246,21 +254,38 @@ Public live target still needed for stable regression coverage. Generic analytic
 | Site | Region | Special notes |
 |------|--------|--------------|
 | `cookiecontrol.com` | US/global | Public banner is visible and the generic handler is implemented, but automated validation currently hits an anti-bot challenge. |
+| `help.uis.cam.ac.uk` | EU | Targeted live e2e passed on Sunday, July 19, 2026 both without VPN and with the Browsec profile (`dom:cookiecontrolcivic:custom`). |
+| `peterborough.gov.uk/cookies` | EU | Visible Civic banner is still present and dismissible, but the July 19 non-VPN run recorded `consentmanager:frame:deferred`, so keep an eye on handler overlap before broadening claims. |
+| `childrenscommissioner.gov.uk/privacy/cookies/` | EU | Targeted live e2e failed reproducibly on Sunday, July 19, 2026 with the banner still visible in custom mode. |
 
 ### Truendo
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
 
-`truendo.com` exposes a visible consent dialog. Generic preference-save handling is implemented; a stable automated regression target still needs to be pinned down.
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `truendo.com` | EU/global | Targeted live e2e passed on Sunday, July 19, 2026 (`cmp_api:Truendo:custom`). |
+| `sportradar.com` | EU/global | Targeted live e2e passed on Sunday, July 19, 2026 (`cmp_api:Truendo:custom`). |
+
+`laola1.at` did not surface a fresh banner in the sampled session, so keep a second-family retest on the backlog.
 
 ### Clickio
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
 
-Generic preference-save handling is implemented. Public live target still needed for regression coverage.
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `diariomotor.com/diariomotor-sin-cookies/` | EU | Targeted live e2e failed reproducibly on Sunday, July 19, 2026 with the banner still visible in custom mode. |
+
+`atelevisao.com` did not surface a fresh banner in the same pass, so keep Clickio out of broad support claims for now.
 
 ### cookiesjsr
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
 
-Generic settings-panel handling is implemented via tab traversal (`performance`, `tracking`, `video`). Public live target still needed for stable regression coverage.
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `crealogix.com/en/cookie_docs` | EU | Targeted live e2e passed on Sunday, July 19, 2026 (`dom:cookiesjsr:reject_all`). |
+| `pathosense.com/cookies/documentation` | EU | Targeted live e2e passed on Sunday, July 19, 2026 (`dom:cookiesjsr:custom`). |
+
+Generic settings-panel handling is implemented via tab traversal (`performance`, `tracking`, `video`).
 
 ### privacymanager.io
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
@@ -389,15 +414,15 @@ Sites marked 🔵 are lower risk but worth a spot-check if time allows.
 |-------------|-----------|------------|
 | `cmp-api-handler.js` | reuters.com, cnbc.com, fifa.com, schwab.com, ceespronkstore.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
 | `dom-handler.js` | reuters.com, bloomberg.com, forbes.com, cnbc.com, schwab.com, ceespronkstore.com | euronews.com, dw.com |
-| `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, disney.com | ft.com |
+| `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, disney.com, theverge.com | ft.com |
 | `rules/cmps.json` (Shopify entry) | ceespronkstore.com | — |
 | `rules/cmps.json` (Complianz entry) | qualityminds.com | — |
 | `rules/cmps.json` (Cookie Information entry) | cookieinformation.com | — |
-| `rules/cmps.json` (Cookie Control by Civic entry) | cookiecontrol.com | — |
-| `rules/cmps.json` (Sourcepoint entry) | nytimes.com, theverge.com | spiegel.de |
+| `rules/cmps.json` (Cookie Control by Civic entry) | cookiecontrol.com, help.uis.cam.ac.uk, childrenscommissioner.gov.uk | peterborough.gov.uk/cookies |
+| `rules/cmps.json` (Sourcepoint entry) | nytimes.com | wired.com, spiegel.de |
 | `rules/cmps.json` (Didomi entry) | euronews.com | — |
 | `rules/cmps.json` (ConsentManager entry) | dw.com, bernstein-sanitarios.pt | — |
-| `sp-frame-handler.js` | nytimes.com, theverge.com, theguardian.com, ft.com | wired.com, spiegel.de |
+| `sp-frame-handler.js` | nytimes.com, theguardian.com, ft.com | wired.com, spiegel.de |
 | `main.js` (coordinator logic) | reuters.com, cnbc.com, schwab.com, ceespronkstore.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, bernstein-sanitarios.pt, euronews.com |
 | `main.js` (site-specific handler) | Only the one site that handler covers | — |
 | `heuristic.js` | Any site where other tiers fail | — |

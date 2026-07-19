@@ -1178,16 +1178,15 @@ async function warmupExtensionRoundTrip(browser) {
       browser = await chromium.launchPersistentContext(userDataDir, launchOptions);
     }
   } else if (useVpn) {
-    // Prefer system Chrome first in VPN mode. On this machine the bundled
-    // Playwright Chromium can stall while launching the persistent VPN profile
-    // before validation even starts. The writePreferences helper already has a
-    // popup-page fallback when service workers are not exposed, so system Chrome
-    // remains a valid headed fallback for real-site VPN validation.
+    // Prefer Chromium-based launches that expose extension service workers.
+    // The system Chrome path can hide the EMC worker in VPN mode, which leaves
+    // onboardingComplete unset and makes every geo-sensitive run look like a
+    // site failure when the harness is actually at fault.
     const vpnCandidates = [
-      { channel: 'chrome' },
-      getSystemChromeExecutable() ? { executablePath: getSystemChromeExecutable() } : null,
       { channel: 'chromium' },
       {},
+      { channel: 'chrome' },
+      getSystemChromeExecutable() ? { executablePath: getSystemChromeExecutable() } : null,
     ].filter(Boolean);
     for (const candidate of vpnCandidates) {
       try {

@@ -178,6 +178,7 @@ npm run test:e2e:us        # US only
 ```
 
 This was discovered in May 2026 when a 42-site EU VPN batch run showed 15 failures, but individual retests confirmed only 2 were genuine (both pre-existing paywalls, not code regressions).
+As of Sunday, July 19, 2026, long Browsec-backed VPN runs can also degrade into `ERR_TUNNEL_CONNECTION_FAILED` mid-batch even when the Browsec popup still shows the tunnel toggle as ON. When that happens, stop the broad run, refresh the Browsec profile with `npm run test:vpn-setup`, and continue with smaller site- or family-level VPN reruns instead of trusting the rest of the batch.
 
 ### Testing with a VPN
 
@@ -214,6 +215,8 @@ npm run test:e2e:vpn                          # full suite via VPN
 npm run test:e2e -- --vpn --site=LVMH       # single site
 npm run test:detect-cmp                        # CMP discovery scan
 ```
+
+If VPN validations suddenly show `emcPref=n/a` or every site starts failing before any extension activity is recorded, update to the latest repo version before investigating the sites themselves. The current validator prefers Chromium-based launches in VPN mode because some system-Chrome paths can hide the extension service worker and leave `onboardingComplete` unset.
 
 Prefer `npm run verify` during normal iteration, `npm run test` before opening a PR when code behavior changed, and targeted `npm run test:e2e` when you touched a supported site or CMP flow.
 

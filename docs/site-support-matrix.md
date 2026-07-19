@@ -6,7 +6,14 @@ Important notes:
 
 - Many EU publisher flows are geo-sensitive. Validation from a US IP can differ from validation from an EU IP.
 - Human validation remains the source of truth for complex paywall-or-consent experiences.
-- TODO: add a repeatable VPN / EU-geo validation workflow so contributors can verify country-specific behavior more reliably.
+- Broad candidate-CMP/customer research should not be treated as support truth; the durable public sources are this matrix plus `tests/sites.json`.
+- A repeatable Browsec-backed VPN workflow exists for targeted reruns, but long sequential VPN sweeps can still degrade into `ERR_TUNNEL_CONNECTION_FAILED`. Prefer focused single-site VPN reruns over one giant geo batch.
+
+## July 19, 2026 Snapshot
+
+- Non-VPN validation across the current `tests/sites.json` inventory finished at **80 passed / 3 failed / 56 skipped**.
+- The three reproducible non-VPN failures were `exame.com` reject flow, `childrenscommissioner.gov.uk/privacy/cookies/`, and `diariomotor.com/diariomotor-sin-cookies/`.
+- Targeted VPN reruns on Sunday, July 19, 2026 confirmed fresh passes for `qualityminds.com`, `orange.com`, `help.uis.cam.ac.uk`, `anta.com`, and `exame.com` reject, while some other sites still failed at navigation time with Browsec tunnel errors instead of consent-handling failures.
 
 ## Supported
 
@@ -14,7 +21,7 @@ These sites currently behave well for the tested flows and have recent human con
 
 | Site | Status | Notes |
 | --- | --- | --- |
-| `20minutes.fr` | Supported | Human-validated. EU VPN single-site test passes (cmp_api:Didomi). Full-run failures are timing artifacts, not real regressions. |
+| `20minutes.fr` | Supported | Human-validated. Targeted non-VPN live rerun passed again on July 19, 2026 (`cmp_api:Didomi`). A same-day VPN rerun did not surface a fresh banner, so keep treating this cluster as session-sensitive rather than regressed. |
 | `leparisien.fr` | Supported | Human-validated. Same Didomi API path as 20minutes.fr — expected to pass. |
 | `lemonde.fr` | Supported | Human-validated: Accept, Reject, and Custom behaved correctly. |
 | `elmundo.es` | Supported | EU VPN single-site test passes. |
@@ -41,10 +48,12 @@ These sites are in the active automated coverage inventory and should remain in 
 | `nytimes.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `reuters.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
 | `thomsonreuters.com` | Automation-covered | Targeted homepage coverage was added June 21, 2026. Important OneTrust nuance: the homepage exposes a visible shell with only a `Cookie Settings` opener, then a `Confirm My Choices` privacy center with five categories (`2,3,4,5,8`). The stable non-VPN path restored on June 22, 2026 is: open the privacy center, apply `OneTrust.RejectAll()` / `OneTrust.Accept()`, then scope the confirm click to the active preference-center surface instead of any page-level accept button. Reuters-class hosts should still avoid synthetic toggle-event sync and forced DOM teardown after the API call because that can freeze the page. Current caveat: the focused US/non-VPN homepage run now passes again, but the VPN profile still fails with the visible shell on screen and no trustworthy extension activity recorded, so EU/VPN behavior remains an open follow-up. |
+| `investopedia.com` | Automation-covered | Dotdash Meredith / OneTrust CCPA settings flow remains in the active automated inventory. The non-VPN rerun on Sunday, July 19, 2026 did not surface a fresh banner, so treat the current result as session-sensitive rather than as a confirmed regression. |
 | `fifa.com` | Automation-covered | Targeted US/no-VPN custom-mode e2e added June 20, 2026. Important OneTrust nuance: the homepage can show a top-level shell with visible `Reject All` / `I'm OK with that` / `Preference Center` controls while the full category preference center sits hidden in the DOM. Custom handling must route through the real OneTrust preference-center flow rather than collapsing to a raw `RejectAll()` API sync. Current validation note from June 21, 2026: isolated US/non-VPN e2e passes, but the same site still failed in the VPN profile because the top-level shell stayed visible after timeout even though the hidden category toggles were OFF. Treat VPN behavior as an open follow-up. |
 | `kpmg.com` | Automation-covered | Targeted article coverage added June 24, 2026 for the OneTrust PC2 custom flow. Important nuance: the preference center has both `Submit All Preferences` and `Agree & Proceed`; custom mode must submit preferences, not click the accept/proceed button. The flow also briefly reopens/restyles the PC after consent is written, so shared OneTrust handling now includes a bounded post-save settle watcher that closes or visually hides stale surfaces and restores scroll. |
-| `qualityminds.com` | Automation-covered | Complianz. Single-site e2e passes on June 6, 2026 both without VPN and with the Browsec VPN profile. `Accept`, `Deny`, and `Custom` are now covered through the visible `View preferences` path. |
+| `qualityminds.com` | Automation-covered | Complianz. Single-site e2e passed again on July 19, 2026 both without VPN and with the Browsec VPN profile (`dom:complianz:custom`). `Accept`, `Deny`, and `Custom` are covered through the visible `View preferences` path. |
 | `cookieinformation.com` | Automation-covered | Cookie Information. Single-site e2e passes on June 6, 2026 both without VPN and with the Browsec VPN profile (`dom:cookieinformation:reject_all`). Public site reliably exposes `Decline all` on first load. |
+| `cookiecontrol.com` | Automation-covered | Public demo target for Cookie Control by Civic. The current non-VPN rerun on Sunday, July 19, 2026 hit an anti-bot challenge, so keep it in the inventory as a regression target but not as a clean automation pass claim. |
 | `forbes.com` | Automation-covered | Ketch CMP. US region: accept/reject/custom all covered via Ketch privacy center. EU region: full banner (Accept All / Reject All Non-Required / Manage Preferences) — fixed May 2026 to respect user preference instead of forcing accept-only. EU e2e passes via VPN (`Forbes (EU/GDPR)` in sites.json). |
 | `zeit.de` | Automation-covered | Targeted live validation rerun passed on July 19, 2026 (`Consent recorded (container persists but buttons gone)`). This should no longer be treated as a current `Needs implementation` entry without fresher contrary evidence. |
 | `faz.net` | Automation-covered | Targeted live validation rerun passed on July 19, 2026 (`Consent recorded (container persists but buttons gone)`). Keep in automated coverage unless a newer real-browser regression is reproduced. |
@@ -55,7 +64,7 @@ These sites are in the active automated coverage inventory and should remain in 
 | `cleareyes.com` | Automation-covered | Ketch CMP (generic). US e2e-validated June 2026 via headless Playwright. **Upcoming release item.** |
 | `therealreal.com` | Supported | Ketch CMP (site-specific). US privacy center at `/customer-privacy`. Human-validated June 2026: `Accept All`, `Reject All`, and `Custom` all apply correctly. No banner — Ketch is embedded inline on the privacy page only. Anti-bot challenge blocks automated e2e testing. **Upcoming release item.** |
 | `bloomberg.com` | Automation-covered | Active e2e coverage for the current OneTrust flow. |
-| `theverge.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
+| `theverge.com` | Automation-covered | Current live homepage fingerprint on July 19, 2026 loaded OneTrust SDK assets plus Launchpad / LiveRamp privacy scripts, and the non-VPN automated run recorded `dom:onetrust:ccpa`. Do not describe this as a current Sourcepoint-only regression target anymore. |
 | `wired.com` | Automation-covered | Active e2e coverage for the current Sourcepoint flow. |
 | `euronews.com` | Automation-covered | Active e2e coverage; human confirmation is still useful because the banner can be session-sensitive. |
 | `cnbc.com` | Automation-covered | Validated May 12, 2026 in live headed Chromium e2e for both `reject_all` and `accept_all` + `ccpaDoNotSell=true`. CNBC's OneTrust CCPA flow starts from a top-level banner where `Continue` only dismisses the shell; the real opt-out entry is `Your Privacy Choices`, and successful runs now record activity. **Validation caveat:** headless Playwright shell was misleading here because the extension coordinator did not reliably bootstrap on the page, so headed runs are the source of truth. |
@@ -100,18 +109,19 @@ These sites still need direct handling work.
 | --- | --- | --- |
 | `washingtonpost.com` | Needs implementation | Not supported for now. Current behavior appears site-buggy and inconsistent: reject can land on the cookie policy page, and accept-all may redirect users unexpectedly. |
 
-## Newly Added Generic CMPs — Pending More Live Targets
+## Newer Generic CMP Coverage
 
-These CMP families were added to the generic handler during the June 6, 2026 coverage pass, but still need better public regression targets before they should be treated as broadly validated coverage.
+These CMP families were introduced as generic handler expansions and then rechecked against live public targets on July 19, 2026. Treat this section as the current evidence status, not as a blanket claim that every site using the family is solved.
 
 | CMP | Status | Notes |
 | --- | --- | --- |
-| `Borlabs Cookie` | Imported, pending validation | Generic detection and preference-save path are now implemented. Candidate public pages probed during this pass did not expose a fresh banner reliably enough for stable automated regression coverage. |
+| `Borlabs Cookie` | Live coverage added | `beumergroup.com` and `discover-drives.danfoss.com` both passed targeted live e2e on July 19, 2026 (`dom:borlabs:custom`). `realmaker.de` did not surface a fresh banner in the same pass, so keep extra targets on the watch list. |
 | `Cookie Wow` | Imported, pending validation | Generic detection and category-toggle handling are now implemented. Vendor/help pages probed during this pass did not expose a live consent surface. |
-| `Cookie Control by Civic` | Partial live coverage | Generic handling is implemented. `cookiecontrol.com` exposes a stable banner publicly, but automated validation currently hits an anti-bot challenge, so this CMP is not yet counted as a clean regression pass. |
-| `Truendo` | Imported, pending validation | Generic detection and preference-save flow are now implemented. `truendo.com` exposes a visible consent dialog, but a stable automated target still needs to be pinned down. |
-| `Clickio` | Imported, pending validation | Generic detection and preference-save flow are now implemented. Public regression target still needed. |
-| `cookiesjsr` | Imported, pending validation | Generic handling is implemented with settings-panel tab traversal. Public sites probed during this pass exposed the settings entry, but not yet a clean stable first-load automated target. |
+| `Cookie Control by Civic` | Mixed live coverage | `help.uis.cam.ac.uk` passed targeted live e2e on July 19, 2026 both without VPN and with the Browsec profile (`dom:cookiecontrolcivic:custom`). `peterborough.gov.uk/cookies` dismissed successfully in the same pass, but the recorded method came back as `consentmanager:frame:deferred`, so keep an eye on handler overlap. `childrenscommissioner.gov.uk/privacy/cookies/` failed reproducibly in custom mode with the banner still visible. |
+| `Truendo` | Live coverage added | `truendo.com` and `sportradar.com` both passed targeted live e2e on July 19, 2026 (`cmp_api:Truendo:custom`). `laola1.at` did not surface a fresh banner in the sampled session. |
+| `Clickio` | Needs investigation | `diariomotor.com/diariomotor-sin-cookies/` failed reproducibly on July 19, 2026 with the banner still visible after timeout. `atelevisao.com` did not show a fresh banner in the same sweep, so this family should stay out of strong support claims for now. |
+| `cookiesjsr` | Live coverage added | `crealogix.com` and `pathosense.com` both passed targeted live e2e on July 19, 2026, including a custom save flow on PathoSense. |
+| `CookieYes` | Live coverage added | `emeablog.msasafety.com` passed targeted live e2e on July 19, 2026 (`dom:cookieyes:custom`). |
 | `privacymanager.io` | Imported, pending validation | Generic slider-based handling is implemented. Public regression target still needed. |
 
 ## Newly Added — Pending Human Validation
@@ -122,13 +132,13 @@ Detected via automated VPN scan (Browsec → Germany/Lithuania EU IP) on 2026-05
 
 Reviewed on June 13, 2026 from live public homepages and user-supplied DOM screenshots. This pass prioritised high-traffic Brazilian publisher / finance targets and mapped them to the actual banner family visible on first load.
 
-Non-VPN live e2e revalidation on June 14, 2026 now passes for `globo.com`, `sbt.com.br`, `e-core.com`, `terra.com.br`, `exame.com` (accept path), `americanas.com.br`, `banco.bradesco`, and `netshoes.com.br`. Additional human validation on June 20, 2026 confirmed these same sites behaved correctly both from a US session and from an EU VPN session, replacing the earlier note that VPN-backed validation was still blocked by the Browsec harness/runtime issue.
+Non-VPN live e2e revalidation on June 14, 2026 passed for `globo.com`, `sbt.com.br`, `e-core.com`, `terra.com.br`, `exame.com` (accept path), `americanas.com.br`, `banco.bradesco`, and `netshoes.com.br`. Sunday, July 19, 2026 follow-up runs kept `globo.com`, `sbt.com.br`, `americanas.com.br`, `banco.bradesco`, `gov.br`, `sp.gov.br`, `correios.com.br`, `tim.com.br`, `uol.com.br`, and `terra.com.br` green in a non-VPN session, but they also surfaced two important truth updates: `e-core.com` currently fingerprints as an AdOpt / HubSpot hybrid rather than a pure HubSpot banner, and `exame.com` reject failed reproducibly without VPN while a targeted VPN rerun passed via the heuristic fallback.
 
 | Site | CMP / banner family | Current status | Notes |
 | --- | --- | --- | --- |
 | `globo.com` | Globo custom LGPD banner | Live-validated | Single-button `Prosseguir` banner. Added direct selector coverage for `#cookie-banner-lgpd` / `.cookie-banner-lgpd_accept-button`. Human-validated June 20, 2026 from both US and EU/VPN sessions. |
 | `sbt.com.br` | SBT custom LGPD banner | Live-validated | CSS-module banner with visible `OK` action and privacy-policy link. Added direct selector coverage for the visible banner shell plus `button.sbt-button`. Human-validated June 20, 2026 from both US and EU/VPN sessions. |
-| `e-core.com` | HubSpot Cookie Banner | Live-validated | User screenshot confirmed HubSpot IDs. Added direct support for `#hs-eu-cookie-confirmation`, Accept, and Decline. Human-validated June 20, 2026 from both US and EU/VPN sessions. |
+| `e-core.com` | AdOpt / HubSpot hybrid | Live-validated | Sunday, July 19, 2026 live fingerprinting found visible AdOpt DOM (`#cookie-banner`) and `tag.goadopt.io` scripts on top of HubSpot assets. The non-VPN reject run still passed, but it recorded via `dom:privacymanager:reject_all`, so this should no longer be described as pure HubSpot-only coverage. |
 | `americanas.com.br` | Privacy Tools banner (`privacytools.com.br`) | Live-validated | Public homepage renders `#privacytools-banner-consent` / `.cc-window.cc-banner` with `Aceitar` plus a close affordance. Added dedicated coverage for this lightweight storefront banner family. Human-validated June 20, 2026 from both US and EU/VPN sessions. |
 | `banco.bradesco` | Bradesco custom LGPD banner | Live-validated | Public homepage shows explicit `#rejeitarCookiesNaoNecessarios` and `#aceitarCookies` actions inside `#cookies.cookie-banner`. Added first-class accept and reject handling. Human-validated June 20, 2026 from both US and EU/VPN sessions. |
 | `netshoes.com.br` | Netshoes custom cookie notice | Live-validated | Homepage notice currently exposes `.cookie-notification` with a single `CONCORDAR E FECHAR` action. Added lightweight notice coverage so it can be dismissed consistently. Human-validated June 20, 2026 from both US and EU/VPN sessions. |
@@ -140,7 +150,7 @@ Non-VPN live e2e revalidation on June 14, 2026 now passes for `globo.com`, `sbt.
 | `uol.com.br` | `privacymanager.io` simple LGPD banner | Fixture-covered | Public homepage currently shows a simple `OK` banner (`.banner-lgpd-consent__accept`) rather than the older slider dialog. |
 | `folha.uol.com.br` | UOL-family simple LGPD banner | Expected-covered | Same visible `banner-lgpd-consent` family as `uol.com.br`. Coverage piggybacks on the same simple-banner path. |
 | `terra.com.br` | `privacymanager.io` simple LGPD banner | Live-validated | Public homepage currently shows the Terra `dialog.push-notification.is-cookies` / `.push-notification--accept-button` flow. Human-validated June 20, 2026 from both US and EU/VPN sessions. |
-| `exame.com` | AdOpt banner on top of Launchpad / Liveramp stack | Live-validated | Public homepage exposes `#cookie-banner`, `#adopt-accept-all-button`, and a visible `Do not sell` path. Added handling through the updated PrivacyManager flow. Human-validated June 20, 2026 from both US and EU/VPN sessions. |
+| `exame.com` | AdOpt banner on top of Launchpad / LiveRamp stack | Needs investigation | The accept path still passed on Sunday, July 19, 2026, but the reject path also failed reproducibly in isolated non-VPN reruns with the banner still visible. A same-day targeted VPN rerun passed via the heuristic fallback instead. Keep the hybrid Launchpad/AdOpt classification, but do not overstate reject support until the non-VPN regression is understood. |
 | `itau.com.br` | OneTrust | Already covered | Live homepage still exposes a OneTrust shell. Existing OneTrust coverage should apply here without special handling. |
 | `estadao.com.br` | Launchpad / Liveramp stack observed | Needs more live validation | Launchpad scripts were present during the June 13, 2026 probe, but the visible actionable shell was not stable enough in that session to claim full live validation yet. |
 

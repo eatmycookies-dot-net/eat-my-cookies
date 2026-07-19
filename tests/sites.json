@@ -379,13 +379,18 @@
       "name": "The Verge",
       "url": "https://www.theverge.com/",
       "region": "US",
-      "cmp": "Sourcepoint",
-      "tier": "sp-frame",
+      "cmp": "OneTrust / LiveRamp Launchpad",
+      "tier": "dom",
+      "note": "Live fingerprint probe on July 19, 2026 found OneTrust SDK assets plus Launchpad / LiveRamp privacy scripts on the public homepage. The non-VPN validation run handled the current surface via dom:onetrust:ccpa rather than the older Sourcepoint path.",
       "bannerSelectors": [
-        "[id^='sp_message_container']"
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        ".optanon-alert-box-wrapper"
       ],
       "consentSelectors": [
-        ".sp_choice_type_REJECT_ALL"
+        "#onetrust-reject-all-handler",
+        "#onetrust-accept-btn-handler",
+        ".ot-sdk-show-settings"
       ]
     },
     {
@@ -2307,19 +2312,22 @@
       "region": "BR",
       "locale": "en-US",
       "acceptLanguage": "en-US,en;q=0.9",
-      "cmp": "HubSpot Cookie Banner",
+      "cmp": "AdOpt / HubSpot hybrid",
       "tier": "dom",
+      "note": "Live fingerprint probe on July 19, 2026 saw AdOpt DOM (`#cookie-banner`) and `tag.goadopt.io` scripts on top of HubSpot assets. The visible reject path in the non-VPN run recorded via dom:privacymanager:reject_all rather than a HubSpot-specific method.",
       "preference": "reject_all",
       "allowDirectDomValidation": true,
       "allowTrustedClickFallback": true,
       "handleWaitMs": 9000,
       "requireBannerDismissal": true,
       "bannerSelectors": [
-        "#hs-eu-cookie-confirmation"
+        "#cookie-banner",
+        "#adopt-accept-all-button",
+        "#adopt-preferences-button"
       ],
       "consentSelectors": [
-        "#hs-eu-decline-button",
-        "#hs-eu-confirmation-button"
+        "#adopt-accept-all-button",
+        "text:do not sell"
       ]
     },
     {
