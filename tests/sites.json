@@ -493,6 +493,72 @@
       ]
     },
     {
+      "name": "FIFA",
+      "url": "https://www.fifa.com/en",
+      "region": "US",
+      "cmp": "OneTrust",
+      "tier": "cmp-api",
+      "preference": "custom",
+      "expectActivityRecorded": true,
+      "requireBannerDismissal": true,
+      "handleWaitMs": 12000,
+      "note": "US/no-VPN public homepage shows a top-level OneTrust shell with visible Reject All / I'm OK with that / Preference Center controls while the full category preference center sits hidden in the DOM. Custom mode must open the preference center, keep Functional on, turn Performance and Targeting off, save, and dismiss the visible shell.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ],
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-2": false,
+        "ot-group-id-3": true,
+        "ot-group-id-4": false
+      }
+    },
+    {
+      "name": "FIFA (Reject All)",
+      "url": "https://www.fifa.com/en",
+      "region": "US",
+      "cmp": "OneTrust",
+      "tier": "cmp-api",
+      "preference": "reject_all",
+      "ccpaDoNotSell": true,
+      "expectActivityRecorded": true,
+      "requireBannerDismissal": true,
+      "handleWaitMs": 12000,
+      "note": "US/no-VPN reject-all should persist the privacy-center state and record activity, not just leave the hidden OneTrust categories flipped without counting the action.",
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        "#onetrust-reject-all-handler",
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ],
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-2": false,
+        "ot-group-id-3": false,
+        "ot-group-id-4": false
+      }
+    },
+    {
       "name": "CNBC",
       "url": "https://www.cnbc.com/",
       "region": "US",
@@ -589,6 +655,38 @@
       ]
     },
     {
+      "name": "Thomson Reuters Homepage",
+      "url": "https://www.thomsonreuters.com/",
+      "region": "US",
+      "cmp": "OneTrust",
+      "tier": "cmp-api",
+      "preference": "reject_all",
+      "ccpaDoNotSell": true,
+      "expectActivityRecorded": true,
+      "requireBannerDismissal": true,
+      "handleWaitMs": 12000,
+      "note": "Homepage exposes a visible OneTrust shell with only a Cookie Settings opener. The working path is: open the privacy center, apply RejectAll via OneTrust's API, confirm choices, and let cleanup remove the visible shell.",
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".ot-sdk-show-settings",
+        ".save-preference-btn-handler",
+        "#onetrust-accept-btn-handler"
+      ],
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-2": false,
+        "ot-group-id-3": false,
+        "ot-group-id-4": false,
+        "ot-group-id-5": false,
+        "ot-group-id-8": false
+      }
+    },
+    {
       "name": "Thomson Reuters Privacy Statement",
       "url": "https://www.thomsonreuters.com/en/privacy-statement#cookies",
       "region": "US",
@@ -609,6 +707,94 @@
         ".save-preference-btn-handler",
         ".onetrust-close-btn-handler"
       ]
+    },
+    {
+      "name": "KPMG OneTrust Article",
+      "url": "https://kpmg.com/xx/en/client-stories/reducing-language-barriers-and-increasing-inclusion.html?cid=ext-refp_reuters_all_xx_2026&utm_medium=refp&utm_source=ext-reuters&utm_campaign=2026-pre-roll#",
+      "region": "US",
+      "cmp": "OneTrust",
+      "tier": "cmp-api",
+      "preference": "custom",
+      "expectActivityRecorded": true,
+      "requireBannerDismissal": true,
+      "handleWaitMs": 12000,
+      "note": "KPMG's OneTrust PC2 center exposes both Submit All Preferences and Agree & Proceed. Custom mode must click the preference submit control, not the accept/proceed control, then dismiss without reopening or leaving the page scrolled to the footer.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler",
+        "#onetrust-accept-btn-handler",
+        ".category-switch-handler"
+      ],
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-C0002": false,
+        "ot-group-id-C0003": true,
+        "ot-group-id-C0004": false
+      }
+    },
+    {
+      "name": "People",
+      "url": "https://people.com/",
+      "region": "US",
+      "cmp": "OneTrust (CCPA settings flow)",
+      "tier": "cmp-api",
+      "preference": "reject_all",
+      "ccpaDoNotSell": true,
+      "expectActivityRecorded": true,
+      "handleWaitMs": 12000,
+      "note": "US flow uses a OneTrust shell with Cookie Settings / Accept All and a privacy center that has recently exposed a single targeting-style opt-out toggle in headed manual checks. Automation often sees the shell hidden in DOM, so activity recording is the primary signal here.",
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler",
+        "#onetrust-accept-btn-handler"
+      ],
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-OSSTA_BG": false
+      }
+    },
+    {
+      "name": "Investopedia",
+      "url": "https://www.investopedia.com/",
+      "region": "US",
+      "cmp": "OneTrust (CCPA settings flow)",
+      "tier": "cmp-api",
+      "preference": "reject_all",
+      "ccpaDoNotSell": true,
+      "expectActivityRecorded": true,
+      "handleWaitMs": 12000,
+      "note": "People Inc. OneTrust US flow mirrors people.com: reject-all must persist the privacy-choice opt-out in the OneTrust preference center, not just dismiss the shell.",
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        "#onetrust-pc-btn-handler",
+        ".save-preference-btn-handler",
+        "#onetrust-accept-btn-handler"
+      ],
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-OSSTA_BG": false
+      }
     },
     {
       "name": "La Repubblica",
@@ -1183,15 +1369,69 @@
       "region": "EU",
       "locale": "en-GB",
       "acceptLanguage": "en-GB,en;q=0.9",
-      "cmp": "Cookiebot",
+      "cmp": "Investis Cookie Manager",
       "tier": "dom",
+      "preference": "custom",
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "note": "Investis Digital Cookie Manager v3.1. The live EU shell uses #__cookieWrapper with direct Accept/Decline buttons and a modal preference center. Custom mode should map Functional=true, Performance=false, Marketing=false, then save and dismiss the wrapper.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#__cookieWrapper",
+        "#__cookieWrapper .__cookieNotice",
+        "#myModal"
+      ],
+      "consentSelectors": [
+        "#cc-reject-Btn",
+        "#cc-CookieSettingPreference",
+        "#cc-cookieAgree"
+      ],
+      "expectedInvestisConsent": {
+        "necessaryCookie": true,
+        "functionalCookies": true,
+        "performanceCookies": false,
+        "marketingCookies": false
+      }
+    },
+    {
+      "name": "Allround Automations",
+      "url": "https://www.allroundautomations.com/",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "Cookiebot",
+      "tier": "cmp-api",
+      "preference": "custom",
+      "handleWaitMs": 9000,
+      "requireBannerDismissal": true,
+      "note": "US traffic currently gets Cookiebot by Usercentrics with a level-selection dialog. The API records consent, but the banner needs an explicit Cookiebot.hide() after submitCustomConsent()/withdraw() to disappear.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
       "bannerSelectors": [
         "#CybotCookiebotDialog",
         "#CybotCookiebotDialogBody"
       ],
       "consentSelectors": [
+        "#CybotCookiebotDialogBodyLevelButtonAccept",
         "#CybotCookiebotDialogBodyButtonDecline"
-      ]
+      ],
+      "expectedCookiebotConsent": {
+        "necessary": true,
+        "preferences": true,
+        "statistics": false,
+        "marketing": false
+      }
     },
     {
       "name": "LVMH",
@@ -2543,6 +2783,50 @@
       ]
     },
     {
+      "name": "Canadian Tire (US/OneTrust/Custom)",
+      "url": "https://www.canadiantire.ca/en.html",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "note": "From US (no VPN), Canadian Tire shows the full OneTrust PC2 preference center directly instead of the simple accept/reject banner shown to CA visitors. Custom mode must keep Functional on, dismiss the visible PC, preserve the hidden OneTrust scaffold, restore scroll after handling, and keep the footer Cookie Settings reopen view synchronized with the saved group state.",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "handleWaitMs": 10000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        ".save-preference-btn-handler",
+        "#onetrust-accept-btn-handler"
+      ]
+    },
+    {
+      "name": "Canadian Tire (EU/OneTrust/Reject)",
+      "url": "https://www.canadiantire.ca/en.html",
+      "cmp": "OneTrust",
+      "tier": "site-specific",
+      "note": "From EU (VPN), Canadian Tire shows the full OneTrust PC2 preference center. Reject mode uses OneTrust.RejectAll(), then closes the visible PC without deleting the reusable preference-center DOM so footer Cookie Settings still works afterward.",
+      "region": "EU",
+      "preference": "reject_all",
+      "handleWaitMs": 10000,
+      "requireBannerDismissal": true,
+      "bannerSelectors": [
+        "#onetrust-pc-sdk",
+        ".onetrust-pc-dark-filter"
+      ],
+      "consentSelectors": [
+        ".save-preference-btn-handler",
+        "#onetrust-accept-btn-handler"
+      ]
+    },
+    {
       "name": "The Weather Network (CA/Didomi Accept)",
       "url": "https://www.theweathernetwork.com/ca",
       "region": "CA",
@@ -2653,6 +2937,34 @@
       ],
       "consentSelectors": [
         "button[title*=\"Accepter et fermer l'alerte\" i]"
+      ]
+    },
+    {
+      "name": "GoDaddy (Privacy Banner)",
+      "url": "https://www.godaddy.com/nl",
+      "region": "US",
+      "cmp": "GoDaddy Privacy Manager",
+      "tier": "dom",
+      "bannerSelectors": [
+        "#pw_banner",
+        ".pw_buttons"
+      ],
+      "consentSelectors": [
+        "#pw_banner",
+        ".pw_buttons"
+      ]
+    },
+    {
+      "name": "Afternic (GoDaddy Privacy Modal)",
+      "url": "https://www.afternic.com/forsale/sprout.com",
+      "region": "US",
+      "cmp": "GoDaddy Privacy Manager",
+      "tier": "dom",
+      "bannerSelectors": [
+        "#privacy_manager_modal"
+      ],
+      "consentSelectors": [
+        "#privacy_manager_modal"
       ]
     }
   ]

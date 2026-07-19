@@ -59,13 +59,12 @@ const PROFILE_DIR = process.env.EMC_VPN_PROFILE
 
 fs.mkdirSync(PROFILE_DIR, { recursive: true });
 
-// Sites to check — Ketch candidates + extras discovered during research
+// Sites to check — mixed CMP candidates + extras discovered during research
 const SITES = [
   // Confirmed Ketch customers (from ketch.com homepage)
   { name: 'LVMH',              url: 'https://www.lvmh.com' },
   { name: 'Skyscanner',        url: 'https://www.skyscanner.net' },
   { name: 'Pret A Manger',     url: 'https://www.pret.com/en-GB' },
-  { name: 'Inchcape',          url: 'https://www.inchcape.com' },
 
   // US sites detected with Ketch from EU IP (Wappalyzer)
   { name: 'CBS News',          url: 'https://www.cbsnews.com' },
@@ -96,6 +95,7 @@ const SITES = [
   { name: 'Sky News',          url: 'https://news.sky.com' },
   { name: 'Marca (ES)',        url: 'https://www.marca.com' },
   { name: 'Le Monde',         url: 'https://www.lemonde.fr' },     // already in repo
+  { name: 'Inchcape',          url: 'https://www.inchcape.com' },
 ];
 
 // CMP fingerprints — scripts/globals/elements loaded by each platform
@@ -109,7 +109,8 @@ const CMP_FINGERPRINTS = [
   { name: 'CookieScript',   scripts: ['cdn.cookie-script.com', 'cookie-script.com'], globals: ['CookieScript'],                selectors: ['#cookiescript_injected', '#cookiescript_injected_wrapper', '#cookiescript_accept', '#cookiescript_reject'] },
   { name: 'WordPress GDPR', scripts: ['wordpress-ptchrgdprplugin'],                   globals: ['wpgdprc'],                     selectors: ['.wpgdprc-consent-bar', '.wpgdprc-consent-modal', '.wpgdprc-consent-bar__settings'] },
   { name: 'Quantcast',      scripts: ['quantcast.mgr.consensu.org', 'quantcast'],   globals: ['__qcCmpApi'],                   selectors: ['.qc-cmp2-container', '.qc-cmp-showing'] },
-  { name: 'Cookiebot',      scripts: ['cookiebot.com', 'consentcdn.com'],           globals: ['Cookiebot', 'CookieConsent'],   selectors: ['#CybotCookiebotDialog', '#CybotCookiebotDialogBody'] },
+  { name: 'Cookiebot',      scripts: ['cookiebot.com', 'consentcdn.com'],           globals: ['Cookiebot'],                    selectors: ['#CybotCookiebotDialog', '#CybotCookiebotDialogBody'] },
+  { name: 'Investis Cookie Manager', scripts: ['assets.investisdigital.com/cookiemanager', 'cookiemanager.investisdigital.com'], globals: ['CookieConsent'], selectors: ['#__cookieWrapper', '#cc-reject-Btn', '#cc-CookieSettingPreference'] },
   { name: 'Usercentrics',   scripts: ['app.usercentrics.eu'],                       globals: ['usercentrics', 'UC_UI'],        selectors: ['#usercentrics-root', '.uc-banner-content'] },
   { name: 'Consentmanager', scripts: ['delivery.consentmanager.net'],               globals: ['cmp2'],                         selectors: ['#cmpbox', '.cmpbox'] },
   { name: 'AppConsent',     scripts: ['appconsent.io', 'figconsent.com'],           globals: ['ACFigConsent'],                 selectors: ['.ac-banner', '#fig-consent-banner'] },

@@ -272,6 +272,26 @@
       }
     },
     {
+      "id": "investiscookiemanager",
+      "name": "Investis Cookie Manager",
+      "detectors": [
+        { "type": "script_src",    "value": "assets.investisdigital.com/cookiemanager" },
+        { "type": "script_src",    "value": "cookiemanager.investisdigital.com" },
+        { "type": "css_selector", "value": "#__cookieWrapper" },
+        { "type": "css_selector", "value": "#cc-reject-Btn" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "#cc-reject-Btn" },
+          { "type": "click", "selector": "#cc-reject-Btn-modal" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "#cc-acceptAll-btn" },
+          { "type": "click", "selector": "#cc-acceptAll-btn-modal" }
+        ]
+      }
+    },
+    {
       "id": "didomi",
       "name": "Didomi",
       "detectors": [
@@ -875,6 +895,13 @@
           { "type": "click", "selector": "#saveAndExit" }
         ]
       }
+    },
+    {
+      "id": "godaddyprivacy",
+      "name": "GoDaddy Privacy Manager",
+      "detectors": [
+        { "type": "css_selector", "value": "#gtm_privacy" }
+      ]
     }
   ]
 }

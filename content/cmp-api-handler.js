@@ -6,19 +6,53 @@
   const GUARDIAN_HOSTS = new Set(['www.theguardian.com', 'support.theguardian.com']);
   const GUARDIAN_REJECT_API_HOSTS = new Set(['www.theguardian.com', 'support.theguardian.com']);
   const EXPLICIT_ONETRUST_CONTROL_HOSTS = new Set(['www.bbc.com']);
-  const ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com', 'www.schwab.com', 'schwab.com']);
+  const ONETRUST_CCPA_TEXT_RE = /\b(do not sell|do not share|sale of personal data|share of personal data)\b/i;
+  const ONETRUST_CCPA_GROUP_ID_RE = /^[A-Z]+_BG$/;
   // CNBC exposes a visible top-level OneTrust banner that reloads on save.
   // NBC News does not consistently expose the same surface, and forcing this
   // path there can route users away from the homepage on reject.
-  const ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set(['www.cnbc.com']);
-  const ONETRUST_FORCE_CLEANUP_HOSTS = new Set(['www.zoom.com', 'www.thomsonreuters.com', 'thomsonreuters.com']);
+  const ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set([
+    'www.cnbc.com',
+    'www.thomsonreuters.com',
+    'thomsonreuters.com',
+  ]);
+  const ONETRUST_FORCE_CLEANUP_HOSTS = new Set([]);
+  // Use OneTrust.Close() / close-button dismissal instead of DOM removal so that the
+  // reusable preference-center structure (#onetrust-pc-sdk) stays in the DOM for footer
+  // link reopens. Do NOT add zoom.com: zoom.com's OneTrust build (202409.2.0) removes
+  // .onetrust-pc-dark-filter from the DOM when OneTrust.Close() is called, which still
+  // breaks footer-link reopens. Use ONETRUST_VISUAL_HIDE_CLOSE_HOSTS for zoom.com instead.
+  const ONETRUST_PRESERVE_DOM_CLOSE_HOSTS = new Set(['www.canadiantire.ca']);
+  // Let OneTrust complete its own close/save lifecycle. Its footer controls remain the
+  // source of truth for reopening privacy settings after the initial consent flow.
+  const ONETRUST_VISUAL_HIDE_CLOSE_HOSTS = new Set([]);
+  const ONETRUST_SKIP_CONFIRM_HOSTS = new Set(['www.zoom.com']);
+  // Most OneTrust builds need the DOM toggles mirrored after UpdateConsent so visible
+  // "Confirm My Choices" / Save actions do not read stale checkbox state. Zoom is the
+  // known exception: touching the toggles at all corrupts OneTrust's internal reopen state.
+  const ONETRUST_SKIP_API_DOM_SYNC_HOSTS = new Set([
+    'www.zoom.com',
+  ]);
+  // Reuters-class hosts hang when we fire OneTrust's full toggle event path, but leaving
+  // the DOM stale makes the visible preference center misreport the saved state. Mirror
+  // the checkbox state with the native setter only so the UI reflects the API-written
+  // consent without retriggering heavy OneTrust processing.
+  const ONETRUST_VISUAL_API_DOM_SYNC_HOSTS = new Set([
+    'www.reuters.com',
+    'reuters.com',
+    'www.thomsonreuters.com',
+    'thomsonreuters.com',
+  ]);
+  const ONETRUST_PRIVACY_CENTER_REJECT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com']);
   const ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com', 'www.schwab.com', 'schwab.com']);
-  const ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com']);
+  const ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set([]);
+  const ONETRUST_SURFACE_ONLY_CLEANUP_HOSTS = new Set(['www.zoom.com']);
   const ONETRUST_CLEANUP_WATCH_MS = 15000;
   const DISNEY_FAMILY_USNAT_HOSTS = new Set(['www.disney.com', 'www.espn.com', 'www.hulu.com']);
   const DISNEY_PRIVACY_HOSTS = new Set(['privacy.thewaltdisneycompany.com']);
   const ZOOM_ONETRUST_HOSTS = new Set(['www.zoom.com']);
   const NIKE_CCPA_HOSTS = new Set(['www.nike.com']);
+  let _zoomOneTrustPrivacyChoicesBridgeInstalled = false;
   const ONETRUST_VISIBLE_SELECTORS = [
     '#onetrust-banner-sdk',
     '#onetrust-consent-sdk',
@@ -27,7 +61,7 @@
   ];
   const ONETRUST_ACTIONABLE_SURFACE_SELECTORS = [
     ...ONETRUST_VISIBLE_SELECTORS,
-    '#onetrust-pc-btn-handler',
+    // onetrust-pc-btn-handler intentionally excluded — see dom-handler.js comment.
     '#onetrust-accept-btn-handler',
     '#onetrust-reject-all-handler',
     '.ot-pc-refuse-all-handler',
@@ -35,6 +69,30 @@
     '.category-switch-handler',
     "input[id^='ot-group-id-']",
   ];
+  const ONETRUST_OPEN_CONTROL_SELECTORS = [
+    '#onetrust-pc-btn-handler',
+    '#ot-do-not-sell',
+    '#ot-sdk-btn',
+    'button[data-type="cmpFooterLink"]',
+    'a[onclick*="ToggleInfoDisplay"]',
+    'button[onclick*="ToggleInfoDisplay"]',
+    '.df-privacy-compliance',
+    '.ot-sdk-show-settings',
+  ];
+  const ONETRUST_CCPA_STRUCTURAL_SELECTORS = [
+    '#ot-do-not-sell',
+    '[data-optanongroupid$="_BG"]',
+    "input[id^='ot-group-id-'][id$='_BG']",
+  ];
+  const ONETRUST_PREFERENCE_CENTER_SELECTORS = [
+    '#onetrust-consent-sdk',
+    '#onetrust-pc-sdk',
+    '.save-preference-btn-handler',
+    '.category-switch-handler',
+    "input[id^='ot-group-id-']",
+  ];
+  const ONETRUST_SAVE_TEXT_RE = /\b(confirm|save|submit|proceed)\b/i;
+  const ONETRUST_NON_SAVE_TEXT_RE = /\b(accept|agree|allow all|i['’]?m ok with that|continue)\b/i;
   const OSANO_VISIBLE_SELECTORS = [
     '.osano-cm-dialog',
     '.osano-cm-window',
@@ -77,6 +135,13 @@
     '.tru_overlay',
   ];
   let _guardianRetryTimer = null;
+
+  // This is independent of a consent action. After a reload, main.js correctly
+  // skips an already-handled page, but Zoom's broken native footer control still
+  // needs its structural bridge for the lifetime of the document.
+  if (ZOOM_ONETRUST_HOSTS.has(window.location.hostname)) {
+    installZoomOneTrustPrivacyChoicesBridge();
+  }
 
   // Sourcepoint: intercept window._sp_queue before their SDK processes it.
   // SP checks _sp_queue on load; pushing a callback here lets us hook onMessageReady
@@ -137,10 +202,6 @@
         return handleDisneyPrivacyChoices(prefs);
       }
 
-      if (shouldUseOneTrustPrivacyCenterOptOut(prefs, window.location.hostname)) {
-        return handleOneTrustPrivacyCenterReject('cmp_api:OneTrust:ccpa');
-      }
-
       // Detect USNat modal first — applies to both accept and reject paths.
       // USNat "Notice of Right to Opt Out" banners use "Submit" as the confirm label.
       // GDPR preference centers use "Accept All" or "Confirm My Choices" — never "Submit".
@@ -197,12 +258,23 @@
 
       // --- Non-USNat (GDPR) path below ---
 
-      if (prefs.globalPreference === 'custom' && ZOOM_ONETRUST_HOSTS.has(window.location.hostname)) {
-        return handleZoomOneTrustCustom(prefs);
+      // Custom mode should use the real OneTrust preference-center flow on any site that
+      // exposes category controls. Host-specific sets only tune post-save behavior
+      // (preserve DOM, skip confirm, DOM sync) and should not decide whether custom is
+      // supported at all.
+      if (prefs.globalPreference === 'custom') {
+        if (ZOOM_ONETRUST_HOSTS.has(window.location.hostname)) {
+          return handleZoomOneTrustCustomNative(prefs);
+        }
+        return handleOneTrustCustom(prefs);
       }
 
-      if (prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(window.location.hostname)) {
-        return handleOneTrustPrivacyCenterAccept();
+      if (shouldUseOneTrustPrivacyCenterOptOut(prefs)) {
+        return handleOneTrustPrivacyCenterReject('cmp_api:OneTrust:ccpa', prefs);
+      }
+
+      if (prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(prefs, window.location.hostname)) {
+        return handleOneTrustPrivacyCenterAccept('cmp_api:OneTrust', prefs);
       }
 
       if (prefs.globalPreference === 'accept_all') {
@@ -218,26 +290,13 @@
           'button[aria-label*="Accept" i]',
           'button[title*="Accept" i]',
         ]);
-        if (acceptClicked) {
-          if (shouldForceOneTrustCleanup(window.location.hostname)) {
-            await delay(500);
-            if (hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) {
-              scheduleOneTrustCleanup();
-            }
-          }
+      if (acceptClicked) {
+          await settleOneTrustAfterAction(window.location.hostname);
           return true;
         }
         if (typeof w.OneTrust?.Accept === 'function') {
           w.OneTrust.Accept();
-          if (shouldForceOneTrustCleanup(window.location.hostname)) {
-            await delay(250);
-            const btn = document.querySelector('#onetrust-accept-btn-handler');
-            if (btn && isVisible(btn)) dispatchSyntheticClick(btn);
-            await delay(500);
-            if (hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) {
-              scheduleOneTrustCleanup();
-            }
-          }
+          await settleOneTrustAfterAction(window.location.hostname);
           return true;
         }
         return clickFirstVisible([
@@ -248,37 +307,46 @@
         ]);
       }
 
-      if (typeof w.OneTrust?.RejectAll === 'function') {
-        if (!hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS)) {
-          return false;
-        }
-        // GDPR preference center: RejectAll via API, fall through to waitForDismissal
+      const rejectResult = await handleOneTrustPrivacyCenterReject('cmp_api:OneTrust', prefs);
+      if (rejectResult) return rejectResult;
+
+      // Last-resort fallback: if a visible OneTrust shell remains but the standard reject
+      // controls were not actionable, sync the SDK state directly and let the shared
+      // dismissal watcher decide whether the surface actually disappeared.
+      if (prefs.globalPreference === 'reject_all' &&
+          typeof w.OneTrust?.RejectAll === 'function' &&
+          hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS)) {
         w.OneTrust.RejectAll();
         await delay(300);
+        await settleOneTrustAfterAction(window.location.hostname);
         return true;
       }
 
-      if (clickFirstVisible([
-        '#onetrust-reject-all-handler',
-        '.ot-pc-refuse-all-handler',
-        'button[aria-label*="Reject" i]',
-        'button[title*="Reject" i]',
-      ])) {
-        return true;
-      }
-
-      return handleOneTrustPrivacyCenterReject();
+      return false;
     },
-    Cookiebot: (w, prefs) => {
+    Cookiebot: async (w, prefs) => {
       if (!w.Cookiebot) return false;
-      w.Cookiebot.declined = prefs.globalPreference !== 'accept_all';
-      w.Cookiebot.consented = prefs.globalPreference === 'accept_all';
-      if (prefs.globalPreference === 'accept_all') {
-        w.Cookiebot.submitCustomConsent?.(true, true, true);
+      const desiredState = buildCookiebotDesiredState(prefs);
+      if (prefs.globalPreference === 'reject_all') {
+        if (typeof w.Cookiebot.withdraw === 'function') {
+          w.Cookiebot.withdraw();
+        } else if (typeof w.Cookiebot.submitCustomConsent === 'function') {
+          w.Cookiebot.submitCustomConsent(false, false, false);
+        } else {
+          return false;
+        }
       } else {
-        w.Cookiebot.withdraw?.();
+        if (typeof w.Cookiebot.submitCustomConsent !== 'function') return false;
+        w.Cookiebot.submitCustomConsent(
+          desiredState.preferences,
+          desiredState.statistics,
+          desiredState.marketing,
+        );
       }
-      return true;
+      const verified = await waitForCookiebotConsentState(desiredState, 2500);
+      if (!verified) return false;
+      w.Cookiebot.hide?.();
+      return prefs.globalPreference === 'custom' ? 'cmp_api:Cookiebot:custom' : 'cmp_api:Cookiebot';
     },
     UC_UI: (w, prefs) => {
       if (!w.UC_UI) return false;
@@ -545,18 +613,7 @@
   };
 
   const CMP_SELECTORS = {
-    OneTrust: [
-      '#onetrust-banner-sdk',
-      '#onetrust-consent-sdk',
-      '#onetrust-pc-sdk',
-      '.onetrust-pc-dark-filter',
-      '#onetrust-reject-all-handler',
-      '#onetrust-pc-btn-handler',
-      '#ot-sdk-btn',
-      '.df-privacy-compliance',
-      '.ot-sdk-show-settings',
-      '.save-preference-btn-handler',
-    ],
+    OneTrust: [...ONETRUST_VISIBLE_SELECTORS],
     Cookiebot: ['#CybotCookiebotDialog', '#cookiebanner'],
     UC_UI: ['#usercentrics-root', "[data-testid='uc-banner']"],
     Didomi: ['#didomi-popup', '#didomi-notice'],
@@ -626,6 +683,7 @@
   async function tryHandlers() {
     if (_handled || !_prefs) return;
     if (userClickedRecently()) return;
+    if (!hasCompleteCustomPrefs(_prefs)) return;
 
     // Guardian uses a dedicated retry loop (startGuardianRetryLoop) that fires every 400ms
     // to wait for Sourcepoint's iframe to load. The _trying guard would block every retry
@@ -675,6 +733,8 @@
   function syncOneTrustConsent() {
     if (_handled || _proactiveSynced || !_prefs) return;
     if (userClickedRecently()) return;
+    if (!hasCompleteCustomPrefs(_prefs)) return;
+    if (_prefs.globalPreference === 'custom') return;
     if (isBlockedForHost('OneTrust', _prefs.globalPreference)) return;
     if (typeof window.OneTrust?.RejectAll !== 'function') return;
     if (hasVisibleSelector(CMP_SELECTORS.OneTrust ?? [])) return;
@@ -1374,6 +1434,65 @@
       document.getElementById('ot-group-id-BG559') != null;
   }
 
+  function buildCookiebotDesiredState(prefs) {
+    if (prefs.globalPreference === 'accept_all') {
+      return {
+        preferences: true,
+        statistics: true,
+        marketing: true,
+      };
+    }
+
+    if (prefs.globalPreference === 'reject_all') {
+      return {
+        preferences: false,
+        statistics: false,
+        marketing: false,
+      };
+    }
+
+    return {
+      preferences: Boolean(prefs.functional) || prefs.uncategorized === 'accept',
+      statistics: Boolean(prefs.analytics),
+      marketing: Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false,
+    };
+  }
+
+  function readCookiebotConsentState() {
+    try {
+      const raw = document.cookie.split('; ').find((entry) => entry.startsWith('CookieConsent='));
+      if (!raw) return null;
+      const decoded = decodeURIComponent(raw.slice('CookieConsent='.length));
+      const readBool = (key) => {
+        const match = decoded.match(new RegExp(`${key}:(true|false)`));
+        if (!match) return null;
+        return match[1] === 'true';
+      };
+      return {
+        preferences: readBool('preferences'),
+        statistics: readBool('statistics'),
+        marketing: readBool('marketing'),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function waitForCookiebotConsentState(desiredState, timeoutMs = 2500) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const current = readCookiebotConsentState();
+      if (current &&
+          current.preferences === desiredState.preferences &&
+          current.statistics === desiredState.statistics &&
+          current.marketing === desiredState.marketing) {
+        return true;
+      }
+      await delay(100);
+    }
+    return false;
+  }
+
   function buildTruendoDesiredState(prefs) {
     const desiredFunctional = Boolean(prefs?.functional) || prefs?.uncategorized === 'accept';
     return {
@@ -1502,16 +1621,24 @@
     } catch (_) {}
   }
 
-  function shouldUseOneTrustPrivacyCenterOptOut(prefs, host = window.location.hostname) {
-    return ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS.has(host) && prefs.ccpaDoNotSell !== false;
+  function shouldUseOneTrustPrivacyCenterOptOut(prefs) {
+    return prefs?.globalPreference !== 'custom' &&
+      prefs.ccpaDoNotSell !== false &&
+      (isOneTrustPrivacyChoicesCcpaFlow() || hasAnyOneTrustPrivacyChoicesEntry());
   }
 
-  function shouldUseOneTrustPrivacyCenterAccept(host = window.location.hostname) {
-    return ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS.has(host);
+  function shouldUseOneTrustPrivacyCenterAccept(prefs, host = window.location.hostname) {
+    if (ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS.has(host)) return true;
+    if (prefs?.ccpaDoNotSell === false) return false;
+    return hasAnyOneTrustPrivacyChoicesEntry();
   }
 
   function shouldForceOneTrustCleanup(host = window.location.hostname) {
     return ONETRUST_FORCE_CLEANUP_HOSTS.has(host);
+  }
+
+  function shouldCloseOneTrustPreservingDom(host = window.location.hostname) {
+    return ONETRUST_PRESERVE_DOM_CLOSE_HOSTS.has(host);
   }
 
   function setPrefs(detail) {
@@ -1523,49 +1650,31 @@
     if (_prefs?.globalPreference) return;
     const pref = document.documentElement.dataset.emcPref;
     if (!pref) return;
+    if (pref === 'custom') return;
     _prefs = { globalPreference: pref };
   }
 
-  async function handleOneTrustPrivacyCenterReject(method = 'cmp_api:OneTrust') {
-    const settingsVisible = hasVisibleSelector([
-      '.save-preference-btn-handler',
-      '.category-switch-handler',
-      "input[id^='ot-group-id-']",
-      '#onetrust-consent-sdk',
-      '#onetrust-pc-sdk',
-    ]);
+  function hasCompleteCustomPrefs(prefs) {
+    if (prefs?.globalPreference !== 'custom') return true;
+    return typeof prefs.functional === 'boolean' &&
+      typeof prefs.analytics === 'boolean' &&
+      typeof prefs.advertising === 'boolean' &&
+      typeof prefs.ccpaDoNotSell === 'boolean' &&
+      (prefs.uncategorized === 'accept' || prefs.uncategorized === 'reject');
+  }
+
+  async function handleOneTrustPrivacyCenterReject(method = 'cmp_api:OneTrust', prefs = _prefs) {
+    const host = window.location.hostname;
+    const settingsVisible = hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS);
     const actionableSurfaceVisible = hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS);
-    const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry(window.location.hostname);
+    const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry();
+    const privacyChoicesEntryPresent = hasAnyOneTrustPrivacyChoicesEntry();
+    const forcePrivacyCenterReject = shouldUseOneTrustPrivacyCenterReject(host);
+    const preferPreferenceCenterPersistence = settingsVisible ||
+      privacyChoicesEntryPresent ||
+      oneTrustCategoryEntries().length > 0;
 
-    if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryVisible) {
-      return false;
-    }
-
-    const opened = settingsVisible || clickFirstVisible([
-      '#onetrust-pc-btn-handler',
-      '#ot-sdk-btn',
-      'a.df-privacy-compliance',
-      '.df-privacy-compliance',
-      '.ot-sdk-show-settings',
-      'button[aria-label*="Privacy Choices" i]',
-      'button[title*="Privacy Choices" i]',
-      'button[aria-label*="Cookie Settings" i]',
-      'button[title*="Cookie Settings" i]',
-      'button[aria-label*="Manage Preferences" i]',
-      'button[title*="Manage Preferences" i]',
-    ]) || clickOneTrustContinueToSettings(window.location.hostname);
-
-    if (!opened) {
-      // USNat/CCPA direct opt-out modal: no privacy center opener exists.
-      // Toggles appear directly on the notice (e.g. Disney's "Notice of Right to Opt Out").
-      return tryOneTrustUSNatDirectReject();
-    }
-
-    if (!(await waitForAnyVisible([
-      '.save-preference-btn-handler',
-      '.category-switch-handler',
-      "input[id^='ot-group-id-']",
-    ], 4000))) {
+    if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryPresent) {
       return false;
     }
 
@@ -1577,66 +1686,101 @@
       'button[aria-label*="Refuse All" i]',
       'button[title*="Refuse All" i]',
     ];
-    if (hasVisibleSelector(rejectSelectors)) {
-      dispatchPreHandleIfOneTrustReloadsOnSave();
+    if (!forcePrivacyCenterReject &&
+        !preferPreferenceCenterPersistence &&
+        clickFirstVisible(rejectSelectors)) {
+      await settleOneTrustAfterAction(host);
+      return finalizeOneTrustHandled(method, 5000, host);
     }
-    if (clickFirstVisible(rejectSelectors)) {
-      return method;
+
+    const { opened, scrollPosition } = openOneTrustPreferenceCenter(host, { settingsVisible, allowContinue: true });
+
+    if (!opened) {
+      // USNat/CCPA direct opt-out modal: no privacy center opener exists.
+      // Toggles appear directly on the notice (e.g. Disney's "Notice of Right to Opt Out").
+      return tryOneTrustUSNatDirectReject();
     }
 
-    disableVisibleOneTrustToggles();
-    await delay(250);
-
-    const saveSelectors = oneTrustSaveSelectors();
-    if (hasVisibleSelector(saveSelectors)) {
-      dispatchPreHandleIfOneTrustReloadsOnSave();
-    }
-    const clicked = clickFirstVisible(saveSelectors);
-    if (clicked && shouldForceOneTrustCleanup(window.location.hostname)) {
-      scheduleOneTrustCleanup();
-    }
-    return clicked ? method : false;
-  }
-
-  async function handleOneTrustPrivacyCenterAccept(method = 'cmp_api:OneTrust') {
-    const settingsVisible = hasVisibleSelector([
-      '.save-preference-btn-handler',
-      '.category-switch-handler',
-      "input[id^='ot-group-id-']",
-      '#onetrust-consent-sdk',
-      '#onetrust-pc-sdk',
-    ]);
-
-    const opened = settingsVisible || clickFirstVisible([
-      '#onetrust-pc-btn-handler',
-      '#ot-sdk-btn',
-      '.ot-sdk-show-settings',
-      'button[aria-label*="Privacy Choices" i]',
-      'button[title*="Privacy Choices" i]',
-      'button[aria-label*="Cookie Settings" i]',
-      'button[title*="Cookie Settings" i]',
-      'button[aria-label*="Manage Preferences" i]',
-      'button[title*="Manage Preferences" i]',
-    ]);
-    if (!opened) return false;
-
-    if (!(await waitForAnyVisible([
-      '.save-preference-btn-handler',
-      '#onetrust-accept-btn-handler',
-      '.category-switch-handler',
-      "input[id^='ot-group-id-']",
-    ], 4000))) {
+    if (!(await ensureOneTrustPreferenceCenterVisible(ONETRUST_PREFERENCE_CENTER_SELECTORS, 4000))) {
       return false;
     }
 
-    enableVisibleOneTrustToggles();
-    await delay(250);
-
-    const clicked = clickFirstVisible(oneTrustSaveSelectors(window.location.hostname));
-    if (clicked && shouldForceOneTrustCleanup(window.location.hostname)) {
-      scheduleOneTrustCleanup();
+    if (!forcePrivacyCenterReject &&
+        !preferPreferenceCenterPersistence &&
+        clickFirstVisible(rejectSelectors)) {
+      await settleOneTrustAfterAction(host);
+      restoreScrollPosition(scrollPosition);
+      return finalizeOneTrustHandled(method, 5000, host);
     }
-    return clicked ? method : false;
+
+    return commitOneTrustPreferenceProfile(prefs, method, host, scrollPosition);
+  }
+
+  async function handleOneTrustPrivacyCenterAccept(method = 'cmp_api:OneTrust', prefs = _prefs) {
+    const settingsVisible = hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS);
+
+    const { opened, scrollPosition } = openOneTrustPreferenceCenter(window.location.hostname, { settingsVisible });
+    if (!opened) return false;
+
+    if (!(await ensureOneTrustPreferenceCenterVisible(ONETRUST_PREFERENCE_CENTER_SELECTORS, 4000))) {
+      return false;
+    }
+
+    return commitOneTrustPreferenceProfile(prefs, method, window.location.hostname, scrollPosition);
+  }
+
+  async function applyOneTrustPrivacyCenterState(checked) {
+    const hadVisibleToggles = visibleOneTrustToggles().length > 0;
+    if (applyOneTrustBulkStateViaApi(checked)) {
+      const host = window.location.hostname;
+      if (!hadVisibleToggles || shouldSkipOneTrustApiDomSync(host)) return true;
+      if (await waitForOneTrustTogglesState(checked, 700)) return true;
+      if (shouldUseVisualOneTrustApiDomSync(host)) {
+        setOneTrustCategoryEntriesSilently(checked);
+        return await waitForOneTrustTogglesState(checked, 250);
+      }
+      setOneTrustTogglesNow(checked);
+      if (await waitForOneTrustTogglesState(checked, 400)) return true;
+    }
+
+    if (checked) {
+      enableVisibleOneTrustToggles();
+    } else {
+      disableVisibleOneTrustToggles();
+    }
+    await delay(250);
+    return !hadVisibleToggles || await waitForOneTrustTogglesState(checked, 400);
+  }
+
+  function applyOneTrustBulkStateViaApi(checked) {
+    try {
+      if (checked) {
+        if (typeof window.OneTrust?.Accept === 'function') {
+          window.OneTrust.Accept();
+          return true;
+        }
+        return false;
+      }
+
+      if (typeof window.OneTrust?.RejectAll === 'function') {
+        window.OneTrust.RejectAll();
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
+  function shouldSkipOneTrustApiDomSync(host = window.location.hostname) {
+    return ONETRUST_SKIP_API_DOM_SYNC_HOSTS.has(host);
+  }
+
+  function shouldUseVisualOneTrustApiDomSync(host = window.location.hostname) {
+    return ONETRUST_VISUAL_API_DOM_SYNC_HOSTS.has(host);
+  }
+
+  function shouldUseOneTrustPrivacyCenterReject(host = window.location.hostname) {
+    return ONETRUST_PRIVACY_CENTER_REJECT_HOSTS.has(host);
   }
 
   async function handleDisneyPrivacyChoices(prefs) {
@@ -1703,43 +1847,85 @@
     }
   }
 
-  async function handleZoomOneTrustCustom(prefs) {
-    const settingsVisible = hasVisibleSelector([
-      '#onetrust-consent-sdk',
-      '#onetrust-pc-sdk',
-      '.save-preference-btn-handler',
-      '.category-switch-handler',
-      "input[id^='ot-group-id-']",
-    ]);
-    if (!settingsVisible) {
-      const opened = clickFirstVisible([
-        '#onetrust-pc-btn-handler',
-        '#ot-do-not-sell',
-        '.ot-sdk-show-settings',
-        'button[aria-label*="Privacy Choices" i]',
-        'button[title*="Privacy Choices" i]',
-        'button[aria-label*="Cookie Settings" i]',
-        'button[title*="Cookie Settings" i]',
-      ]);
-      if (!opened) return false;
-    }
+  async function handleOneTrustCustom(prefs) {
+    const host = window.location.hostname;
+    const settingsVisible = hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS);
+    const { opened, scrollPosition } = openOneTrustPreferenceCenter(host, { settingsVisible });
+    if (!opened) return false;
 
-    if (!(await waitForAnyVisible([
-      '.category-switch-handler',
-      "input[id^='ot-group-id-']",
-      '.save-preference-btn-handler',
-      '#onetrust-accept-btn-handler',
-    ], 4000))) {
+    if (!(await ensureOneTrustPreferenceCenterVisible(ONETRUST_PREFERENCE_CENTER_SELECTORS, 4000))) {
       return false;
     }
 
-    if (!applyOneTrustCustomPreferences(prefs)) return false;
+    return commitOneTrustPreferenceProfile(prefs, 'cmp_api:OneTrust:custom', host, scrollPosition);
+  }
 
-    await delay(250);
+  async function handleZoomOneTrustCustomNative(prefs) {
+    const host = window.location.hostname;
+    const settingsVisible = hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS);
+    const { opened } = openOneTrustPreferenceCenter(host, { settingsVisible });
+    if (!opened || !(await ensureOneTrustPreferenceCenterVisible(ONETRUST_PREFERENCE_CENTER_SELECTORS, 4000))) {
+      return false;
+    }
 
-    const clicked = clickFirstVisible(oneTrustSaveSelectors(window.location.hostname));
-    if (clicked) scheduleOneTrustCleanup();
-    return clicked;
+    // Zoom's save control reads the rendered toggle state. Updating the cookie API
+    // first leaves those controls stale, so use OneTrust's native control path here.
+    if (!applyZoomOneTrustNativeToggleState(prefs)) return false;
+    const expectedGroups = expectedOneTrustConsentGroupsForPrefs(prefs);
+    await delay(150);
+    if (!clickOneTrustSaveButton(host)) return false;
+    if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2500))) {
+      return false;
+    }
+    if (!(await waitForDismissal(ONETRUST_VISIBLE_SELECTORS, 4000))) return false;
+
+    _handled = true;
+    document.dispatchEvent(new CustomEvent('__emc_handled__', {
+      detail: { method: 'cmp_api:OneTrust:zoom_native_custom' }
+    }));
+    return true;
+  }
+
+  // Zoom's #ot-do-not-sell control is a broken OneTrust settings opener after a
+  // reload. Its sibling .ot-sdk-show-settings control opens the same native
+  // preference center reliably. Bridge by stable ids/classes only; do not touch
+  // the modal, page scroll, or OneTrust's save/close lifecycle.
+  function installZoomOneTrustPrivacyChoicesBridge() {
+    if (_zoomOneTrustPrivacyChoicesBridgeInstalled) return;
+    _zoomOneTrustPrivacyChoicesBridgeInstalled = true;
+    document.addEventListener('click', (event) => {
+      const privacyChoices = event.target?.closest?.('#ot-do-not-sell');
+      if (!privacyChoices) return;
+      const settings = document.querySelector('.ot-sdk-show-settings:not(#ot-do-not-sell)');
+      if (!settings) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      settings.click();
+    }, true);
+  }
+
+  function applyZoomOneTrustNativeToggleState(prefs) {
+    let applied = false;
+    for (const entry of oneTrustCategoryEntries()) {
+      const desired = desiredOneTrustEntryState(entry, prefs);
+      if (desired === null || entry.id === 'C0001') continue;
+      const toggle = document.getElementById(`ot-group-id-${entry.id}`);
+      if (!toggle || toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') continue;
+      applied = true;
+      if (Boolean(toggle.checked) === desired) continue;
+      const label = findToggleLabel(toggle);
+      if (label) {
+        try {
+          label.click();
+        } catch (_) {
+          dispatchSyntheticClick(label);
+        }
+      }
+      if (Boolean(toggle.checked) !== desired) {
+        applyOneTrustToggleDirectById(toggle.id, desired);
+      }
+    }
+    return applied;
   }
 
   function tryOneTrustUSNatDirectReject() {
@@ -1761,7 +1947,18 @@
     return dispatchSyntheticClick(btn);
   }
 
-  function oneTrustSaveSelectors(host = window.location.hostname) {
+  function clickOneTrustSaveButton(host = window.location.hostname) {
+    const btn = findVisibleOneTrustSaveButton(host) ?? findAnyOneTrustSaveButton(host);
+    if (!btn) return false;
+    try {
+      btn.click();
+      return true;
+    } catch (_) {
+      return dispatchSyntheticClick(btn);
+    }
+  }
+
+  function oneTrustSaveSelectors(host = window.location.hostname, { includeGenericButtons = false } = {}) {
     const selectors = [
       '.save-preference-btn-handler',
       '#onetrust-accept-btn-handler',
@@ -1780,15 +1977,73 @@
       );
     }
 
+    if (includeGenericButtons) {
+      selectors.push('button');
+    }
+
     return selectors;
   }
 
-  function dispatchPreHandleIfOneTrustReloadsOnSave() {
-    if (!ONETRUST_RELOAD_ON_SAVE_HOSTS.has(window.location.hostname)) return;
+  function findVisibleOneTrustSaveButton(host = window.location.hostname) {
+    return findAnyOneTrustSaveButton(host, { visibleOnly: true });
+  }
+
+  function findAnyOneTrustSaveButton(host = window.location.hostname, { visibleOnly = false } = {}) {
+    const explicitSave = visibleOnly
+      ? firstVisibleElement(['.save-preference-btn-handler'])
+      : document.querySelector('.save-preference-btn-handler');
+    if (explicitSave && (!visibleOnly || isVisible(explicitSave))) return explicitSave;
+
+    for (const root of oneTrustPreferenceSaveRoots()) {
+      const scoped = findOneTrustSaveButtonInRoot(root, host, { visibleOnly, includeGenericButtons: true });
+      if (scoped) return scoped;
+    }
+
+    return findOneTrustSaveButtonInRoot(document, host, { visibleOnly });
+  }
+
+  function findOneTrustSaveButtonInRoot(root, host = window.location.hostname, { visibleOnly = false, includeGenericButtons = false } = {}) {
+    const seen = new Set();
+    for (const selector of oneTrustSaveSelectors(host, { includeGenericButtons })) {
+      for (const el of root.querySelectorAll(selector)) {
+        if (seen.has(el)) continue;
+        seen.add(el);
+        if (visibleOnly && !isVisible(el)) continue;
+        if (isOneTrustSaveButtonCandidate(el)) return el;
+      }
+    }
+    return null;
+  }
+
+  function oneTrustPreferenceSaveRoots() {
+    return Array.from(document.querySelectorAll('#onetrust-pc-sdk, #onetrust-consent-sdk')).filter((root) => {
+      if (!isVisible(root)) return false;
+      return Boolean(root.querySelector(
+        ".save-preference-btn-handler, .category-switch-handler, input[id^='ot-group-id-'], [data-optanongroupid], .ot-cat-grp"
+      ));
+    });
+  }
+
+  function isOneTrustSaveButtonCandidate(el) {
+    if (!el) return false;
+    if (el.matches?.('.save-preference-btn-handler')) return true;
+    const text = [
+      el.textContent,
+      el.getAttribute?.('aria-label'),
+      el.getAttribute?.('title'),
+      el.getAttribute?.('value'),
+    ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    if (!text) return false;
+    if (ONETRUST_NON_SAVE_TEXT_RE.test(text)) return false;
+    return ONETRUST_SAVE_TEXT_RE.test(text);
+  }
+
+  function dispatchPreHandleIfOneTrustFlowStarts(expectedGroups = null, method = 'cmp_api:OneTrust:ccpa', preference = document.documentElement.dataset.emcPref ?? 'reject_all') {
     document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {
       detail: {
-        method: 'cmp_api:OneTrust:ccpa',
-        preference: document.documentElement.dataset.emcPref ?? 'reject_all',
+        method,
+        preference,
+        expectedGroups,
       },
     }));
   }
@@ -1802,6 +2057,123 @@
     return dispatchSyntheticClick(btn);
   }
 
+  function invokeOneTrustToggleInfoDisplay() {
+    try {
+      if (typeof window.OneTrust?.ToggleInfoDisplay !== 'function') return false;
+      window.OneTrust.ToggleInfoDisplay();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function openOneTrustPreferenceCenter(host = window.location.hostname, { settingsVisible = hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS), allowContinue = false } = {}) {
+    const scrollPosition = captureScrollPosition();
+    if (settingsVisible) {
+      return { opened: true, scrollPosition };
+    }
+
+    const opened = clickFirstVisible([
+      ...ONETRUST_OPEN_CONTROL_SELECTORS,
+    ]) || invokeOneTrustToggleInfoDisplay() || (allowContinue && clickOneTrustContinueToSettings(host));
+
+    return {
+      opened: Boolean(opened),
+      scrollPosition: opened ? scrollPosition : null,
+    };
+  }
+
+  function scheduleOneTrustPostSaveSettle(host = window.location.hostname, scrollPosition = null, expectedGroups = null) {
+    // Zoom preserves its reusable preference-center nodes for footer reopens.
+    // The generic watcher hides visible nodes with inline display:none, which
+    // corrupts that native reopen path after Reject All has saved consent.
+    if (ZOOM_ONETRUST_HOSTS.has(host)) return;
+    try {
+      const stopAt = Date.now() + 15000;
+      let settling = false;
+      const settleVisibleSurface = async () => {
+        if (Date.now() > stopAt) {
+          cleanup();
+          return;
+        }
+        if (settling || !hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) return;
+        settling = true;
+        try {
+          syncPreservedOneTrustPreferenceCenter(host, expectedGroups);
+          hideVisibleOneTrustSurfaces();
+          await settleOneTrustAfterAction(host);
+          syncPreservedOneTrustPreferenceCenter(host, expectedGroups);
+          if (hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) {
+            hideVisibleOneTrustSurfaces();
+          }
+          restoreScrollPosition(scrollPosition);
+        } finally {
+          settling = false;
+        }
+      };
+      const intervalId = setInterval(settleVisibleSurface, 500);
+      const observer = new MutationObserver(() => { settleVisibleSurface(); });
+      const root = document.body ?? document.documentElement;
+      if (root) {
+        observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'aria-hidden'] });
+      }
+      const cleanupTimer = setTimeout(cleanup, 16000);
+      function cleanup() {
+        try { clearInterval(intervalId); } catch (_) {}
+        try { clearTimeout(cleanupTimer); } catch (_) {}
+        try { observer.disconnect(); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  function schedulePreservedOneTrustStateSync(host = window.location.hostname, expectedGroups = null) {
+    if (!shouldCloseOneTrustPreservingDom(host) || !expectedGroups || !Object.keys(expectedGroups).length) return;
+    try {
+      const stopAt = Date.now() + 60000;
+      const burstSync = () => {
+        for (const ms of [0, 50, 150, 350, 750, 1500]) {
+          try { setTimeout(sync, ms); } catch (_) {}
+        }
+      };
+      const onClick = (event) => {
+        const target = event?.target;
+        if (!target?.closest?.(ONETRUST_OPEN_CONTROL_SELECTORS.join(', '))) return;
+        burstSync();
+      };
+      const sync = () => {
+        if (Date.now() > stopAt) {
+          cleanup();
+          return;
+        }
+        syncPreservedOneTrustPreferenceCenter(host, expectedGroups);
+      };
+      const intervalId = setInterval(sync, 250);
+      const observer = new MutationObserver(sync);
+      const root = document.body ?? document.documentElement;
+      if (root) {
+        observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'checked', 'aria-checked'] });
+      }
+      document.addEventListener('click', onClick, true);
+      const cleanupTimer = setTimeout(cleanup, 61000);
+      burstSync();
+      function cleanup() {
+        try { clearInterval(intervalId); } catch (_) {}
+        try { clearTimeout(cleanupTimer); } catch (_) {}
+        try { observer.disconnect(); } catch (_) {}
+        try { document.removeEventListener('click', onClick, true); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  function syncPreservedOneTrustPreferenceCenter(host = window.location.hostname, expectedGroups = null) {
+    if (!shouldCloseOneTrustPreservingDom(host) || !expectedGroups) return false;
+    let synced = false;
+    for (const [id, checked] of Object.entries(expectedGroups)) {
+      if (applyOneTrustToggleSilentById(`ot-group-id-${id}`, Boolean(checked))) synced = true;
+    }
+    return synced;
+  }
+
   function setOneTrustGroupStateById(id, checked) {
     const toggle = document.getElementById(id);
     if (!toggle || toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
@@ -1810,9 +2182,111 @@
     return true;
   }
 
-  function applyOneTrustCustomPreferences(prefs) {
+  // Like setOneTrustGroupStateById but omits the label click.
+  // Used for React-managed toggles in tab-based preference centers (canadiantire.ca,
+  // zoom.com) where the label click would fire a reverting change event and flip the
+  // toggle back to its original state. Do NOT use this for sites like reuters.com where
+  // the reverting label-click event is needed to avoid triggering heavy OneTrust processing.
+  function applyOneTrustToggleDirectById(id, checked) {
+    const toggle = document.getElementById(id);
+    if (!toggle || toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+    if (Boolean(toggle.checked) === checked) return true;
+    setOneTrustToggleChecked(toggle, checked);
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    toggle.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
+
+  function applyOneTrustToggleSilentById(id, checked) {
+    const toggle = document.getElementById(id);
+    if (!toggle || toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+    if (Boolean(toggle.checked) === checked) return true;
+    setOneTrustToggleChecked(toggle, checked);
+    return true;
+  }
+
+  async function commitOneTrustPreferenceProfile(prefs, method, host = window.location.hostname, scrollPosition = null) {
+    const applyMethod = applyOneTrustPreferenceProfile(prefs);
+    if (!applyMethod) return false;
+
+    const expectedGroups = expectedOneTrustConsentGroupsForPrefs(prefs);
+    dispatchPreHandleIfOneTrustFlowStarts(expectedGroups, method, prefs?.globalPreference);
+    await delay(250);
+
+    // When UpdateConsent already persisted consent (API path), skip "Confirm My Choices"
+    // on hosts where that click corrupts OneTrust's state. settleOneTrustAfterAction
+    // closes the PC via close button / OneTrust.Close() without triggering the corruption.
+    if (applyMethod === 'api' && ONETRUST_SKIP_CONFIRM_HOSTS.has(host)) {
+      if (Object.keys(expectedGroups).length) {
+        await waitForOneTrustConsentGroups(expectedGroups, 1500);
+      }
+      await settleOneTrustAfterAction(host);
+      restoreScrollPosition(scrollPosition);
+      if (host !== 'www.zoom.com' && hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) hideVisibleOneTrustSurfaces();
+      schedulePreservedOneTrustStateSync(host, expectedGroups);
+      scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);
+      if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2000))) {
+        return false;
+      }
+      return finalizeOneTrustHandled(method, 5000, host);
+    }
+
+    const saveSelectors = oneTrustSaveSelectors(host);
+    const clicked = clickOneTrustSaveButton(host);
+    if (Object.keys(expectedGroups).length) {
+      await waitForOneTrustConsentGroups(expectedGroups, clicked ? 1500 : 800);
+    }
+    if (!clicked) {
+      await settleOneTrustAfterAction(host);
+      restoreScrollPosition(scrollPosition);
+      if (hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) hideVisibleOneTrustSurfaces();
+      schedulePreservedOneTrustStateSync(host, expectedGroups);
+      scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);
+      if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2000))) {
+        return false;
+      }
+      return finalizeOneTrustHandled(method, 5000, host);
+    }
+    await settleOneTrustAfterAction(host);
+    restoreScrollPosition(scrollPosition);
+    if (host !== 'www.zoom.com' && hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) hideVisibleOneTrustSurfaces();
+    schedulePreservedOneTrustStateSync(host, expectedGroups);
+    scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);
+    if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2000))) {
+      return false;
+    }
+    return finalizeOneTrustHandled(method, 5000, host);
+  }
+
+  function applyOneTrustPreferenceProfile(prefs) {
     if (applyOneTrustCustomPreferencesViaApi(prefs)) {
-      return true;
+      return 'api';
+    }
+    return applyOneTrustCustomPreferencesViaDom(prefs) ? 'dom' : false;
+  }
+
+  // Returns 'api' if consent was applied via OneTrust.UpdateConsent (no Confirm click
+  // needed on some hosts), 'dom' if applied via DOM toggle manipulation (Confirm needed),
+  // or false if nothing could be applied.
+  function applyOneTrustCustomPreferences(prefs) {
+    return applyOneTrustPreferenceProfile(prefs);
+  }
+
+  function applyOneTrustCustomPreferencesViaDom(prefs) {
+    // Tab-based PC layouts (e.g. FIFA, canadiantire.ca) often expose only the active
+    // tab's toggle as "visible". Iterate all known category IDs directly so every
+    // category is reconciled regardless of which tab is currently active.
+    const categoryEntries = oneTrustCategoryEntries();
+    if (categoryEntries.length) {
+      let appliedViaId = false;
+      for (const entry of categoryEntries) {
+        const nextState = desiredOneTrustEntryState(entry, prefs);
+        if (nextState === null) continue;
+        if (applyOneTrustToggleDirectById(`ot-group-id-${entry.id}`, nextState)) {
+          appliedViaId = true;
+        }
+      }
+      if (appliedViaId) return true;
     }
 
     const toggles = visibleOneTrustToggles();
@@ -1837,6 +2311,9 @@
 
     const categoryEntries = oneTrustCategoryEntries();
     if (!categoryEntries.length) return false;
+    const host = window.location.hostname;
+    const skipDomSync = shouldSkipOneTrustApiDomSync(host);
+    const visualDomSync = shouldUseVisualOneTrustApiDomSync(host);
 
     let appliedAny = false;
     for (const entry of categoryEntries) {
@@ -1846,6 +2323,12 @@
       try {
         updateConsent('Category', `${entry.id}:${nextState ? '1' : '0'}`);
       } catch (_) {}
+      if (skipDomSync) continue;
+      if (visualDomSync) {
+        applyOneTrustToggleSilentById(`ot-group-id-${entry.id}`, nextState);
+      } else {
+        applyOneTrustToggleDirectById(`ot-group-id-${entry.id}`, nextState);
+      }
     }
     return appliedAny;
   }
@@ -1861,6 +2344,16 @@
     const id = entry?.id ?? '';
     const text = entry?.text ?? '';
 
+    // Privacy-choice `_BG` groups are semantic opt-out controls even when the
+    // visible label looks like a targeting/advertising category.
+    if (isOneTrustCcpaEntry(entry)) {
+      return prefs.ccpaDoNotSell === false;
+    }
+
+    if (id === 'C0001' || /strictly necessary|necessary cookies|essential cookies|required cookies|always active/i.test(text)) {
+      return true;
+    }
+
     if (id === 'C0002' || /performance|analytics|measurement|statistics/i.test(text)) {
       return Boolean(prefs.analytics);
     }
@@ -1875,10 +2368,6 @@
       /targeting|advertising|marketing|social media|sale of personal data|share of personal data/i.test(text)
     ) {
       return Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;
-    }
-
-    if (/do not sell|do not share|sale of personal data|share of personal data/i.test(text) || /[A-Z]+_BG/.test(id)) {
-      return prefs.ccpaDoNotSell === false;
     }
 
     if (prefs.uncategorized === 'accept') return true;
@@ -1898,13 +2387,49 @@
   }
 
   function oneTrustCategoryEntries() {
-    const rows = Array.from(document.querySelectorAll(
+    const entries = new Map();
+    for (const row of document.querySelectorAll(
       '#onetrust-pc-sdk [data-optanongroupid], #onetrust-banner-sdk [data-optanongroupid]'
-    ));
-    return rows.map((row) => ({
-      id: row.getAttribute('data-optanongroupid') ?? '',
-      text: row.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-    })).filter((entry) => entry.id);
+    )) {
+      const id = row.getAttribute('data-optanongroupid') ?? '';
+      if (!id) continue;
+      const text = row.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      const prev = entries.get(id);
+      if (!prev || text.length > prev.text.length) {
+        entries.set(id, { id, text });
+      }
+    }
+    return Array.from(entries.values());
+  }
+
+  function isOneTrustPrivacyChoicesCcpaFlow() {
+    if (document.querySelector(ONETRUST_CCPA_STRUCTURAL_SELECTORS.join(', '))) return true;
+
+    const categoryEntries = oneTrustCategoryEntries();
+    if (categoryEntries.some((entry) => isOneTrustCcpaEntry(entry))) return true;
+
+    return Array.from(document.querySelectorAll("input[id^='ot-group-id-']")).some((toggle) =>
+      isOneTrustCcpaEntry({
+        id: toggle?.id?.replace(/^ot-group-id-/, '') ?? '',
+        text: oneTrustToggleText(toggle),
+      })
+    );
+  }
+
+  function isOneTrustCcpaEntry(entry) {
+    const id = entry?.id ?? '';
+    const text = entry?.text ?? '';
+    return ONETRUST_CCPA_GROUP_ID_RE.test(id) || ONETRUST_CCPA_TEXT_RE.test(text);
+  }
+
+  function expectedOneTrustConsentGroupsForPrefs(prefs) {
+    const expectedGroups = {};
+    for (const entry of oneTrustCategoryEntries()) {
+      const nextState = desiredOneTrustEntryState(entry, prefs);
+      if (nextState === null) continue;
+      expectedGroups[entry.id] = nextState;
+    }
+    return expectedGroups;
   }
 
   function closeZoomOneTrustBannerIfVisible() {
@@ -1920,16 +2445,18 @@
 
   function closeOneTrustUSNatModal() {
     const removeHiddenToo = ONETRUST_AGGRESSIVE_CLEANUP_HOSTS.has(window.location.hostname);
+    const selectors = ONETRUST_SURFACE_ONLY_CLEANUP_HOSTS.has(window.location.hostname)
+      ? ONETRUST_VISIBLE_SELECTORS
+      : [
+        ...ONETRUST_VISIBLE_SELECTORS,
+        '.ot-sdk-container',
+        '.ot-sdk-row',
+      ];
     // Only remove elements that are currently visible. Hidden elements (e.g. the
     // preference-center SDK container that OneTrust re-uses for "Your Privacy Choices")
     // must be left in the DOM so the CMP can show correct state when the user opens
-    // them later. Exception: Thomson Reuters re-surfaces broken hidden OneTrust shells,
-    // so its host-scoped cleanup removes those nodes entirely.
-    for (const sel of [
-      ...ONETRUST_VISIBLE_SELECTORS,
-      '.ot-sdk-container',
-      '.ot-sdk-row',
-    ]) {
+    // them later.
+    for (const sel of selectors) {
       for (const el of document.querySelectorAll(sel)) {
         if (removeHiddenToo || isVisible(el)) el.remove?.();
       }
@@ -1939,6 +2466,147 @@
       document.documentElement?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
       if (document.body) document.body.style.overflow = '';
     } catch (_) {}
+  }
+
+  function closeOneTrustPreferenceCenterIfVisible() {
+    const btn = document.querySelector('#close-pc-btn-handler, .onetrust-close-btn-handler.ot-close-icon:not(.banner-close-button)');
+    if (btn && isVisible(btn)) {
+      try {
+        btn.click();
+        return true;
+      } catch (_) {
+        return dispatchSyntheticClick(btn);
+      }
+    }
+
+    try {
+      if (typeof window.OneTrust?.Close === 'function') {
+        window.OneTrust.Close();
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
+  function closeVisibleOneTrustSurface() {
+    const btn = firstVisibleElement([
+      '#close-pc-btn-handler',
+      '#onetrust-close-btn-container button',
+      '.onetrust-close-btn-handler.ot-close-icon.banner-close-button',
+      '.onetrust-close-btn-handler.banner-close-button',
+      '.onetrust-close-btn-handler.ot-close-icon:not(.banner-close-button)',
+    ]);
+    if (btn) {
+      try {
+        btn.click();
+        return true;
+      } catch (_) {
+        return dispatchSyntheticClick(btn);
+      }
+    }
+
+    try {
+      if (typeof window.OneTrust?.Close === 'function') {
+        window.OneTrust.Close();
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
+  function hideOneTrustSurfacesVisually() {
+    if (document.documentElement?.dataset.emcZoomOneTrustUserOpen === 'true') return;
+    // Sets display:none via inline style on OneTrust surfaces WITHOUT removing elements
+    // from the DOM or calling OneTrust's JS close logic. Used for zoom.com where every close
+    // mechanism (Confirm, close button, OneTrust.Close()) removes .onetrust-pc-dark-filter
+    // from the DOM — which breaks the footer "Cookie Settings" link because otBannerSdk
+    // calls removeAttribute("style") on that element to unhide it when reopening.
+    //
+    // IMPORTANT: Do NOT hide #onetrust-consent-sdk on zoom.com. Zoom's OneTrust build
+    // (202409.2.0) nests both #onetrust-pc-sdk and .onetrust-pc-dark-filter INSIDE
+    // #onetrust-consent-sdk. If we set display:none on the parent container, the footer
+    // link's removeAttribute("style") only clears inline style on the children — the parent
+    // stays display:none, making the children invisible regardless. By hiding children
+    // individually and leaving #onetrust-consent-sdk without an inline style override,
+    // fetchAndSetupPC() can unhide the PC correctly.
+    const zoomHideSelectors = [
+      '#onetrust-banner-sdk',
+      '#onetrust-pc-sdk',
+      '.onetrust-pc-dark-filter',
+    ];
+    for (const sel of zoomHideSelectors) {
+      for (const el of document.querySelectorAll(sel)) {
+        try { el.style.display = 'none'; } catch (_) {}
+      }
+    }
+    try {
+      document.body?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
+      document.documentElement?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
+      if (document.body) document.body.style.overflow = '';
+    } catch (_) {}
+  }
+
+  function hideVisibleOneTrustSurfaces() {
+    for (const sel of ONETRUST_VISIBLE_SELECTORS) {
+      for (const el of document.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        try { el.style.display = 'none'; } catch (_) {}
+      }
+    }
+    try {
+      document.body?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
+      document.documentElement?.classList?.remove('ot-overflow-hidden', 'ot-no-scroll');
+      if (document.body) document.body.style.overflow = '';
+    } catch (_) {}
+  }
+
+  async function settleOneTrustAfterAction(host = window.location.hostname) {
+    if (ONETRUST_VISUAL_HIDE_CLOSE_HOSTS.has(host)) {
+      await delay(250);
+      hideOneTrustSurfacesVisually();
+      return;
+    }
+
+    if (shouldCloseOneTrustPreservingDom(host)) {
+      await delay(250);
+      const started = Date.now();
+      while (Date.now() - started < 2500) {
+        if (!hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) return;
+        closeOneTrustPreferenceCenterIfVisible();
+        await delay(200);
+      }
+      return;
+    }
+
+    if (host === 'www.zoom.com') {
+      await delay(250);
+      closeZoomOneTrustBannerIfVisible();
+      return;
+    }
+
+    await delay(250);
+    const closeStarted = Date.now();
+    while (Date.now() - closeStarted < 1500) {
+      if (!hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) return;
+      if (!closeVisibleOneTrustSurface()) break;
+      await delay(200);
+    }
+    if (!hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) return;
+    if (document.cookie.includes('OptanonConsent=')) {
+      hideVisibleOneTrustSurfaces();
+      return;
+    }
+
+    if (shouldForceOneTrustCleanup(host)) {
+      const btn = document.querySelector('#onetrust-accept-btn-handler');
+      if (btn && isVisible(btn)) dispatchSyntheticClick(btn);
+      await delay(250);
+      if (hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) {
+        scheduleOneTrustCleanup();
+      }
+    }
   }
 
   function scheduleOneTrustCleanup() {
@@ -1991,19 +2659,71 @@
   // synchronously, potentially causing a re-render that reverts the checked state before
   // Submit fires.
   function setOneTrustTogglesNow(checked) {
-    const nativeSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype, 'checked'
-    )?.set;
     for (const toggle of visibleOneTrustToggles()) {
       if (Boolean(toggle.checked) === checked) continue;
-      if (nativeSetter) {
-        nativeSetter.call(toggle, checked);
-      } else {
-        toggle.checked = checked;
-      }
+      setOneTrustToggleChecked(toggle, checked);
       toggle.dispatchEvent(new Event('change', { bubbles: true }));
       toggle.dispatchEvent(new Event('input', { bubbles: true }));
     }
+  }
+
+  function setOneTrustTogglesSilently(checked) {
+    for (const toggle of visibleOneTrustToggles()) {
+      if (Boolean(toggle.checked) === checked) continue;
+      setOneTrustToggleChecked(toggle, checked);
+    }
+  }
+
+  function setOneTrustCategoryEntriesSilently(checked) {
+    let appliedAny = false;
+    for (const entry of oneTrustCategoryEntries()) {
+      if (applyOneTrustToggleSilentById(`ot-group-id-${entry.id}`, checked)) {
+        appliedAny = true;
+      }
+    }
+    if (appliedAny) return true;
+    setOneTrustTogglesSilently(checked);
+    return false;
+  }
+
+  function readOneTrustConsentGroups() {
+    const raw = document.cookie
+      .split('; ')
+      .find((part) => part.startsWith('OptanonConsent='))
+      ?.slice('OptanonConsent='.length);
+    if (!raw) return null;
+
+    try {
+      const decoded = decodeURIComponent(raw);
+      const groupText = decoded.match(/groups=([^&]+)/)?.[1] ?? '';
+      return Object.fromEntries(
+        groupText
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .map((entry) => {
+            const [group, value] = entry.split(':');
+            return [group, value === '1'];
+          })
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function waitForOneTrustConsentGroups(expectedGroups, timeoutMs) {
+    if (!expectedGroups || Object.keys(expectedGroups).length === 0) return true;
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const groups = readOneTrustConsentGroups();
+      if (groups && Object.entries(expectedGroups).every(([group, expected]) => groups[group] === expected)) {
+        return true;
+      }
+      await delay(100);
+    }
+    const groups = readOneTrustConsentGroups();
+    return Boolean(groups &&
+      Object.entries(expectedGroups).every(([group, expected]) => groups[group] === expected));
   }
 
   function disableVisibleOneTrustToggles() {
@@ -2046,6 +2766,21 @@
   // A synthetic click on the label is also fired as a belt-and-suspenders fallback.
   function forceOneTrustToggleState(toggle, checked) {
     // Native setter — bypasses React's property descriptor override
+    setOneTrustToggleChecked(toggle, checked);
+    // React's synthetic event system listens for native change/input events
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    toggle.dispatchEvent(new Event('input', { bubbles: true }));
+    // Belt-and-suspenders: also click the label.
+    // On some OneTrust builds (e.g. reuters.com) the label click fires a reverting
+    // change event (checked → !checked) that tells OneTrust's handler "state unchanged"
+    // — without it, the single change(false) triggers heavy consent processing that
+    // hangs the page. For React-managed custom-preference flows (canadiantire.ca, zoom.com)
+    // we use applyOneTrustToggleDirectById instead, which omits this label click.
+    const label = findToggleLabel(toggle);
+    if (label) dispatchSyntheticClick(label);
+  }
+
+  function setOneTrustToggleChecked(toggle, checked) {
     const nativeSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype, 'checked'
     )?.set;
@@ -2054,12 +2789,6 @@
     } else {
       toggle.checked = checked;
     }
-    // React's synthetic event system listens for native change/input events
-    toggle.dispatchEvent(new Event('change', { bubbles: true }));
-    toggle.dispatchEvent(new Event('input', { bubbles: true }));
-    // Belt-and-suspenders: also click the label (works for non-React OneTrust builds)
-    const label = findToggleLabel(toggle);
-    if (label) dispatchSyntheticClick(label);
   }
 
   function findToggleLabel(toggle) {
@@ -2109,12 +2838,14 @@
     return dispatchSyntheticClick(el);
   }
 
-  function hasVisibleOneTrustPrivacyChoicesEntry(host = window.location.hostname) {
-    if (!ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS.has(host)) return false;
-    return hasVisibleSelector([
-      '#onetrust-pc-btn-handler',
-      '.ot-sdk-show-settings',
-    ]);
+  function hasVisibleOneTrustPrivacyChoicesEntry() {
+    return hasVisibleSelector(ONETRUST_OPEN_CONTROL_SELECTORS);
+  }
+
+  function hasAnyOneTrustPrivacyChoicesEntry() {
+    return ONETRUST_OPEN_CONTROL_SELECTORS.some((selector) => document.querySelector(selector)) ||
+      typeof window.OneTrust?.ToggleInfoDisplay === 'function' ||
+      oneTrustCategoryEntries().length > 0;
   }
 
   async function waitForAnyVisible(selectors, timeoutMs = 3000) {
@@ -2124,6 +2855,43 @@
       await delay(200);
     }
     return false;
+  }
+
+  async function ensureOneTrustPreferenceCenterVisible(selectors, timeoutMs = 4000) {
+    if (await waitForAnyVisible(selectors, timeoutMs)) return true;
+    if (!invokeOneTrustToggleInfoDisplay()) return false;
+    return waitForAnyVisible(selectors, Math.max(1800, Math.floor(timeoutMs / 2)));
+  }
+
+  async function finalizeOneTrustHandled(method, timeoutMs = 5000, host = window.location.hostname) {
+    if (!(await waitForDismissal(ONETRUST_VISIBLE_SELECTORS, timeoutMs))) {
+      await settleOneTrustAfterAction(host);
+      if (!(await waitForDismissal(ONETRUST_VISIBLE_SELECTORS, 1500))) return false;
+    }
+    _handled = true;
+    document.dispatchEvent(new CustomEvent('__emc_handled__', {
+      detail: { method },
+    }));
+    return true;
+  }
+
+  function captureScrollPosition() {
+    try {
+      const dataset = document.documentElement?.dataset ?? {};
+      const x = Number(dataset.emcConsentScrollX);
+      const y = Number(dataset.emcConsentScrollY);
+      if (Number.isFinite(x) && Number.isFinite(y)) return { x, y };
+      return { x: window.scrollX, y: window.scrollY };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function restoreScrollPosition(position) {
+    if (!position) return;
+    try {
+      window.scrollTo(position.x, position.y);
+    } catch (_) {}
   }
 
   function isVisible(el) {

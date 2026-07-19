@@ -8,8 +8,24 @@
 const site = location.hostname;
 const RUN_GUARD_PREFIX = '__emc_handled__';
 const FLOW_COOLDOWN_MS = 15000;
+const MAIN_WORLD_FLOW_GRACE_MS = 4000;
+const MAIN_WORLD_FLOW_IN_PROGRESS_TTL_MS = 12000;
 const SHOPIFY_MAIN_WORLD_TIMEOUT_MS = 5000;
-const REJECT_RELOAD_GUARD_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com']);
+const ONETRUST_MAIN_WORLD_TIMEOUT_MS = 12000;
+const ONETRUST_RELOAD_RETRY_SELECTORS = [
+  '#onetrust-banner-sdk',
+  '#onetrust-consent-sdk',
+  '#onetrust-pc-sdk',
+  '.save-preference-btn-handler',
+  '.category-switch-handler',
+  "input[id^='ot-group-id-']",
+];
+const REJECT_RELOAD_GUARD_HOSTS = new Set([
+  'www.cnbc.com',
+  'www.nbcnews.com',
+  'www.thomsonreuters.com',
+  'thomsonreuters.com',
+]);
 const PRE_HANDLE_PENDING_TTL_MS = 20000;
 const DO_NOT_HANDLE_URLS = new Set([
   'https://www.theguardian.com/help/accessibility-help',
@@ -56,6 +72,9 @@ const BLOOMBERG_CCPA_MANUAL_SUPPRESS_MS = 15000;
 let ketchManualOpenGuardInstalled = false;
 let ketchManualOpenUntil = 0;
 const KETCH_MANUAL_SUPPRESS_MS = 120000;
+// Zoom footer openers are handled once in the document-start MAIN-world guard.
+// Keeping this coordinator out of the click path avoids competing with Zoom's
+// own OneTrust event handlers after consent has been applied.
 
 const ACCEPT_OR_WARN_SITES = {
   'www.repubblica.it': {
@@ -806,6 +825,9 @@ const MAIN_WORLD_ONLY_SITES = new Set([
   'www.nike.com',
   'privacy.thewaltdisneycompany.com',
   'truendo.com',
+  // Zoom's OneTrust preference center must have a single owner. Its native save
+  // flow runs in MAIN world; the isolated DOM fallback can leave stale UI state.
+  'www.zoom.com',
 ]);
 
 const DISNEY_FAMILY_USNAT_HOSTS = new Set([
@@ -816,15 +838,19 @@ const DISNEY_FAMILY_USNAT_HOSTS = new Set([
 
 let latestRunId = 0;
 let currentRunSignature = null;
+let currentMainWorldFlow = null;
 
 document.addEventListener('__emc_pre_handle__', (event) => {
   const detail = event?.detail ?? {};
   const signature = currentRunSignature ?? document.documentElement.dataset.emcRunSignature ?? document.documentElement.dataset.emcPref ?? '';
   const preference = detail.preference ?? document.documentElement.dataset.emcPref ?? 'reject_all';
-  const actionToken = persistPendingPreHandleAction(signature, detail.method, preference);
+  currentMainWorldFlow = {
+    signature,
+    method: detail.method ?? '',
+    timestamp: Date.now(),
+  };
+  persistPendingPreHandleAction(signature, detail.method, preference, detail.expectedGroups ?? null);
   startFlowCooldown(runCooldownScope(signature));
-  firePreHandleAction(detail.method, preference, actionToken);
-  markHandledForCurrentPage(signature);
 });
 
 bootstrap();
@@ -841,13 +867,17 @@ async function bootstrap(force = false) {
   const prefs = resolvePrefs(settings, siteOverrides);
   currentRunSignature = prefsRunSignature(prefs);
   document.documentElement.dataset.emcRunSignature = currentRunSignature;
+  document.documentElement.dataset.emcConsentScrollX = String(window.scrollX || 0);
+  document.documentElement.dataset.emcConsentScrollY = String(window.scrollY || 0);
   scheduleShopifyWatch(prefs);
   scheduleOsanoWatch(prefs);
   scheduleLateDomWatch(prefs);
-  const hadPendingPreHandleAction = hasPendingPreHandleAction(currentRunSignature);
-  await flushPendingPreHandleAction(currentRunSignature);
-  if (!force && hadPendingPreHandleAction) return;
-  if (!force && isFlowCoolingDown(runCooldownScope(currentRunSignature))) return;
+  const flushedPendingPreHandleAction = await flushPendingPreHandleAction(currentRunSignature);
+  if (!force && flushedPendingPreHandleAction) return;
+  const cooldownScope = runCooldownScope(currentRunSignature);
+  if (!force &&
+      isFlowCoolingDown(cooldownScope) &&
+      !shouldRetryOneTrustAfterReload(currentRunSignature)) return;
   if (!force && wasHandledForCurrentPage(currentRunSignature)) return;
   if (runId !== latestRunId) return;
 
@@ -867,8 +897,13 @@ async function bootstrap(force = false) {
   if (runId !== latestRunId) return;
 
   const preferShopifyMainWorld = shouldUseShopifyMainWorldOnly(prefs);
+  const mainWorldTimeoutMs = preferShopifyMainWorld
+    ? SHOPIFY_MAIN_WORLD_TIMEOUT_MS
+    : shouldUseExtendedOneTrustMainWorldTimeout()
+      ? ONETRUST_MAIN_WORLD_TIMEOUT_MS
+      : 3000;
   const mainWorldResultPromise = waitForMainWorldResult(
-    preferShopifyMainWorld ? SHOPIFY_MAIN_WORLD_TIMEOUT_MS : 3000,
+    mainWorldTimeoutMs,
     preferShopifyMainWorld ? prefs : null,
   );
 
@@ -879,6 +914,19 @@ async function bootstrap(force = false) {
   if (mainWorldResult) {
     return reportAction(mainWorldResult.method, prefs.globalPreference);
   }
+
+  const mainWorldGraceResult = await waitForMainWorldGraceResult(currentRunSignature);
+  if (mainWorldGraceResult) {
+    return reportAction(mainWorldGraceResult.method, prefs.globalPreference);
+  }
+
+  // The MAIN world handler may still be running — OneTrust PC flows (open panel, apply
+  // prefs, settle, dismiss) can easily exceed the 3-second window. Install a secondary
+  // listener so those late-finishing handlers still get counted when __emc_handled__
+  // arrives after the initial window. The listener self-removes after 30 seconds and
+  // checks wasHandledForCurrentPage to avoid double-counting if the DOM handler
+  // also handles the page.
+  scheduleLateMainWorldReport(runId, prefs);
 
   if (DISNEY_FAMILY_USNAT_HOSTS.has(site)) {
     const retried = await retryDisneyFamilyUsNatMainWorld(prefs);
@@ -1013,6 +1061,9 @@ async function handleSiteSpecificFlow(siteOverrides, prefs) {
   }
   if (site === 'privacy.thewaltdisneycompany.com') {
     return handleDisneyPrivacyCenter(prefs);
+  }
+  if (site === 'www.canadiantire.ca') {
+    return handleCanadianTireOneTrust(prefs);
   }
   if (site === 'github.com') {
     return handleGitHub(prefs, siteOverrides);
@@ -2452,6 +2503,214 @@ async function handleDisneyPrivacyCenter(prefs) {
   return true;
 }
 
+async function handleCanadianTireOneTrust(prefs) {
+  const visible = await waitForSiteSelectors([
+    '#onetrust-pc-sdk',
+    '.save-preference-btn-handler',
+    '#ot-sdk-btn',
+    '.ot-sdk-show-settings',
+  ], 5000);
+  if (!visible) return false;
+
+  if (prefs.globalPreference === 'accept_all') {
+    const accepted = clickNativeElement([
+      '#accept-recommended-btn-handler',
+      'button[aria-label*="Allow All" i]',
+      'button[title*="Allow All" i]',
+    ]);
+    if (!accepted) return false;
+    if (!(await waitForCanadianTireCookieGroups({
+      C0002: true,
+      C0003: true,
+      C0004: true,
+    }, 5000))) return false;
+    if (!(await closeCanadianTireOneTrustPanel())) return false;
+    await reportAction('site_specific:accept_all', prefs.globalPreference);
+    return true;
+  }
+
+  const panelOpen = isSelectorVisible('#onetrust-pc-sdk') || isSelectorVisible('.save-preference-btn-handler');
+  if (!panelOpen) {
+    const opened = clickNativeElement([
+      '#ot-sdk-btn',
+      '.ot-sdk-show-settings',
+      '#onetrust-pc-btn-handler',
+    ]);
+    if (!opened) return false;
+  }
+
+  const ready = await waitForSiteSelectors([
+    '#onetrust-pc-sdk',
+    '.save-preference-btn-handler',
+    '#close-pc-btn-handler',
+    '#ot-group-id-C0002',
+    '#ot-group-id-C0003',
+    '#ot-group-id-C0004',
+  ], 5000);
+  if (!ready) return false;
+
+  let expectedGroups = null;
+
+  if (prefs.globalPreference === 'reject_all') {
+    const rejected = clickNativeElement([
+      '.ot-pc-refuse-all-handler',
+      '#onetrust-reject-all-handler',
+    ]);
+    if (!rejected) {
+      const applied = [
+        setCanadianTireOneTrustToggle('ot-group-id-C0002', false),
+        setCanadianTireOneTrustToggle('ot-group-id-C0003', false),
+        setCanadianTireOneTrustToggle('ot-group-id-C0004', false),
+      ];
+      if (applied.some((value) => value === false)) return false;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (!clickNativeElement([
+        '.save-preference-btn-handler',
+        '#onetrust-accept-btn-handler',
+      ])) {
+        return false;
+      }
+    }
+
+    expectedGroups = {
+      C0002: false,
+      C0003: false,
+      C0004: false,
+    };
+    if (!(await waitForCanadianTireCookieGroups(expectedGroups, 5000))) return false;
+    syncCanadianTireToggleScaffold(expectedGroups);
+    if (!(await closeCanadianTireOneTrustPanel())) return false;
+    await reportAction('site_specific:deny_all', prefs.globalPreference);
+    return true;
+  }
+
+  if (prefs.globalPreference !== 'custom') return false;
+
+  const applied = [
+    setCanadianTireOneTrustToggle('ot-group-id-C0002', Boolean(prefs.analytics)),
+    setCanadianTireOneTrustToggle('ot-group-id-C0003', Boolean(prefs.functional)),
+    setCanadianTireOneTrustToggle('ot-group-id-C0004', Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false),
+  ];
+  if (applied.some((value) => value === false)) return false;
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
+  if (!clickNativeElement([
+    '.save-preference-btn-handler',
+    '#onetrust-accept-btn-handler',
+  ])) {
+    return false;
+  }
+
+  expectedGroups = {
+    C0002: Boolean(prefs.analytics),
+    C0003: Boolean(prefs.functional),
+    C0004: Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false,
+  };
+  if (!(await waitForCanadianTireCookieGroups(expectedGroups, 5000))) return false;
+  syncCanadianTireToggleScaffold(expectedGroups);
+  if (!(await closeCanadianTireOneTrustPanel())) return false;
+
+  await reportAction('site_specific:canadiantire:onetrust:custom', prefs.globalPreference);
+  return true;
+}
+
+function setCanadianTireOneTrustToggle(id, checked) {
+  const toggle = document.getElementById(id);
+  if (!(toggle instanceof HTMLInputElement) || toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') {
+    return false;
+  }
+  if (Boolean(toggle.checked) === checked) return true;
+
+  const label = document.querySelector(`label[for="${id}"]`);
+  if (label && isVisible(label)) {
+    try {
+      label.click();
+    } catch (_) {
+      dispatchSyntheticClick(label);
+    }
+  }
+  if (Boolean(toggle.checked) === checked) return true;
+
+  try {
+    toggle.click();
+  } catch (_) {
+    dispatchSyntheticClick(toggle);
+  }
+  if (Boolean(toggle.checked) === checked) return true;
+
+  forceCheckboxState(toggle, checked);
+  return Boolean(toggle.checked) === checked;
+}
+
+async function waitForCanadianTireCookieGroups(expectedGroups, timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const groups = readCanadianTireCookieGroups();
+    if (groups &&
+        Object.entries(expectedGroups).every(([group, expected]) => groups[group] === expected)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  const groups = readCanadianTireCookieGroups();
+  return Boolean(groups &&
+    Object.entries(expectedGroups).every(([group, expected]) => groups[group] === expected));
+}
+
+function readCanadianTireCookieGroups() {
+  const raw = document.cookie
+    .split('; ')
+    .find((part) => part.startsWith('OptanonConsent='))
+    ?.slice('OptanonConsent='.length);
+  if (!raw) return null;
+
+  try {
+    const decoded = decodeURIComponent(raw);
+    const groupText = decoded.match(/groups=([^&]+)/)?.[1] ?? '';
+    return Object.fromEntries(groupText.split(',').map((entry) => {
+      const [group, value] = entry.split(':');
+      return [group, value === '1'];
+    }));
+  } catch (_) {
+    return null;
+  }
+}
+
+function syncCanadianTireToggleScaffold(expectedGroups) {
+  for (const [group, checked] of Object.entries(expectedGroups ?? {})) {
+    const toggle = document.getElementById(`ot-group-id-${group}`);
+    if (!(toggle instanceof HTMLInputElement)) continue;
+    forceCheckboxState(toggle, checked);
+  }
+}
+
+async function closeCanadianTireOneTrustPanel() {
+  if (!(isSelectorVisible('#onetrust-pc-sdk') || isSelectorVisible('.onetrust-pc-dark-filter'))) {
+    return true;
+  }
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    clickNativeElement([
+      '#close-pc-btn-handler',
+      '.onetrust-close-btn-handler.ot-close-icon',
+    ]);
+    if (await waitForSelectorsToDisappear([
+      '#onetrust-pc-sdk',
+      '.onetrust-pc-dark-filter',
+    ], 600)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+
+  return waitForSelectorsToDisappear([
+    '#onetrust-pc-sdk',
+    '.onetrust-pc-dark-filter',
+  ], 1500);
+}
+
 async function handleGitHub(prefs, siteOverrides) {
   const DIALOG_SEL = 'ghcc-consent [role="dialog"][aria-label="Manage cookie preferences"]';
 
@@ -2621,6 +2880,34 @@ async function turnOffLeMondeInputs() {
   await new Promise((resolve) => setTimeout(resolve, 150));
 }
 
+function scheduleLateMainWorldReport(capturedRunId, prefs) {
+  const signature = currentRunSignature;
+  const cleanupTimer = setTimeout(() => {
+    document.removeEventListener('__emc_handled__', lateHandler);
+  }, 30000);
+  function lateHandler(event) {
+    clearTimeout(cleanupTimer);
+    document.removeEventListener('__emc_handled__', lateHandler);
+    if (capturedRunId !== latestRunId) return;
+    if (wasHandledForCurrentPage(signature)) return;
+    void reportAction(event.detail?.method ?? 'cmp_api:late', prefs.globalPreference);
+  }
+  document.addEventListener('__emc_handled__', lateHandler);
+}
+
+function shouldUseExtendedOneTrustMainWorldTimeout() {
+  return [
+    '#onetrust-banner-sdk',
+    '#onetrust-consent-sdk',
+    '#onetrust-pc-sdk',
+    '#onetrust-pc-btn-handler',
+    '.ot-sdk-show-settings',
+    '.save-preference-btn-handler',
+    '.category-switch-handler',
+    "input[id^='ot-group-id-']",
+  ].some((selector) => document.querySelector(selector));
+}
+
 function waitForMainWorldResult(timeoutMs, redispatchPrefs = null) {
   return new Promise((resolve) => {
     let intervalId = null;
@@ -2645,6 +2932,20 @@ function waitForMainWorldResult(timeoutMs, redispatchPrefs = null) {
 
     document.addEventListener('__emc_handled__', handler, { once: true });
   });
+}
+
+function hasFreshMainWorldFlowInProgress(signature) {
+  return Boolean(
+    currentMainWorldFlow &&
+    currentMainWorldFlow.signature === signature &&
+    currentMainWorldFlow.method &&
+    (Date.now() - currentMainWorldFlow.timestamp) < MAIN_WORLD_FLOW_IN_PROGRESS_TTL_MS
+  );
+}
+
+async function waitForMainWorldGraceResult(signature) {
+  if (!hasFreshMainWorldFlowInProgress(signature)) return null;
+  return waitForMainWorldResult(MAIN_WORLD_FLOW_GRACE_MS);
 }
 
 function shouldUseShopifyMainWorldOnly(prefs) {
@@ -2720,6 +3021,18 @@ async function clickKetchBannerActionAndWait(clickSelectors, watchSelectors, set
     await new Promise((resolve) => setTimeout(resolve, 350));
   }
   return false;
+}
+
+function clickNativeElement(selectors) {
+  const el = firstVisibleElementOnPage(selectors);
+  if (!el) return false;
+  const target = clickTargetFor(el);
+  try {
+    target.focus?.();
+    target.click?.();
+    return true;
+  } catch (_) {}
+  return dispatchSyntheticClick(target);
 }
 
 function clickElement(selectors) {
@@ -3809,6 +4122,10 @@ function pendingPreHandleActionKey(signature) {
   return `${RUN_GUARD_PREFIX}:pending-action:${site}:${location.pathname}:${signature}`;
 }
 
+function reloadRetryKey(signature) {
+  return `${RUN_GUARD_PREFIX}:reload-retry:${site}:${location.pathname}:${signature}`;
+}
+
 function wasHandledForCurrentPage(preference) {
   try {
     return sessionStorage.getItem(handledKey(preference)) === '1';
@@ -3838,6 +4155,22 @@ function isFlowCoolingDown(scope) {
   }
 }
 
+function shouldRetryOneTrustAfterReload(signature) {
+  const navigationEntry = performance.getEntriesByType?.('navigation')?.[0];
+  if (navigationEntry?.type !== 'reload') return false;
+  if (!ONETRUST_RELOAD_RETRY_SELECTORS.some((selector) => isVisible(document.querySelector(selector)))) {
+    return false;
+  }
+  try {
+    const key = reloadRetryKey(signature);
+    if (sessionStorage.getItem(key) === '1') return false;
+    sessionStorage.setItem(key, '1');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function startSiteSpecificFlowLock(scope, ttlMs = 4000) {
   siteSpecificFlowLock = {
     scope,
@@ -3853,7 +4186,7 @@ function isSiteSpecificFlowLocked(scope) {
   );
 }
 
-function persistPendingPreHandleAction(signature, method, preference) {
+function persistPendingPreHandleAction(signature, method, preference, expectedGroups = null) {
   if (!REJECT_RELOAD_GUARD_HOSTS.has(site)) return;
   if (!method) return;
   const actionToken = `${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
@@ -3861,6 +4194,7 @@ function persistPendingPreHandleAction(signature, method, preference) {
     localStorage.setItem(pendingPreHandleActionKey(signature), JSON.stringify({
       method,
       preference,
+      expectedGroups,
       actionToken,
       timestamp: Date.now(),
     }));
@@ -3889,20 +4223,6 @@ function isFreshPendingPreHandleAction(payload) {
   );
 }
 
-function firePreHandleAction(method, preference, actionToken) {
-  if (!method) return;
-  try {
-    const payload = {
-      type: 'ACTION_FIRED',
-      site,
-      method,
-      preference,
-    };
-    if (actionToken) payload.actionToken = actionToken;
-    void chrome.runtime.sendMessage(payload);
-  } catch (_) {}
-}
-
 async function flushPendingPreHandleAction(signature) {
   if (!REJECT_RELOAD_GUARD_HOSTS.has(site)) return;
   let payload = null;
@@ -3913,7 +4233,11 @@ async function flushPendingPreHandleAction(signature) {
   }
   if (!isFreshPendingPreHandleAction(payload)) {
     clearPendingPreHandleAction(signature);
-    return;
+    return false;
+  }
+  if (payload.expectedGroups && !oneTrustConsentGroupsMatch(payload.expectedGroups)) {
+    clearPendingPreHandleAction(signature);
+    return false;
   }
   try {
     const response = await chrome.runtime.sendMessage({
@@ -3923,14 +4247,50 @@ async function flushPendingPreHandleAction(signature) {
       preference: payload.preference,
       actionToken: payload.actionToken,
     });
-    if (response?.ok) clearPendingPreHandleAction(signature);
+    if (response?.ok) {
+      clearPendingPreHandleAction(signature);
+      return true;
+    }
   } catch (_) {}
+  return false;
 }
 
 function clearPendingPreHandleAction(signature) {
   try {
     localStorage.removeItem(pendingPreHandleActionKey(signature));
   } catch (_) {}
+}
+
+function readOneTrustConsentGroups() {
+  const raw = document.cookie
+    .split('; ')
+    .find((part) => part.startsWith('OptanonConsent='))
+    ?.slice('OptanonConsent='.length);
+  if (!raw) return null;
+
+  try {
+    const decoded = decodeURIComponent(raw);
+    const groupText = decoded.match(/groups=([^&]+)/)?.[1] ?? '';
+    return Object.fromEntries(
+      groupText
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const [group, value] = entry.split(':');
+          return [group, value === '1'];
+        })
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+function oneTrustConsentGroupsMatch(expectedGroups) {
+  if (!expectedGroups || Object.keys(expectedGroups).length === 0) return true;
+  const groups = readOneTrustConsentGroups();
+  return Boolean(groups &&
+    Object.entries(expectedGroups).every(([group, expected]) => groups[group] === Boolean(expected)));
 }
 
 function dispatchSyntheticClick(el) {

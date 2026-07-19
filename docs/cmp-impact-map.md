@@ -59,6 +59,8 @@ Use this to understand which sites share the same code path and will behave simi
 | `reuters.com` | US/global | GDPR + USNat | Automation-covered |
 | `forbes.com` | US/global | GDPR + USNat | Automation-covered |
 | `bloomberg.com` | US/global | GDPR + USNat | Automation-covered |
+| `fifa.com` | US/global | GDPR banner + hidden preference center | Targeted custom-mode e2e added June 20, 2026. The homepage can show a simple top-level OneTrust shell while the full category PC remains hidden in the DOM. |
+| `kpmg.com` | US/global | GDPR banner + PC2 preference center | Targeted custom-mode e2e added June 24, 2026. The PC footer exposes both `Submit All Preferences` and `Agree & Proceed`; generic save selection must choose the submit/preferences button and treat agree/proceed as accept-style text. KPMG can also reopen the PC after consent is written, so the shared post-save settle watcher must close or visually hide stale OneTrust surfaces after save. |
 | `cnbc.com` | US | CCPA settings flow | Validated May 12, 2026 in headed Chromium e2e for `reject_all` and `accept_all + ccpaDoNotSell=true`. Important behavioral note: the top-level banner often shows `Continue`, but that button only dismisses the shell. The real opt-out path is the visible `Your Privacy Choices` opener into the OneTrust privacy center. |
 | `nbcnews.com` | US | CCPA settings flow | Validated May 13, 2026 in headed Chromium e2e for `reject_all + ccpaDoNotSell=true` and `accept_all + ccpaDoNotSell=true`. Important behavioral note: unlike CNBC, NBC News should use the visible `Your Privacy Choices` entry into the OneTrust privacy center without the CNBC-specific reload-on-save path. |
 | `schwab.com`, `client.schwab.com` | US | CCPA settings flow + logged-in client surfaces | Validated May 28, 2026 in live manual browser sessions. `www.schwab.com` resource pages use a OneTrust privacy-choice modal with the `SPD_BG` toggle. `client.schwab.com` also matters to OneTrust/ConsentManager changes because false-positive generic automation previously redirected the logged-in account summary page into `/secured/agreements*`. |
@@ -86,6 +88,14 @@ What matters:
 - the correct routing condition is `ccpaDoNotSell !== false`, even when `globalPreference === 'accept_all'`
 - already-open settings state must be treated as actionable without requiring another opener click
 - live validation for this family should use headed Chromium, because headless shell produced false negatives where the extension coordinator never bootstrapped on the page (`emcPref` stayed unset)
+
+**Custom-mode routing rule (added June 20, 2026):**
+When a OneTrust surface exposes real category controls, `custom` must route through the shared
+preference-center flow (`handleOneTrustCustom` / `executeOneTrustCustomFlow`). Host-scoped sets
+may tune follow-up behavior such as DOM preservation, confirm skipping, or DOM sync, but they
+must not decide whether custom mode is supported at all. FIFA exposed the bug here: collapsing
+`custom` to raw `RejectAll()` wrote a reject-style cookie, left the visible shell untouched,
+and skipped the real category mapping.
 
 **Separate Schwab note (added May 28, 2026):**
 Schwab exposes two distinct risk surfaces that should be kept in mind when changing generic handlers:
@@ -165,7 +175,16 @@ What matters:
 ### Cookiebot
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
 
-No sites currently in the validated inventory — coverage is generic.
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `allroundautomations.com` | US | Targeted single-site e2e passes June 20, 2026 in custom mode (`preferences=true`, `statistics=false`, `marketing=false`). This Usercentrics-branded Cookiebot build records the correct `CookieConsent` values through `submitCustomConsent()` / `withdraw()`, but the visible dialog does not auto-dismiss afterward; the shared handler now calls `Cookiebot.hide()` after consent-state verification. |
+
+### Investis Cookie Manager
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `inchcape.com` | EU/UK | Public site uses Investis Digital Cookie Manager v3.1 (`#__cookieWrapper`, `#cc-reject-Btn`, `#cc-CookieSettingPreference`) rather than Cookiebot. The reusable DOM flow now covers direct accept/reject plus the modal custom-preferences path (`functionalCookies`, `performanceCookies`, `marketingCookies`). Targeted single-site e2e now passes in `custom` mode, but an EU-IP rerun is still a useful follow-up because the original regression was reported from an EU session. Retest after changes to `dom-handler.js` or `rules/cmps.json`. |
 
 ### Complianz
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
@@ -180,6 +199,22 @@ No sites currently in the validated inventory — coverage is generic.
 | Site | Region | Special notes |
 |------|--------|--------------|
 | `cluse.com` | EU/global | Human-validated June 6, 2026. Public site uses Pandectes rather than Shopify Customer Privacy, so Shopify regressions should not be inferred from this target. |
+
+### GoDaddy Privacy Manager
+**Handler files:** `dom-handler.js` + `rules/cmps.json`
+
+New CMP family added June 21, 2026. Two-layer implementation:
+
+**Layer 1 — Shadow DOM banner** (godaddy.com and parked/hosted GoDaddy properties): detected by `#gtm_privacy` (shadow host). Shadow root contains `#pw_banner` and `.pw_buttons` with Reject/Accept/Manage buttons that vary by locale. Handler uses multilingual regex patterns (`/^afwijzen|ablehnen|refuser|rechazar.../i`) plus positional fallback (button order: Manage → Reject → Accept).
+
+**Layer 2 — Preference modal** (afternic.com and any site where the modal appears directly): detected by `#privacy_manager_modal`. Uses GoDaddy's UX design system (`ux-toggle-button-track`, `pm_toggle`, `pm_option`) with `div[role="switch"][aria-checked]` toggle controls. Categories: Advertising, Performance, Support (all optional); Essential (locked, `aria-disabled="true"`). Handler uses `setAriaToggleState` to flip each interactable toggle, then clicks the visible Save button.
+
+Consent persistence is not yet human-validated on either layer.
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `godaddy.com` | US/global | Shadow DOM banner. Seen in Dutch (`/nl`). Multilingual button matching + positional fallback. Pending human validation. |
+| `afternic.com` | US | Full preference modal. Tested on `/forsale/sprout.com` without VPN. Pending human validation. |
 
 ### Consentmo
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
@@ -265,6 +300,86 @@ Generic slider-based handling is implemented. Public live target still needed fo
 
 ---
 
+## OneTrust toggle manipulation — blast radius and known constraints (June 2026)
+
+`forceOneTrustToggleState`, `disableVisibleOneTrustToggles`, and `enableVisibleOneTrustToggles`
+are called from every OneTrust reject, accept, and custom-preference flow in both
+`cmp-api-handler.js` (MAIN world) and `dom-handler.js` (ISOLATED world). A behavior change
+in any of these silently affects every OneTrust site.
+
+**Known constraint — label click in `forceOneTrustToggleState`:**
+The label click at the end of `forceOneTrustToggleState` is intentional. It fires a reverting
+`change` event (checked → !checked) immediately after the native setter's `change(false)`.
+This tells OneTrust's internal handler "state changed then reverted — nothing to do." Without it,
+the single `change(false)` event triggers heavy consent processing on some OneTrust builds
+(confirmed: reuters.com became unresponsive / hung). Do not remove this label click from the
+shared function.
+
+**How to fix toggle behavior for a specific host without breaking others:**
+Create a host-gated function that omits the label click and call it only from that host's code
+path. The existing `applyOneTrustToggleDirectById` in `cmp-api-handler.js` is the established
+pattern — it is only called from `handleOneTrustCustom`, with `UpdateConsent`-driven DOM sync now
+enabled generically except on known-bad hosts (currently zoom.com, where those change events
+corrupt OneTrust's reopen state).
+
+**Minimum retest when changing any OneTrust toggle helper or surface router:**
+reuters.com, thomsonreuters.com (no hang), people.com or another People-family US privacy-choice
+flow, cnbc.com, fifa.com, schwab.com, one simple direct-button banner such as kpmg.com, and at
+least one site from the canadiantire.ca / zoom.com custom-preference set.
+
+**Privacy-center state rule (June 21, 2026):**
+For OneTrust privacy centers that expose only a settings opener plus `Confirm My Choices`,
+prefer `OneTrust.Accept()` / `OneTrust.RejectAll()` first, then use direct DOM sync only as
+visual reconciliation, and keep the old label-click toggle helper as the fallback. Thomson
+Reuters' homepage and People's US `OSSTA_BG`-style flow are the motivating cases: they are better
+modeled as "OneTrust API state + confirm dismissal" than as bespoke per-toggle exceptions.
+The routing decision for that CCPA/privacy-choice path is now selector/model-driven rather than
+host-driven: route through the CCPA privacy-choice flow only when the rendered OneTrust model
+exposes actual opt-out controls such as `_BG` group ids (`OSSTA_BG`, `SPD_BG`) or matching
+category-row text. A visible footer opener like `#ot-do-not-sell` / `Your Privacy Choices`
+is not sufficient on its own, because Zoom and similar GDPR-style builds can expose that opener
+while still using ordinary `C000x` categories underneath.
+`custom` must also stay on the real OneTrust custom-preference path even when
+`ccpaDoNotSell=true`; otherwise People-family privacy-choice sites collapse to a generic
+CCPA/reject flow, record `CCPA handled`, and skip the actual custom category save the user asked
+for. Treat "privacy-choice custom" and "privacy-choice reject" as different surface behaviors.
+For generic OneTrust opening logic, prefer these surfaces in order:
+1. visible banner action buttons (`Reject`, `Reject All`, `Accept All`)
+2. explicit preference-center controls (`#onetrust-pc-btn-handler`, `.ot-sdk-show-settings`)
+3. `ToggleInfoDisplay`-backed openers such as inline `manage choices` links
+This keeps KPMG-style banners in the shared OneTrust model instead of requiring a host exception.
+Once a OneTrust settings surface is open, save/confirm selection should be scoped to a visible
+preference-center root that actually contains category controls. Do not let a page-level
+`#onetrust-accept-btn-handler` outrank the in-modal confirm button just because it appears
+earlier in the DOM; that can collapse a reject/custom flow back into an accept-style shell click.
+Likewise, do not classify `Agree & Proceed` as a save button. Some PC2 builds, such as KPMG,
+place that accept-style button next to the real preference save (`Submit All Preferences`).
+Reuters-class hosts (`reuters.com`, `thomsonreuters.com`) are the known exception to that
+visual-reconciliation step: once the API state is written, synthetic toggle events should be
+avoided because they can re-enter heavy OneTrust processing and freeze the page.
+Thomson Reuters also no longer belongs in the forced OneTrust DOM-cleanup bucket: its live
+homepage dismisses cleanly through OneTrust's own confirm/reload path, so aggressive node
+removal is more likely to destabilize the page than to help.
+Because some OneTrust privacy-center flows perform a top-level reload as part of save, the
+`content/main.js` cooldown guard now allows one controlled retry after a reload when the same
+OneTrust surface is still visible. This keeps reload-backed dismissals from getting stranded
+behind the normal 15-second same-page cooldown.
+Separately, some privacy-center flows legitimately stay busy longer than the initial
+main-world wait window even without a reload: open footer/settings entry, apply API state,
+confirm, settle, then dismiss. `content/main.js` now gives a short grace window when a
+OneTrust MAIN-world flow has already emitted `__emc_pre_handle__`, so Tier 4 does not race in
+and reopen the same modal a second time while the first pass is still finishing.
+When the opener used a footer/settings control rather than the currently visible banner button,
+capture and restore the page scroll position after the save/dismiss sequence. This prevents
+People-family and similar footer-opened OneTrust flows from leaving the user stranded at the
+bottom of the page after automation completes.
+Some OneTrust builds can also reopen or restyle the preference center shortly after a successful
+save even though the `OptanonConsent` groups are correct. The shared post-save settle watcher is
+intentionally bounded and observes OneTrust DOM/style mutations briefly after save; if a stale
+surface reappears, it closes or visually hides that surface and restores the original scroll.
+
+---
+
 ## Change → Minimum retest matrix
 
 When you change a file, test at least the sites marked ✅ below.
@@ -272,7 +387,7 @@ Sites marked 🔵 are lower risk but worth a spot-check if time allows.
 
 | Changed file | Must test | Spot-check |
 |-------------|-----------|------------|
-| `cmp-api-handler.js` | reuters.com, cnbc.com, schwab.com, ceespronkstore.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
+| `cmp-api-handler.js` | reuters.com, cnbc.com, fifa.com, schwab.com, ceespronkstore.com, nytimes.com, dw.com, euronews.com, theguardian.com | bbc.com, ft.com, lemonde.fr |
 | `dom-handler.js` | reuters.com, bloomberg.com, forbes.com, cnbc.com, schwab.com, ceespronkstore.com | euronews.com, dw.com |
 | `rules/cmps.json` (OneTrust entry) | reuters.com, bloomberg.com, disney.com | ft.com |
 | `rules/cmps.json` (Shopify entry) | ceespronkstore.com | — |
@@ -484,3 +599,33 @@ scaffolding after consent handling, which could break those footer reopen links 
 banner itself had been dismissed successfully. Fixed by narrowing Zoom cleanup to remove only
 currently visible OneTrust surfaces, leaving the hidden reusable preference-center structure intact
 for later footer-triggered reopens.
+
+**Footer opener update (July 19, 2026):** Zoom exposes two structural OneTrust openers:
+`#ot-do-not-sell.ot-sdk-show-settings` (`Your Privacy Choices`) and its sibling
+`.ot-sdk-show-settings` (`Cookie Settings`). After a reload, Zoom's own first control can fail
+silently while the sibling opens the native preference center immediately. The extension bridges
+only `#ot-do-not-sell` to that sibling by id/class, without text matching, scroll restoration,
+modal styling, or synthetic preference-center lifecycle work. The targeted headed regression now
+covers custom consent, both footer controls, close/reopen, and the first click after reload in
+both the normal and VPN profiles.
+
+**Footer reopen-path constraint (June 20, 2026):** After adding `applyOneTrustToggleDirectById`
+to the custom-preference path (for canadiantire.ca toggle-state correctness), the footer "Cookie
+Settings" link produced `otBannerSdk.js: Cannot read properties of undefined (reading
+'removeAttribute')`. Root cause: `applyOneTrustCustomPreferencesViaApi` was calling
+`applyOneTrustToggleDirectById` after every `UpdateConsent` call to sync DOM state. On Zoom,
+`UpdateConsent` correctly records consent in OneTrust's internal state — the `change` events fired
+by `applyOneTrustToggleDirectById` triggered OneTrust's handler, corrupting the state
+`otBannerSdk` needs to reopen the PC from the footer link. The safer generic rule is now:
+mirror DOM state after `UpdateConsent` unless the host is in
+`ONETRUST_SKIP_API_DOM_SYNC_HOSTS` (currently zoom.com). That keeps tabbed preference centers
+such as FIFA and Canadian Tire aligned without growing a new allowlist for every host whose Save
+button reads DOM state.
+
+**Canadian Tire footer-state update (June 24, 2026):** Canadian Tire's OneTrust flow respects the
+saved consent choices, but its preserved preference-center DOM can redraw stale cached toggle
+values when the footer `Cookie Settings` link is opened immediately after handling. The
+preserve-DOM path now installs a bounded post-save sync for expected OneTrust groups and a
+reopen-click sync burst, so the footer reopen reflects the latest saved toggle state without a
+page refresh. The same flow also restores the consent-run scroll baseline so the page does not
+remain stranded at the footer after OneTrust handling.

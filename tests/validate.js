@@ -295,6 +295,22 @@ async function testSite(page, site) {
     detail += '; Shopify consent verified';
   }
 
+  if (site.expectedCookiebotConsent) {
+    const mismatch = await readCookiebotConsentMismatch(page, site.expectedCookiebotConsent);
+    if (mismatch) {
+      return { status: 'FAIL', detail: mismatch };
+    }
+    detail += '; Cookiebot consent verified';
+  }
+
+  if (site.expectedInvestisConsent) {
+    const mismatch = await readInvestisConsentMismatch(page, site.expectedInvestisConsent);
+    if (mismatch) {
+      return { status: 'FAIL', detail: mismatch };
+    }
+    detail += '; Investis consent verified';
+  }
+
   if (site.debugConsentmoInspectUrl) {
     const consentmoSnapshot = await readConsentmoDebugSnapshot(
       page,
@@ -387,6 +403,92 @@ async function readShopifyConsentMismatch(page, expected) {
   for (const [key, wanted] of Object.entries(expected)) {
     if (normalizedActual[key] !== wanted) {
       return `Banner dismissed but Shopify consent ${key} expected=${wanted} actual=${normalizedActual[key]}`;
+    }
+  }
+
+  return null;
+}
+
+async function readCookiebotConsentMismatch(page, expected) {
+  const diagnostic = await page.evaluate(() => {
+    const raw = document.cookie.split('; ').find((entry) => entry.startsWith('CookieConsent=')) ?? null;
+    const decoded = raw ? decodeURIComponent(raw.slice('CookieConsent='.length)) : null;
+    const readBool = (key) => {
+      if (!decoded) return null;
+      const match = decoded.match(new RegExp(`${key}:(true|false)`));
+      if (!match) return null;
+      return match[1] === 'true';
+    };
+    const dialog = document.querySelector('#CybotCookiebotDialog, #cookiebanner');
+    const dialogVisible = (() => {
+      if (!dialog) return false;
+      const rect = dialog.getBoundingClientRect();
+      const style = getComputedStyle(dialog);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    })();
+
+    return {
+      raw,
+      decoded,
+      actual: decoded ? {
+        necessary: readBool('necessary'),
+        preferences: readBool('preferences'),
+        statistics: readBool('statistics'),
+        marketing: readBool('marketing'),
+      } : null,
+      consented: window.Cookiebot?.consented ?? null,
+      declined: window.Cookiebot?.declined ?? null,
+      dialogVisible,
+    };
+  });
+
+  const actual = diagnostic?.actual;
+  if (!actual) {
+    return `Banner dismissed but Cookiebot consent cookie was unavailable (consented=${diagnostic?.consented ?? 'n/a'} declined=${diagnostic?.declined ?? 'n/a'} dialogVisible=${diagnostic?.dialogVisible ?? 'n/a'} raw=${diagnostic?.raw ?? 'n/a'})`;
+  }
+
+  for (const [key, wanted] of Object.entries(expected)) {
+    if (actual[key] !== wanted) {
+      return `Banner dismissed but Cookiebot consent ${key} expected=${wanted} actual=${actual[key]} raw=${diagnostic?.decoded ?? diagnostic?.raw ?? 'n/a'}`;
+    }
+  }
+
+  return null;
+}
+
+async function readInvestisConsentMismatch(page, expected) {
+  const diagnostic = await page.evaluate(() => {
+    const readCookie = (name) => document.cookie
+      .split('; ')
+      .find((entry) => entry.startsWith(`${name}=`)) ?? null;
+    const raw = readCookie('__CookieConsentV300') ?? readCookie('__CookieConsentV200');
+    const decoded = raw ? decodeURIComponent(raw.slice(raw.indexOf('=') + 1)) : null;
+    const parsed = decoded ? JSON.parse(decoded) : null;
+    const wrapper = document.querySelector('#__cookieWrapper');
+    const wrapperVisible = (() => {
+      if (!wrapper) return false;
+      const rect = wrapper.getBoundingClientRect();
+      const style = getComputedStyle(wrapper);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    })();
+
+    return {
+      raw,
+      decoded,
+      consent: parsed?.consent ?? null,
+      accepted: parsed?.accepted ?? null,
+      wrapperVisible,
+    };
+  });
+
+  const actual = diagnostic?.consent;
+  if (!actual) {
+    return `Banner dismissed but Investis consent cookie was unavailable (accepted=${diagnostic?.accepted ?? 'n/a'} wrapperVisible=${diagnostic?.wrapperVisible ?? 'n/a'} raw=${diagnostic?.raw ?? 'n/a'})`;
+  }
+
+  for (const [key, wanted] of Object.entries(expected)) {
+    if (actual[key] !== wanted) {
+      return `Banner dismissed but Investis consent ${key} expected=${wanted} actual=${actual[key]} raw=${diagnostic?.decoded ?? diagnostic?.raw ?? 'n/a'}`;
     }
   }
 

@@ -134,10 +134,35 @@ describe('tcf-interceptor.js — guardian skip', () => {
   });
 });
 
+describe('cmp-api-handler.js — OneTrust shared guards', () => {
+  const source = readSource('content/cmp-api-handler.js');
+
+  it('uses active OneTrust surfaces for dismissal instead of persistent footer openers', () => {
+    expect(source).toContain('OneTrust: [...ONETRUST_VISIBLE_SELECTORS]');
+  });
+
+  it('chooses OneTrust save controls by confirm/save semantics instead of banner-accept text', () => {
+    expect(source).toContain('ONETRUST_PREFERENCE_CENTER_SELECTORS');
+    expect(source).toContain('findVisibleOneTrustSaveButton');
+    expect(source).toContain('findAnyOneTrustSaveButton');
+    expect(source).toContain('oneTrustPreferenceSaveRoots');
+    expect(source).toContain('findOneTrustSaveButtonInRoot');
+    expect(source).toContain("document.querySelectorAll('#onetrust-pc-sdk, #onetrust-consent-sdk')");
+    expect(source).toContain("i['’]?m ok with that");
+    expect(source).toContain('agree');
+    expect(source).toContain('includeGenericButtons');
+    expect(source).toContain("selectors.push('button');");
+    expect(source).toContain('ONETRUST_SAVE_TEXT_RE');
+    expect(source).toContain('ONETRUST_NON_SAVE_TEXT_RE');
+  });
+});
+
 // ── main.js — guardian main-world-only handling ───────────────────────────────
 
 describe('main.js — guardian main-world-only guards', () => {
   const source = readSource('content/main.js');
+  const oneTrustRetrySelectorsMatch = source.match(/const ONETRUST_RELOAD_RETRY_SELECTORS = \[(.*?)\];/s);
+  const oneTrustRetrySelectors = oneTrustRetrySelectorsMatch?.[1] ?? '';
 
   it('has a MAIN_WORLD_ONLY_SITES set', () => {
     expect(source).toContain('MAIN_WORLD_ONLY_SITES');
@@ -446,18 +471,46 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('function isSiteSpecificFlowLocked(scope) {');
   });
 
-  it('can pre-mark reload-on-save flows before navigation interrupts reporting', () => {
+  it('queues reload-on-save flows for post-reload reporting instead of crediting them immediately', () => {
     expect(source).toContain("document.addEventListener('__emc_pre_handle__'");
     expect(source).toContain('document.documentElement.dataset.emcRunSignature = currentRunSignature;');
-    expect(source).toContain('const actionToken = persistPendingPreHandleAction(signature, detail.method, preference);');
+    expect(source).toContain('persistPendingPreHandleAction(signature, detail.method, preference, detail.expectedGroups ?? null);');
     expect(source).toContain('startFlowCooldown(runCooldownScope(signature));');
-    expect(source).toContain("REJECT_RELOAD_GUARD_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com'])");
+    expect(source).toContain('REJECT_RELOAD_GUARD_HOSTS = new Set([');
+    expect(source).toContain("'www.cnbc.com'");
+    expect(source).toContain("'www.nbcnews.com'");
+    expect(source).toContain("'www.thomsonreuters.com'");
+    expect(source).toContain("'thomsonreuters.com'");
     expect(source).toContain("const preference = detail.preference ?? document.documentElement.dataset.emcPref ?? 'reject_all';");
-    expect(source).toContain('firePreHandleAction(detail.method, preference, actionToken);');
-    expect(source).toContain('const hadPendingPreHandleAction = hasPendingPreHandleAction(currentRunSignature);');
-    expect(source).toContain('await flushPendingPreHandleAction(currentRunSignature);');
-    expect(source).toContain('if (!force && hadPendingPreHandleAction) return;');
-    expect(source).toContain('if (!force && isFlowCoolingDown(runCooldownScope(currentRunSignature))) return;');
+    expect(source).not.toContain('firePreHandleAction(detail.method, preference, actionToken);');
+    expect(source).not.toContain('markHandledForCurrentPage(signature);');
+    expect(source).toContain('const flushedPendingPreHandleAction = await flushPendingPreHandleAction(currentRunSignature);');
+    expect(source).toContain('if (!force && flushedPendingPreHandleAction) return;');
+    expect(source).toContain('if (payload.expectedGroups && !oneTrustConsentGroupsMatch(payload.expectedGroups)) {');
+    expect(source).toContain('const cooldownScope = runCooldownScope(currentRunSignature);');
+    expect(source).toContain('!shouldRetryOneTrustAfterReload(currentRunSignature)) return;');
+    expect(source).toContain('function shouldRetryOneTrustAfterReload(signature) {');
+    expect(source).toContain("const ONETRUST_RELOAD_RETRY_SELECTORS = [");
+    expect(source).toContain("navigationEntry?.type !== 'reload'");
+  });
+
+  it('waits briefly for an in-progress main-world OneTrust flow before falling back to DOM handling', () => {
+    expect(source).toContain('const MAIN_WORLD_FLOW_GRACE_MS = 4000;');
+    expect(source).toContain('const MAIN_WORLD_FLOW_IN_PROGRESS_TTL_MS = 12000;');
+    expect(source).toContain('let currentMainWorldFlow = null;');
+    expect(source).toContain('currentMainWorldFlow = {');
+    expect(source).toContain('timestamp: Date.now(),');
+    expect(source).toContain('const mainWorldGraceResult = await waitForMainWorldGraceResult(currentRunSignature);');
+    expect(source).toContain('function hasFreshMainWorldFlowInProgress(signature) {');
+    expect(source).toContain('async function waitForMainWorldGraceResult(signature) {');
+    expect(source).toContain('return waitForMainWorldResult(MAIN_WORLD_FLOW_GRACE_MS);');
+  });
+
+  it('limits OneTrust reload retries to active consent surfaces, not persistent footer openers', () => {
+    expect(oneTrustRetrySelectors).toContain('#onetrust-banner-sdk');
+    expect(oneTrustRetrySelectors).toContain('.save-preference-btn-handler');
+    expect(oneTrustRetrySelectors).not.toContain('#onetrust-pc-btn-handler');
+    expect(oneTrustRetrySelectors).not.toContain('.ot-sdk-show-settings');
   });
 
   it('holds Shopify custom on the main-world path and redispatches prefs while the API initializes', () => {
@@ -470,12 +523,18 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('return activateShopifyButton(el);');
     expect(source).toContain('function activateShopifyButton(el) {');
     expect(source).toContain('const preferShopifyMainWorld = shouldUseShopifyMainWorldOnly(prefs);');
+    expect(source).toContain('const mainWorldTimeoutMs = preferShopifyMainWorld');
     expect(source).toContain('const mainWorldResultPromise = waitForMainWorldResult(');
-    expect(source).toContain('preferShopifyMainWorld ? SHOPIFY_MAIN_WORLD_TIMEOUT_MS : 3000');
+    expect(source).toContain('shouldUseExtendedOneTrustMainWorldTimeout()');
+    expect(source).toContain('const ONETRUST_MAIN_WORLD_TIMEOUT_MS = 12000;');
+    expect(source).toContain('? ONETRUST_MAIN_WORLD_TIMEOUT_MS');
     expect(source).toContain('preferShopifyMainWorld ? prefs : null');
     expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: prefs }));");
     expect(source).toContain('const mainWorldResult = await mainWorldResultPromise;');
     expect(source).toContain('function shouldUseShopifyMainWorldOnly(prefs) {');
+    expect(source).toContain('function shouldUseExtendedOneTrustMainWorldTimeout() {');
+    expect(source).not.toContain("const ONETRUST_RELOAD_RETRY_SELECTORS = [\n  '#onetrust-banner-sdk',\n  '#onetrust-consent-sdk',\n  '#onetrust-pc-sdk',\n  '#onetrust-pc-btn-handler'");
+    expect(source).toContain("input[id^='ot-group-id-']");
     expect(source).toContain("if (prefs?.globalPreference !== 'custom') return false;");
     expect(source).toContain("if (prefs?.globalPreference !== 'custom' || shopifyWatchStarted) return;");
     expect(source).toContain("'#shopify-pc__prefs__header-save'");
@@ -661,26 +720,44 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain('a.df-privacy-compliance');
   });
 
-  it('uses CNBC and NBC News for CCPA privacy-center routing, but only CNBC for reload-on-save pre-marking', () => {
-    expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com', 'www.schwab.com', 'schwab.com'])");
-    expect(source).toContain("ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set(['www.cnbc.com'])");
+  it('routes OneTrust CCPA privacy-choice flows from structural selectors and group ids, but only CNBC reloads on save', () => {
+    expect(source).toContain('const ONETRUST_OPEN_CONTROL_SELECTORS = [');
+    expect(source).toContain("'#ot-do-not-sell'");
+    expect(source).toContain("'a[onclick*=\"ToggleInfoDisplay\"]'");
+    expect(source).toContain("'.df-privacy-compliance'");
+    expect(source).toContain('const ONETRUST_CCPA_STRUCTURAL_SELECTORS = [');
+    expect(source).toContain('const ONETRUST_CCPA_GROUP_ID_RE = /^[A-Z]+_BG$/;');
+    expect(source).toContain('function isOneTrustPrivacyChoicesCcpaFlow() {');
+    expect(source).toContain('function isOneTrustCcpaEntry(entry) {');
+    expect(source).toContain("document.querySelector(ONETRUST_CCPA_STRUCTURAL_SELECTORS.join(', '))");
+    expect(source).toContain('return hasVisibleSelector(ONETRUST_OPEN_CONTROL_SELECTORS);');
+    expect(source).not.toContain('const ONETRUST_PRIVACY_CHOICES_ENTRY_TEXT_RE =');
+    expect(source).toContain('ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set([');
+    expect(source).toContain("'www.cnbc.com'");
+    expect(source).toContain("'www.thomsonreuters.com'");
+    expect(source).toContain("'thomsonreuters.com'");
     expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {");
-    expect(source).toContain("method: 'cmp_api:OneTrust:ccpa'");
+    expect(source).toContain('expectedGroups,');
+    expect(source).toContain('method,');
   });
 
   it('includes Schwab in the OneTrust privacy-choice host allowlists', () => {
-    expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set(['www.cnbc.com', 'www.nbcnews.com', 'www.schwab.com', 'schwab.com'])");
+    expect(source).toContain("'www.schwab.com'");
+    expect(source).toContain("'schwab.com'");
     expect(source).toContain("ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com', 'www.schwab.com', 'schwab.com'])");
   });
 
   it('treats an already-open OneTrust settings modal as actionable without requiring an opener click', () => {
     expect(source).toContain('ONETRUST_ACTIONABLE_SURFACE_SELECTORS');
-    expect(source).toContain('const settingsVisible = hasVisibleSelector([');
+    expect(source).toContain('const settingsVisible = hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS);');
     expect(source).toContain('const actionableSurfaceVisible = hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS);');
-    expect(source).toContain('const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry(window.location.hostname);');
-    expect(source).toContain('if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryVisible) {');
-    expect(source).toContain("'.save-preference-btn-handler'");
-    expect(source).toContain("const opened = settingsVisible || clickFirstVisible([");
+    expect(source).toContain('const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry();');
+    expect(source).toContain('const privacyChoicesEntryPresent = hasAnyOneTrustPrivacyChoicesEntry();');
+    expect(source).toContain('if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryPresent) {');
+    expect(source).toContain('const ONETRUST_PREFERENCE_CENTER_SELECTORS = [');
+    expect(source).toContain('const { opened, scrollPosition } = openOneTrustPreferenceCenter(host, { settingsVisible, allowContinue: true });');
+    expect(source).toContain('ensureOneTrustPreferenceCenterVisible(ONETRUST_PREFERENCE_CENTER_SELECTORS, 4000)');
+    expect(source).toContain('function hasAnyOneTrustPrivacyChoicesEntry() {');
   });
 
   it('treats CNBC Continue as the opener into OneTrust privacy settings', () => {
@@ -688,18 +765,137 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain('/\\bcontinue\\b/i.test(text)');
   });
 
-  it('uses CCPA-specific OneTrust method labels and cleanup hosts for Thomson Reuters leftovers', () => {
-    expect(source).toContain("handleOneTrustPrivacyCenterReject('cmp_api:OneTrust:ccpa')");
-    expect(source).toContain("ONETRUST_FORCE_CLEANUP_HOSTS = new Set(['www.zoom.com', 'www.thomsonreuters.com', 'thomsonreuters.com'])");
-    expect(source).toContain("ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com'])");
-    expect(source).toContain('shouldForceOneTrustCleanup(window.location.hostname)');
+  it('uses CCPA-specific OneTrust method labels without forcing Thomson Reuters into cleanup-only handling', () => {
+    expect(source).toContain("handleOneTrustPrivacyCenterReject('cmp_api:OneTrust:ccpa', prefs)");
+    expect(source).toContain('const ONETRUST_FORCE_CLEANUP_HOSTS = new Set([]);');
+    expect(source).toContain('const ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set([]);');
+    expect(source).toContain("return prefs?.globalPreference !== 'custom' &&");
+    expect(source).toContain('prefs.ccpaDoNotSell !== false &&');
+    expect(source).toContain('(isOneTrustPrivacyChoicesCcpaFlow() || hasAnyOneTrustPrivacyChoicesEntry());');
+    expect(source).toContain('shouldSkipOneTrustApiDomSync(host)');
+    expect(source).toContain('shouldUseVisualOneTrustApiDomSync(host)');
+  });
+
+  it('defers incomplete custom prefs and routes all actionable OneTrust custom flows through the preference center', () => {
+    expect(source).toContain('if (!hasCompleteCustomPrefs(_prefs)) return;');
+    expect(source).toContain("if (pref === 'custom') return;");
+    expect(source).toContain("if (prefs.globalPreference === 'custom') {");
+    expect(source).toContain('return handleOneTrustCustom(prefs);');
+    expect(source).not.toContain('shouldUseOneTrustCustomFlow');
+    expect(source).toContain("const ONETRUST_PRESERVE_DOM_CLOSE_HOSTS = new Set(['www.canadiantire.ca'])");
+    expect(source).toContain('const ONETRUST_VISUAL_HIDE_CLOSE_HOSTS = new Set([]);');
+    expect(source).toContain("const ONETRUST_SKIP_CONFIRM_HOSTS = new Set(['www.zoom.com'])");
+    expect(source).toContain('const ONETRUST_SKIP_API_DOM_SYNC_HOSTS = new Set([');
+    expect(source).toContain("'www.zoom.com'");
+    expect(source).toContain('function installZoomOneTrustPrivacyChoicesBridge()');
+    expect(source).toContain("event.target?.closest?.('#ot-do-not-sell')");
+    expect(source).toContain(".ot-sdk-show-settings:not(#ot-do-not-sell)");
+    expect(source).not.toContain('scheduleZoomOneTrustFooterReopenRepair');
+    expect(source).toContain('closeOneTrustPreferenceCenterIfVisible');
+    const customIdx = source.indexOf("if (prefs.globalPreference === 'custom') {");
+    const ccpaIdx = source.indexOf('if (shouldUseOneTrustPrivacyCenterOptOut(prefs)) {');
+    expect(customIdx).toBeGreaterThan(-1);
+    expect(ccpaIdx).toBeGreaterThan(customIdx);
+  });
+
+  it('deduplicates OneTrust category IDs so empty duplicate rows cannot overwrite richer mappings', () => {
+    expect(source).toContain('const entries = new Map();');
+    expect(source).toContain('text.length > prev.text.length');
+    expect(source).toContain('return Array.from(entries.values());');
+  });
+
+  it('tries the real OneTrust reject UI before falling back to raw RejectAll() state sync', () => {
+    expect(source).toContain("const rejectSelectors = [");
+    expect(source).toContain("'#onetrust-reject-all-handler'");
+    expect(source).toContain('!preferPreferenceCenterPersistence &&');
+    expect(source).toContain("const rejectResult = await handleOneTrustPrivacyCenterReject('cmp_api:OneTrust', prefs);");
+    expect(source).toContain('if (rejectResult) return rejectResult;');
+    expect(source).toContain("if (prefs.globalPreference === 'reject_all' &&");
+    expect(source).toContain('typeof w.OneTrust?.RejectAll === \'function\'');
+    const rejectResultIdx = source.indexOf("const rejectResult = await handleOneTrustPrivacyCenterReject('cmp_api:OneTrust', prefs);");
+    const rejectAllIdx = source.indexOf('w.OneTrust.RejectAll()', rejectResultIdx);
+    expect(rejectAllIdx).toBeGreaterThan(rejectResultIdx);
+  });
+
+  it('uses OneTrust APIs first inside privacy-center accept/reject flows and only then falls back to toggle helpers', () => {
+    expect(source).toContain('async function applyOneTrustPrivacyCenterState(checked) {');
+    expect(source).toContain('if (applyOneTrustBulkStateViaApi(checked)) {');
+    expect(source).toContain('const host = window.location.hostname;');
+    expect(source).toContain('if (!hadVisibleToggles || shouldSkipOneTrustApiDomSync(host)) return true;');
+    expect(source).toContain('if (shouldUseVisualOneTrustApiDomSync(host)) {');
+    expect(source).toContain('setOneTrustCategoryEntriesSilently(checked);');
+    expect(source).toContain('setOneTrustTogglesNow(checked);');
+    expect(source).toContain('function applyOneTrustBulkStateViaApi(checked) {');
+    expect(source).toContain('function shouldSkipOneTrustApiDomSync(host = window.location.hostname) {');
+    expect(source).toContain('function shouldUseVisualOneTrustApiDomSync(host = window.location.hostname) {');
+    expect(source).toContain('window.OneTrust.Accept()');
+    expect(source).toContain('window.OneTrust.RejectAll()');
+  });
+
+  it('lets OneTrust privacy-center flows self-dispatch success after the active surfaces are gone', () => {
+    expect(source).toContain('async function finalizeOneTrustHandled(method, timeoutMs = 5000, host = window.location.hostname) {');
+    expect(source).toContain('waitForDismissal(ONETRUST_VISIBLE_SELECTORS, timeoutMs)');
+    expect(source).toContain('await settleOneTrustAfterAction(host);');
+    expect(source).toContain('return finalizeOneTrustHandled(method, 5000, host);');
+    expect(source).toContain("return commitOneTrustPreferenceProfile(prefs, 'cmp_api:OneTrust:custom', host, scrollPosition);");
+    expect(source).toContain('async function commitOneTrustPreferenceProfile(prefs, method, host = window.location.hostname, scrollPosition = null) {');
+    expect(source).toContain('if (!clicked) {');
+    expect(source).toContain('restoreScrollPosition(scrollPosition);');
+    expect(source).toContain('schedulePreservedOneTrustStateSync(host, expectedGroups);');
+    expect(source).toContain('scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);');
+    expect(source).toContain('function scheduleOneTrustPostSaveSettle(host = window.location.hostname, scrollPosition = null, expectedGroups = null) {');
+    expect(source).toContain('function syncPreservedOneTrustPreferenceCenter(host = window.location.hostname, expectedGroups = null) {');
+    expect(source).toContain('hideVisibleOneTrustSurfaces();');
+  });
+
+  it('can open OneTrust preference centers through ToggleInfoDisplay-backed controls', () => {
+    expect(source).toContain('button[data-type="cmpFooterLink"]');
+    expect(source).toContain("'a[onclick*=\"ToggleInfoDisplay\"]'");
+    expect(source).toContain('function invokeOneTrustToggleInfoDisplay() {');
+    expect(source).toContain('window.OneTrust.ToggleInfoDisplay();');
+    expect(source).toContain('function openOneTrustPreferenceCenter(host = window.location.hostname');
+    expect(source).toContain('const scrollPosition = captureScrollPosition();');
+    expect(source).toContain('scrollPosition: opened ? scrollPosition : null');
+    expect(source).toContain('function ensureOneTrustPreferenceCenterVisible(selectors, timeoutMs = 4000) {');
+  });
+
+  it('tries to close any remaining visible OneTrust surface after consent is already written', () => {
+    expect(source).toContain('function closeVisibleOneTrustSurface() {');
+    expect(source).toContain('function hideVisibleOneTrustSurfaces() {');
+    expect(source).toContain("'#onetrust-close-btn-container button'");
+    expect(source).toContain('.onetrust-close-btn-handler.ot-close-icon.banner-close-button');
+    expect(source).toContain('while (Date.now() - closeStarted < 1500) {');
+    expect(source).toContain("if (document.cookie.includes('OptanonConsent=')) {");
+  });
+
+  it('treats _BG privacy-choice groups as CCPA controls before label-based category mapping', () => {
+    expect(source).toContain('// Privacy-choice `_BG` groups are semantic opt-out controls even when the');
+    const ccpaIdx = source.indexOf('if (isOneTrustCcpaEntry(entry)) {');
+    const targetingIdx = source.indexOf('/targeting|advertising|marketing|social media|sale of personal data|share of personal data/i.test(text)');
+    expect(ccpaIdx).toBeGreaterThan(-1);
+    expect(targetingIdx).toBeGreaterThan(ccpaIdx);
+  });
+
+  it('uses visual-only post-api OneTrust DOM sync on Reuters-class hosts where synthetic toggle events are unsafe', () => {
+    expect(source).toContain("const ONETRUST_SKIP_API_DOM_SYNC_HOSTS = new Set([");
+    expect(source).toContain("'www.zoom.com'");
+    expect(source).toContain("const ONETRUST_VISUAL_API_DOM_SYNC_HOSTS = new Set([");
+    expect(source).toContain("'www.reuters.com'");
+    expect(source).toContain("'reuters.com'");
+    expect(source).toContain("'www.thomsonreuters.com'");
+    expect(source).toContain("'thomsonreuters.com'");
+    expect(source).toContain('applyOneTrustToggleSilentById');
+    expect(source).toContain('setOneTrustCategoryEntriesSilently(checked);');
   });
 
   it('has a dedicated OneTrust privacy-center accept path for Thomson Reuters-style pages', () => {
+    expect(source).toContain("ONETRUST_PRIVACY_CENTER_REJECT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com'])");
     expect(source).toContain("ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set(['www.thomsonreuters.com', 'thomsonreuters.com', 'www.schwab.com', 'schwab.com'])");
-    expect(source).toContain("if (prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(window.location.hostname))");
+    expect(source).toContain("if (prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(prefs, window.location.hostname))");
+    expect(source).toContain('const forcePrivacyCenterReject = shouldUseOneTrustPrivacyCenterReject(host);');
+    expect(source).toContain('const preferPreferenceCenterPersistence = settingsVisible ||');
     expect(source).toContain('handleOneTrustPrivacyCenterAccept');
-    expect(source).toContain('enableVisibleOneTrustToggles();');
+    expect(source).toContain('return commitOneTrustPreferenceProfile(prefs, method, window.location.hostname, scrollPosition);');
   });
 
   it('uses Shopify privacyBanner and customerPrivacy APIs before falling back to DOM work', () => {
@@ -739,6 +935,15 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).not.toContain("instance.acceptAction(categories);");
   });
 
+  it('uses Cookiebot custom category consent and hides the dialog after verification', () => {
+    expect(source).toContain('const desiredState = buildCookiebotDesiredState(prefs);');
+    expect(source).toContain('waitForCookiebotConsentState(desiredState, 2500)');
+    expect(source).toContain('w.Cookiebot.submitCustomConsent(');
+    expect(source).toContain('w.Cookiebot.withdraw()');
+    expect(source).toContain('w.Cookiebot.hide?.();');
+    expect(source).toContain("'cmp_api:Cookiebot:custom'");
+  });
+
   it('treats the Truendo cookie as the primary consent source and returns success after dispatch', () => {
     expect(source).toContain("document.cookie.split('; ').find((entry) => entry.startsWith('truendo_cmp='))");
     expect(source).toContain('const verified = await waitForTruendoConsentState(w, desiredState, 4000);');
@@ -757,25 +962,75 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
     expect(source).toContain("if (!EXPLICIT_ONETRUST_CONTROL_HOSTS.has(host))");
   });
 
-  it('uses CNBC and NBC News for DOM CCPA privacy-center routing, but only CNBC for reload-on-save pre-marking', () => {
-    expect(source).toContain("ONETRUST_PRIVACY_CHOICES_CCPA_HOSTS = new Set([");
-    expect(source).toContain("'www.nbcnews.com'");
-    expect(source).toContain("'www.schwab.com'");
-    expect(source).toContain("'schwab.com'");
+  it('routes DOM OneTrust CCPA privacy-center flows from structural selectors and group ids, but only CNBC reloads on save', () => {
+    expect(source).toContain('const ONETRUST_OPEN_CONTROL_SELECTORS = [');
+    expect(source).toContain("'#ot-do-not-sell'");
+    expect(source).toContain("'a[onclick*=\"ToggleInfoDisplay\"]'");
+    expect(source).toContain("'.df-privacy-compliance'");
+    expect(source).toContain('const ONETRUST_CCPA_STRUCTURAL_SELECTORS = [');
+    expect(source).toContain('const ONETRUST_CCPA_GROUP_ID_RE = /^[A-Z]+_BG$/;');
+    expect(source).toContain('function isOneTrustPrivacyChoicesCcpaFlow() {');
+    expect(source).toContain('function isOneTrustCcpaEntry(entry) {');
+    expect(source).toContain("document.querySelector(ONETRUST_CCPA_STRUCTURAL_SELECTORS.join(', '))");
+    expect(source).toContain('return hasVisibleSelector(ONETRUST_OPEN_CONTROL_SELECTORS);');
+    expect(source).not.toContain('const ONETRUST_PRIVACY_CHOICES_ENTRY_TEXT_RE =');
     expect(source).toContain("ONETRUST_RELOAD_ON_SAVE_HOSTS = new Set([");
     expect(source).toContain("'www.cnbc.com'");
+    expect(source).toContain("'www.thomsonreuters.com'");
+    expect(source).toContain("'thomsonreuters.com'");
     expect(source).toContain("document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {");
-    expect(source).toContain("method: 'dom:onetrust:ccpa'");
+    expect(source).toContain('expectedGroups,');
+    expect(source).toContain('method,');
+  });
+
+  it('keeps DOM custom OneTrust flows ahead of the generic CCPA shortcut', () => {
+    expect(source).toContain("return prefs?.globalPreference !== 'custom' &&");
+    const customIdx = source.indexOf("if (cmp.id === 'onetrust' && prefs.globalPreference === 'custom') {");
+    const ccpaIdx = source.indexOf("if (cmp.id === 'onetrust' && shouldUseOneTrustPrivacyCenterOptOut(prefs)) {");
+    expect(customIdx).toBeGreaterThan(-1);
+    expect(ccpaIdx).toBeGreaterThan(customIdx);
   });
 
   it('lets the DOM fallback act on an already-open OneTrust settings modal', () => {
     expect(source).toContain('ONETRUST_ACTIONABLE_SURFACE_SELECTORS');
-    expect(source).toContain('const settingsVisible = hasVisibleSelector([');
+    expect(source).toContain('const settingsVisible = hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS);');
     expect(source).toContain('const actionableSurfaceVisible = hasVisibleOneTrustActionableSurface();');
-    expect(source).toContain('const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry(host);');
+    expect(source).toContain('const privacyChoicesEntryVisible = hasVisibleOneTrustPrivacyChoicesEntry();');
     expect(source).toContain('if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryVisible) {');
-    expect(source).toContain("'.save-preference-btn-handler'");
-    expect(source).toContain('const opened = settingsVisible || clickFirstVisible([');
+    expect(source).toContain('const ONETRUST_PREFERENCE_CENTER_SELECTORS = [');
+    expect(source).toContain('const { opened, scrollPosition } = openOneTrustPreferenceCenter(host, { settingsVisible, allowContinue: true });');
+    expect(source).toContain("'a[onclick*=\"ToggleInfoDisplay\"]'");
+    expect(source).toContain('ensureOneTrustPreferenceCenterVisible(ONETRUST_PREFERENCE_CENTER_SELECTORS, 4000)');
+  });
+
+  it('treats Investis Cookie Manager as a first-class DOM custom-flow CMP', () => {
+    expect(source).toContain("if (cmp.id === 'investiscookiemanager') {");
+    expect(source).toContain('executeInvestisCookieManagerFlow');
+    expect(source).toContain('INVESTIS_COOKIE_MANAGER_ACTIONABLE_SURFACE_SELECTORS');
+    expect(source).toContain("'#cc-CookieSettingPreference'");
+    expect(source).toContain("'#cc-cookieAgree'");
+    expect(source).toContain("'app-item-functionalCookies'");
+    expect(source).toContain("'app-item-performanceCookies'");
+    expect(source).toContain("'app-item-marketingCookies'");
+    expect(source).toContain('waitForInvestisCookieManagerConsentState');
+    expect(source).toContain('cleanupInvestisCookieManagerArtifacts');
+  });
+
+  it('deduplicates DOM OneTrust category rows by id before applying custom mappings', () => {
+    expect(source).toContain('const entries = new Map();');
+    expect(source).toContain('const nextScore = next.text.length + (isOneTrustToggleInteractable(toggle) ? 1000 : 0);');
+    expect(source).toContain('return Array.from(entries.values());');
+  });
+
+  it('excludes #onetrust-pc-btn-handler from the actionable-surface guard to avoid footer widget false positives', () => {
+    const guardStart = source.indexOf('ONETRUST_ACTIONABLE_SURFACE_SELECTORS = [');
+    const guardEnd = source.indexOf('];', guardStart);
+    const guardBlock = source.slice(guardStart, guardEnd);
+    // Must not appear as a live selector string (quoted value), only as a comment.
+    expect(guardBlock).not.toMatch(/'#onetrust-pc-btn-handler'/);
+    // The parent containers still gate the guard, so real banners are still caught.
+    expect(guardBlock).toContain('#onetrust-banner-sdk');
+    expect(guardBlock).toContain('#onetrust-consent-sdk');
   });
 
   it('lets the DOM fallback use CNBC Continue as the settings opener', () => {
@@ -783,19 +1038,75 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
     expect(source).toContain('/\\bcontinue\\b/i.test(text)');
   });
 
-  it('uses CCPA-specific DOM method labels and cleanup hosts for Thomson Reuters leftovers', () => {
+  it('lets the DOM fallback retry OneTrust preference-center opening through ToggleInfoDisplay when opener clicks do not surface controls', () => {
+    expect(source).toContain('function invokeOneTrustToggleInfoDisplay() {');
+    expect(source).toContain('window.OneTrust.ToggleInfoDisplay();');
+    expect(source).toContain('function openOneTrustPreferenceCenter(host = location.hostname');
+    expect(source).toContain('const scrollPosition = captureScrollPosition();');
+    expect(source).toContain('function ensureOneTrustPreferenceCenterVisible(selectors, timeoutMs = 4000) {');
+    expect(source).toContain('if (!invokeOneTrustToggleInfoDisplay()) return false;');
+    expect(source).toContain('const clicked = clickOneTrustSaveButton(host);');
+    expect(source).toContain('return completeOneTrustPreferenceCenterAction(cmp, prefs, host,');
+  });
+
+  it('uses CCPA-specific DOM method labels without forcing Thomson Reuters through DOM cleanup', () => {
     expect(source).toContain("return { method: `dom:${cmp.id}:ccpa`, cmpName: cmp.name }");
-    expect(source).toContain("ONETRUST_FORCE_CLEANUP_HOSTS = new Set([");
+    const cleanupStart = source.indexOf('const ONETRUST_FORCE_CLEANUP_HOSTS = new Set([');
+    const cleanupEnd = source.indexOf(']);', cleanupStart);
+    const cleanupBlock = source.slice(cleanupStart, cleanupEnd);
+    expect(cleanupBlock).not.toContain("'www.zoom.com'");
+    expect(cleanupBlock).not.toContain("'www.thomsonreuters.com'");
+    expect(cleanupBlock).not.toContain("'www.canadiantire.ca'");
+    expect(source).toContain("const ZOOM_ONETRUST_HOSTS = new Set([");
+    expect(source).toContain('cleanupZoomOneTrustArtifacts');
     expect(source).toContain("ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set([");
-    expect(source).toContain("'www.thomsonreuters.com'");
+    expect(source).not.toContain("ONETRUST_AGGRESSIVE_CLEANUP_HOSTS = new Set(['www.thomsonreuters.com'");
     expect(source).toContain('scheduleHostOneTrustCleanup(host)');
+  });
+
+  it('closes Canadian Tire OneTrust panels without removing the reusable preference-center DOM', () => {
+    expect(source).toContain("const ONETRUST_PRESERVE_DOM_CLOSE_HOSTS = new Set([");
+    expect(source).toContain("'www.canadiantire.ca'");
+    expect(source).toContain('closeOneTrustPreferenceCenterIfVisible');
+    expect(source).toContain('await settleOneTrustAfterAction(host);');
+  });
+
+  it('treats DOM _BG privacy-choice groups as CCPA controls before label-based category mapping', () => {
+    expect(source).toContain('// Privacy-choice `_BG` groups are semantic opt-out controls even when the');
+    const ccpaIdx = source.indexOf('if (isOneTrustCcpaEntry(entry)) {');
+    const targetingIdx = source.indexOf('/targeting|advertising|marketing|social media|sale of personal data|share of personal data/i.test(text)');
+    expect(ccpaIdx).toBeGreaterThan(-1);
+    expect(targetingIdx).toBeGreaterThan(ccpaIdx);
+  });
+
+  it('tries to close any remaining DOM-visible OneTrust surface after consent is written', () => {
+    expect(source).toContain('function closeVisibleOneTrustSurface() {');
+    expect(source).toContain('function hideVisibleOneTrustSurfaces() {');
+    expect(source).toContain("'#onetrust-close-btn-container button'");
+    expect(source).toContain('.onetrust-close-btn-handler.ot-close-icon.banner-close-button');
+    expect(source).toContain('while (Date.now() - closeStarted < 1500) {');
+    expect(source).toContain("if (document.cookie.includes('OptanonConsent=')) {");
   });
 
   it('has a dedicated DOM privacy-center accept path for Thomson Reuters-style pages', () => {
     expect(source).toContain("ONETRUST_PRIVACY_CENTER_ACCEPT_HOSTS = new Set([");
-    expect(source).toContain("if (cmp.id === 'onetrust' && prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(host))");
+    expect(source).toContain("if (cmp.id === 'onetrust' && prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(prefs, host))");
     expect(source).toContain('executeOneTrustPrivacyCenterAccept');
-    expect(source).toContain('enableVisibleOneTrustToggles();');
+    expect(source).toContain("return completeOneTrustPreferenceCenterAction(cmp, prefs, host, 'dom:onetrust', cmp.actions?.accept_all ?? [], scrollPosition);");
+  });
+
+  it('restores scroll and retries dismissal after DOM OneTrust preference-center saves', () => {
+    expect(source).toContain('restoreScrollPosition(scrollPosition);');
+    expect(source).toContain('async function waitForOneTrustDismissalAfterSettle(cmp, actions, host, timeoutMs = 4000) {');
+    expect(source).toContain('await settleOneTrustAfterAction(host);');
+    expect(source).toContain('return waitForDismissal(cmp, actions, 1500);');
+    expect(source).toContain('function captureScrollPosition() {');
+    expect(source).toContain('function restoreScrollPosition(position) {');
+    expect(source).toContain('schedulePreservedOneTrustStateSync(host, expectedGroups);');
+    expect(source).toContain('scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);');
+    expect(source).toContain('function scheduleOneTrustPostSaveSettle(host = location.hostname, scrollPosition = null, expectedGroups = null) {');
+    expect(source).toContain('function syncPreservedOneTrustPreferenceCenter(host = location.hostname, expectedGroups = null) {');
+    expect(source).toContain('hideVisibleOneTrustSurfaces();');
   });
 
   it('includes Schwab in the DOM OneTrust privacy-choice accept allowlist', () => {
