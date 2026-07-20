@@ -7,20 +7,6 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <!-- Milestone card (hidden until a milestone triggers) -->
-  <div id="milestone-card" class="milestone-card hidden">
-      <div class="milestone-icon">🍪</div>
-      <div class="milestone-body">
-        <h3 id="milestone-name"></h3>
-        <p id="milestone-desc"></p>
-        <p id="milestone-nudge" class="milestone-nudge" data-i18n="popupMilestoneCoffeeNudge">Eat My Cookies is free forever. If it's saved you a minute, consider buying me a coffee.</p>
-      </div>
-      <div class="milestone-actions">
-        <a id="milestone-donate" href="#" target="_blank" class="btn btn-primary" data-i18n="popupMilestoneBuyCoffee">♥ Buy Me a Coffee</a>
-        <button id="milestone-dismiss" class="btn btn-ghost" data-i18n="popupMilestoneDismiss">Keep Going →</button>
-      </div>
-    </div>
-
   <!-- Main popup -->
   <div id="main-view">
     <header class="popup-header">
@@ -67,6 +53,20 @@
       <div id="total-count" class="stat-number">—</div>
       <div class="stat-label" data-i18n="popupStatCookiesEaten">cookies eaten</div>
       <div id="sites-count" class="stat-sublabel">across — sites</div>
+    </div>
+
+    <!-- Milestone / review card (hidden until a popup card triggers) -->
+    <div id="milestone-card" class="milestone-card hidden">
+      <div class="milestone-icon">🍪</div>
+      <div class="milestone-body">
+        <h3 id="milestone-name"></h3>
+        <p id="milestone-desc"></p>
+        <p id="milestone-nudge" class="milestone-nudge" data-i18n="popupMilestoneCoffeeNudge">Eat My Cookies is free forever. If it's saved you a minute, consider buying me a coffee.</p>
+      </div>
+      <div class="milestone-actions">
+        <a id="milestone-donate" href="#" target="_blank" class="btn btn-primary" data-i18n="popupMilestoneBuyCoffee">♥ Buy Me a Coffee</a>
+        <button id="milestone-dismiss" class="btn btn-ghost" data-i18n="popupMilestoneDismiss">Keep Going →</button>
+      </div>
     </div>
 
     <section id="site-warning" class="site-warning hidden">
@@ -128,9 +128,12 @@
     <div class="divider"></div>
 
     <footer class="popup-footer">
-      <a id="donate-link" href="https://ko-fi.com/eatmycookies" target="_blank" class="footer-link" data-i18n="popupDonateFooter">♥ Buy me a coffee</a>
-      <span class="footer-sep">·</span>
-      <a href="https://github.com/sponsors/eatmycookies-dot-net" target="_blank" class="footer-link" data-i18n="popupSponsorFooter">Sponsor on GitHub</a>
+      <div class="popup-footer-row">
+        <a id="donate-link" href="https://ko-fi.com/eatmycookies" target="_blank" class="footer-link" data-i18n="popupDonateFooter">♥ Buy me a coffee</a>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/sponsors/eatmycookies-dot-net" target="_blank" class="footer-link" data-i18n="popupSponsorFooter">Sponsor on GitHub</a>
+      </div>
+      <a id="review-link" href="https://chromewebstore.google.com/detail/eat-my-cookies/bjkadflopfgeolknbhkhoechfahdjkpf/reviews" target="_blank" class="footer-link footer-link-review" data-i18n="popupReviewCta">Leave a review</a>
     </footer>
   </div>
 
@@ -231,12 +234,15 @@
       <div class="divider"></div>
 
       <div class="settings-meta">
-        <span id="version-label">v—</span>
-        <a id="report-bug-link" href="#" target="_blank" class="footer-link" data-i18n="settingsReportBug">Report a bug ↗</a>
-        <a href="mailto:support@eatmycookies.net" class="footer-link" data-i18n="settingsContactSupport">Contact support ↗</a>
-        <a href="https://github.com/eatmycookies-dot-net/eat-my-cookies" target="_blank" class="footer-link" data-i18n="settingsOpenSource">Open source on GitHub →</a>
+        <div class="settings-meta-links">
+          <a id="report-bug-link" href="#" target="_blank" class="footer-link" data-i18n="settingsReportBug">Report a bug ↗</a>
+          <a href="mailto:support@eatmycookies.net" class="footer-link" data-i18n="settingsContactSupport">Contact support ↗</a>
+          <a id="settings-review-link" href="https://chromewebstore.google.com/detail/eat-my-cookies/bjkadflopfgeolknbhkhoechfahdjkpf/reviews" target="_blank" class="footer-link" data-i18n="settingsReviewLink">Leave a review ↗</a>
+          <a href="https://github.com/eatmycookies-dot-net/eat-my-cookies" target="_blank" class="footer-link" data-i18n="settingsOpenSource">Open source on GitHub →</a>
+        </div>
       </div>
       <button id="restart-onboarding-btn" class="btn btn-ghost" data-i18n="settingsRestartOnboarding">Restart onboarding</button>
+      <span id="version-label" class="settings-version-label">v—</span>
     </div>
   </div>
 

@@ -11,6 +11,8 @@ const SYNC_DEFAULTS = {
   uiLanguage: 'auto',
   onboardingComplete: false,
   milestonesShown: [],
+  reviewPromptsShown: [],
+  reviewPromptClickedAt: null,
   installDate: null,
 };
 
@@ -21,6 +23,7 @@ const LOCAL_DEFAULTS = {
     handledSites: [],
     lastActionDate: null,
     lastActionSite: null,
+    lastActionNoticeOnly: false,
     recentActivity: [],
   },
   siteOverrides: {},

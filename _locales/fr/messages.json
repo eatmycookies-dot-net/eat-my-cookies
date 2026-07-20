@@ -38,6 +38,21 @@
   "popupMilestoneBuyBeer": {
     "message": "♥ Offrez-moi une bière"
   },
+  "popupReviewTitle": {
+    "message": "Vous aimez Eat My Cookies ?"
+  },
+  "popupReviewNudge": {
+    "message": "Si l’extension vous aide vraiment, accepteriez-vous de laisser un avis honnête sur le Chrome Web Store ?"
+  },
+  "popupReviewCta": {
+    "message": "Laisser un avis"
+  },
+  "settingsReviewLink": {
+    "message": "Laisser un avis ↗"
+  },
+  "settingsVersionLabel": {
+    "message": "Version $1"
+  },
   "popupMilestoneDismiss": {
     "message": "Continuer →"
   },
@@ -186,7 +201,7 @@
     "message": "Code source sur GitHub →"
   },
   "settingsRestartOnboarding": {
-    "message": "Relancer l’onboarding"
+    "message": "Relancer le guide"
   },
   "siteWarningAutoDisabledTitle": {
     "message": "Désactivation automatique pour $1"

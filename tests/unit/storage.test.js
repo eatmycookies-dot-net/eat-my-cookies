@@ -36,6 +36,8 @@ describe('getSettings()', () => {
     expect(s.onboardingComplete).toBe(false);
     expect(s.showBadgeCount).toBe(true);
     expect(s.milestonesShown).toEqual([]);
+    expect(s.reviewPromptsShown).toEqual([]);
+    expect(s.reviewPromptClickedAt).toBeNull();
     expect(s.installDate).toBeNull();
   });
 
@@ -92,15 +94,24 @@ describe('getStats()', () => {
     expect(stats.handledSites).toEqual([]);
     expect(stats.recentActivity).toEqual([]);
     expect(stats.lastActionDate).toBeNull();
+    expect(stats.lastActionNoticeOnly).toBe(false);
   });
 });
 
 describe('setStats()', () => {
   it('persists and retrieves custom stats', async () => {
-    await setStats({ totalActionsCount: 42, sitesHandled: 3, handledSites: ['a.com'], recentActivity: [], lastActionDate: '2024-01-01' });
+    await setStats({
+      totalActionsCount: 42,
+      sitesHandled: 3,
+      handledSites: ['a.com'],
+      recentActivity: [],
+      lastActionDate: '2024-01-01',
+      lastActionNoticeOnly: true,
+    });
     const stats = await getStats();
     expect(stats.totalActionsCount).toBe(42);
     expect(stats.sitesHandled).toBe(3);
+    expect(stats.lastActionNoticeOnly).toBe(true);
   });
 });
 
@@ -115,6 +126,7 @@ describe('clearRecentActivity()', () => {
       recentActivity: [{ site: 'x.com', method: 'test', preference: 'reject_all', timestamp: 'now' }],
       lastActionDate: '2024-01-01',
       lastActionSite: 'x.com',
+      lastActionNoticeOnly: false,
     });
     await clearRecentActivity();
     const stats = await getStats();
@@ -218,6 +230,8 @@ describe('exportSettings()', () => {
     expect(parsed).toHaveProperty('showBadgeCount');
     expect(parsed).toHaveProperty('onboardingComplete');
     expect(parsed).toHaveProperty('milestonesShown');
+    expect(parsed).toHaveProperty('reviewPromptsShown');
+    expect(parsed).toHaveProperty('reviewPromptClickedAt');
   });
 });
 

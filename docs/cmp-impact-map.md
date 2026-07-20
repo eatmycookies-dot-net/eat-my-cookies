@@ -382,6 +382,13 @@ place that accept-style button next to the real preference save (`Submit All Pre
 Reuters-class hosts (`reuters.com`, `thomsonreuters.com`) are the known exception to that
 visual-reconciliation step: once the API state is written, synthetic toggle events should be
 avoided because they can re-enter heavy OneTrust processing and freeze the page.
+For every API-backed OneTrust save, the handler now also installs a lightweight, page-lifetime
+reconciliation listener. When a structural OneTrust settings opener is user-activated, it
+silently mirrors the persisted `OptanonConsent` group map into the newly rendered group-id
+checkboxes. This is deliberately group-id based, emits no input/change events, and does not
+depend on English labels or a site-specific footer-text whitelist. It addresses the class of
+"consent stored but Manage Cookies shows defaults" regressions while preserving Reuters' no-event
+constraint.
 Thomson Reuters also no longer belongs in the forced OneTrust DOM-cleanup bucket: its live
 homepage dismisses cleanly through OneTrust's own confirm/reload path, so aggressive node
 removal is more likely to destabilize the page than to help.
@@ -402,6 +409,9 @@ Some OneTrust builds can also reopen or restyle the preference center shortly af
 save even though the `OptanonConsent` groups are correct. The shared post-save settle watcher is
 intentionally bounded and observes OneTrust DOM/style mutations briefly after save; if a stale
 surface reappears, it closes or visually hides that surface and restores the original scroll.
+That watcher is strictly automation-only: a trusted click on a structural OneTrust footer/settings
+opener stops it before OneTrust renders the user-requested preference center. Footer review must
+show the saved choices and remain interactive; it must never trigger a second dismissal pass.
 
 ---
 

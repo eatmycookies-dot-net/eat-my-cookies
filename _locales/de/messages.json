@@ -38,6 +38,21 @@
   "popupMilestoneBuyBeer": {
     "message": "♥ Bier spendieren"
   },
+  "popupReviewTitle": {
+    "message": "Hilft dir Eat My Cookies?"
+  },
+  "popupReviewNudge": {
+    "message": "Wenn dir die Erweiterung wirklich hilft, würdest du eine ehrliche Rezension im Chrome Web Store hinterlassen?"
+  },
+  "popupReviewCta": {
+    "message": "Rezension schreiben"
+  },
+  "settingsReviewLink": {
+    "message": "Rezension schreiben ↗"
+  },
+  "settingsVersionLabel": {
+    "message": "Version $1"
+  },
   "popupMilestoneDismiss": {
     "message": "Weiter →"
   },
@@ -186,7 +201,7 @@
     "message": "Open Source auf GitHub →"
   },
   "settingsRestartOnboarding": {
-    "message": "Onboarding neu starten"
+    "message": "Einführung neu starten"
   },
   "siteWarningAutoDisabledTitle": {
     "message": "Automatisch deaktiviert für $1"

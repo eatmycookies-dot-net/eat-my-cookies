@@ -31,15 +31,22 @@ export const MILESTONES = [
   { id: 'million',               threshold: 1000000,  name: 'Mythic Muncher',       nameKey: 'badgeNameMythicMuncher',       icon: '../icons/badges/mythic-muncher.png' },
 ];
 
-export async function recordAction({ site, method, preference }) {
+export async function recordAction({ site, method, preference, noticeOnly = false }) {
   const stats = await getStats();
 
   const prev = stats.totalActionsCount;
   stats.totalActionsCount += 1;
   stats.lastActionDate = new Date().toISOString();
   stats.lastActionSite = site;
+  stats.lastActionNoticeOnly = Boolean(noticeOnly);
 
-  const activity = { site, method, preference, timestamp: stats.lastActionDate };
+  const activity = {
+    site,
+    method,
+    preference,
+    noticeOnly: Boolean(noticeOnly),
+    timestamp: stats.lastActionDate,
+  };
   stats.recentActivity = [activity, ...stats.recentActivity].slice(0, RECENT_ACTIVITY_LIMIT);
 
   const triggered = MILESTONES.filter(

@@ -11,9 +11,20 @@ import {
 import { getBuildMeta, getDisplayVersion, getIssueVersionLabel, getReleaseVersion } from '../utils/build-info.js';
 import { MILESTONES, formatActivityPreference } from '../utils/stats.js';
 import { applyI18nAttributes, getTranslator } from '../utils/i18n.js';
+import {
+  POPUP_CARD_KIND_REVIEW,
+  REVIEW_PROMPT_RELATED_MILESTONE_ID,
+  REVIEW_PROMPT_THRESHOLD,
+  buildReviewPopupCard,
+  findTriggeredReviewPromptOpportunity,
+  normalizeReviewPromptIds,
+  selectNextPendingPopupCard,
+} from '../utils/popup-cards.js';
 
 const KO_FI_URL = 'https://ko-fi.com/eatmycookies';
+const CHROME_WEB_STORE_REVIEW_URL = 'https://chromewebstore.google.com/detail/eat-my-cookies/bjkadflopfgeolknbhkhoechfahdjkpf/reviews';
 const POPUP_VIEW_STATE_KEY = 'emc-popup-view';
+let activeSettings = null;
 let storageListenerAttached = false;
 let i18n = {
   locale: 'en',
@@ -27,6 +38,11 @@ let i18n = {
       popupMilestoneBeerNudge: "You've made it absurdly far. If you skipped the coffee, maybe buy me a beer so I can sober up.",
       popupMilestoneBuyCoffee: '♥ Buy Me a Coffee',
       popupMilestoneBuyBeer: '♥ Buy Me a Beer',
+      popupReviewTitle: 'Enjoying Eat My Cookies?',
+      popupReviewNudge: 'If it is genuinely helping, would you leave an honest review on the Chrome Web Store?',
+      popupReviewCta: 'Leave a review',
+      settingsReviewLink: 'Leave a review ↗',
+      settingsVersionLabel: 'Version $1',
       siteOverrideRemove: 'Remove',
       activityAccepted: 'Accepted',
       activityRejected: 'Rejected',
@@ -101,6 +117,7 @@ async function init() {
     getUnsupportedSites(),
     getSiteOverrides(),
   ]);
+  activeSettings = settings;
 
   i18n = await getTranslator(settings.uiLanguage);
   document.documentElement.lang = i18n.locale;
@@ -116,11 +133,26 @@ async function init() {
   renderSiteToggle(currentDomain, siteOverrides[currentDomain]);
   renderLanguageShortcut(settings);
   await renderVersionMeta(currentDomain);
+  bindFooterLinks();
 
-  const milestones = pending.pendingMilestones;
-  if (milestones.length > 0) {
-    showMilestoneCard(milestones[0]);
-    await chrome.storage.local.set({ pendingMilestones: milestones.slice(1) });
+  const rawPendingCards = Array.isArray(pending.pendingMilestones) ? pending.pendingMilestones : [];
+  const {
+    card: nextPendingCard,
+    remainingCards,
+  } = selectNextPendingPopupCard(rawPendingCards);
+  const reviewOpportunity = nextPendingCard
+    ? null
+    : findTriggeredReviewPromptOpportunity({ settings, stats });
+  const cardToShow = nextPendingCard ?? (
+    reviewOpportunity ? buildReviewPopupCard(stats, reviewOpportunity) : null
+  );
+
+  if (cardToShow) {
+    showPopupCard(cardToShow);
+    await markPopupCardSeen(cardToShow);
+    if (nextPendingCard) {
+      await chrome.storage.local.set({ pendingMilestones: remainingCards });
+    }
   }
 
   bindSettingsPanel(settings, currentDomain);
@@ -136,6 +168,8 @@ async function init() {
         changes.siteOverrides ||
         changes.unsupportedSites ||
         changes.milestonesShown ||
+        changes.reviewPromptsShown ||
+        changes.reviewPromptClickedAt ||
         changes.uiLanguage
       ) {
         window.location.reload();
@@ -144,13 +178,33 @@ async function init() {
   }
 }
 
+async function markPopupCardSeen(card) {
+  if (card?.kind !== POPUP_CARD_KIND_REVIEW || !card.id) return;
+  const shown = normalizeReviewPromptIds(activeSettings?.reviewPromptsShown ?? []);
+  if (shown.includes(card.id)) return;
+  const updatedShown = [...shown, card.id];
+  activeSettings = {
+    ...(activeSettings ?? {}),
+    reviewPromptsShown: updatedShown,
+  };
+  await updateSettings({ reviewPromptsShown: updatedShown });
+}
+
+async function openChromeWebStoreReview() {
+  const clickedAt = new Date().toISOString();
+  activeSettings = { ...(activeSettings ?? {}), reviewPromptClickedAt: clickedAt };
+  await updateSettings({ reviewPromptClickedAt: clickedAt });
+  await chrome.tabs.create({ url: CHROME_WEB_STORE_REVIEW_URL });
+  window.close();
+}
+
 async function renderVersionMeta(currentDomain) {
   const releaseVersion = getReleaseVersion();
   const buildMeta = await getBuildMeta();
   const displayVersion = getDisplayVersion(releaseVersion, buildMeta);
   const issueVersion = getIssueVersionLabel(releaseVersion, buildMeta);
 
-  document.getElementById('version-label').textContent = `v${displayVersion}`;
+  document.getElementById('version-label').textContent = i18n.t('settingsVersionLabel', [`v${displayVersion}`]);
   document.getElementById('report-bug-link').href = buildIssueUrl({
     releaseVersion,
     issueVersion,
@@ -323,33 +377,110 @@ function renderLanguageShortcut(settings) {
   row.classList.toggle('hidden', settings.uiLanguage !== 'auto');
 }
 
-function showMilestoneCard(milestone) {
+function formatMilestoneDescription(count) {
+  return i18n.t(
+    count === 1 ? 'milestoneDescSingular' : 'milestoneDescPlural',
+    [i18n.formatNumber(count)],
+  );
+}
+
+function renderPopupCard({
+  icon,
+  title,
+  description,
+  nudgeText,
+  primaryHref,
+  primaryText,
+  onPrimaryClick,
+}) {
   const card = document.getElementById('milestone-card');
-  const donateLink = document.getElementById('milestone-donate');
+  const primaryLink = document.getElementById('milestone-donate');
   const nudge = document.getElementById('milestone-nudge');
-  const isBeerTier = milestone.threshold >= 5000;
 
   const iconEl = card.querySelector('.milestone-icon');
   if (iconEl) {
-    iconEl.innerHTML = milestone.icon
-      ? `<img src="${milestone.icon}" width="36" height="36" alt="">`
+    iconEl.innerHTML = icon
+      ? `<img src="${icon}" width="36" height="36" alt="">`
       : '🍪';
   }
 
-  document.getElementById('milestone-name').textContent = i18n.t('milestoneUnlocked', [i18n.t(milestone.nameKey)]);
-  const n = milestone.threshold;
-  document.getElementById('milestone-desc').textContent = i18n.t(
-    n === 1 ? 'milestoneDescSingular' : 'milestoneDescPlural',
-    [i18n.formatNumber(n)],
-  );
-  nudge.textContent = isBeerTier ? i18n.t('popupMilestoneBeerNudge') : i18n.t('popupMilestoneCoffeeNudge');
-  donateLink.href = KO_FI_URL;
-  donateLink.textContent = isBeerTier ? i18n.t('popupMilestoneBuyBeer') : i18n.t('popupMilestoneBuyCoffee');
+  document.getElementById('milestone-name').textContent = title;
+  document.getElementById('milestone-desc').textContent = description;
+
+  nudge.textContent = nudgeText ?? '';
+  nudge.classList.toggle('hidden', !nudgeText);
+
+  if (primaryHref && primaryText) {
+    primaryLink.href = primaryHref;
+    primaryLink.textContent = primaryText;
+    primaryLink.classList.remove('hidden');
+    primaryLink.onclick = onPrimaryClick ?? null;
+  } else {
+    primaryLink.removeAttribute('href');
+    primaryLink.classList.add('hidden');
+    primaryLink.onclick = null;
+  }
 
   card.classList.remove('hidden');
-  document.getElementById('milestone-dismiss').addEventListener('click', () => {
+  document.getElementById('milestone-dismiss').onclick = () => {
     card.classList.add('hidden');
-  }, { once: true });
+  };
+}
+
+function showMilestoneCard(milestone) {
+  const isBeerTier = milestone.threshold >= 5000;
+  const isFirstMilestone = milestone.id === 'first_action';
+
+  renderPopupCard({
+    icon: milestone.icon,
+    title: i18n.t('milestoneUnlocked', [i18n.t(milestone.nameKey)]),
+    description: formatMilestoneDescription(milestone.threshold),
+    nudgeText: isFirstMilestone
+      ? ''
+      : (isBeerTier ? i18n.t('popupMilestoneBeerNudge') : i18n.t('popupMilestoneCoffeeNudge')),
+    primaryHref: isFirstMilestone ? '' : KO_FI_URL,
+    primaryText: isFirstMilestone
+      ? ''
+      : (isBeerTier ? i18n.t('popupMilestoneBuyBeer') : i18n.t('popupMilestoneBuyCoffee')),
+  });
+}
+
+function showReviewCard(card) {
+  const relatedMilestone = MILESTONES.find((milestone) => milestone.id === card.relatedMilestoneId)
+    ?? MILESTONES.find((milestone) => milestone.id === REVIEW_PROMPT_RELATED_MILESTONE_ID);
+  const count = Math.max(Number(card.count) || 0, REVIEW_PROMPT_THRESHOLD);
+
+  renderPopupCard({
+    icon: relatedMilestone?.icon,
+    title: i18n.t('popupReviewTitle'),
+    description: formatMilestoneDescription(count),
+    nudgeText: i18n.t('popupReviewNudge'),
+    primaryHref: CHROME_WEB_STORE_REVIEW_URL,
+    primaryText: i18n.t('popupReviewCta'),
+    onPrimaryClick: async (event) => {
+      event.preventDefault();
+      await openChromeWebStoreReview();
+    },
+  });
+}
+
+function showPopupCard(card) {
+  if (card?.kind === POPUP_CARD_KIND_REVIEW) {
+    showReviewCard(card);
+    return;
+  }
+  showMilestoneCard(card);
+}
+
+function bindFooterLinks() {
+  for (const linkId of ['review-link', 'settings-review-link']) {
+    const reviewLink = document.getElementById(linkId);
+    if (!reviewLink) continue;
+    reviewLink.addEventListener('click', async (event) => {
+      event.preventDefault();
+      await openChromeWebStoreReview();
+    });
+  }
 }
 
 function bindSettingsPanel(settings, currentDomain) {

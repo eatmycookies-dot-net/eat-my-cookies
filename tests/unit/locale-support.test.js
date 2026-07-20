@@ -112,6 +112,50 @@ describe('supported UI locales vs content fallbacks', () => {
   });
 });
 
+describe('review prompt locale coverage', () => {
+  const localeRoot = path.join(ROOT, '_locales');
+  const localeDirs = fs.readdirSync(localeRoot).filter((entry) => (
+    fs.statSync(path.join(localeRoot, entry)).isDirectory()
+  ));
+  const requiredKeys = [
+    'popupReviewTitle',
+    'popupReviewNudge',
+    'popupReviewCta',
+    'settingsReviewLink',
+    'settingsVersionLabel',
+  ];
+
+  it('ships review prompt strings for every bundled locale catalog', () => {
+    for (const localeDir of localeDirs) {
+      const messages = JSON.parse(fs.readFileSync(path.join(localeRoot, localeDir, 'messages.json'), 'utf8'));
+      for (const key of requiredKeys) {
+        expect(messages[key]?.message, `${localeDir} is missing ${key}`).toBeTruthy();
+      }
+    }
+  });
+});
+
+describe('restart onboarding locale coverage', () => {
+  const localeRoot = path.join(ROOT, '_locales');
+  const localeDirs = fs.readdirSync(localeRoot).filter((entry) => (
+    fs.statSync(path.join(localeRoot, entry)).isDirectory()
+  ));
+
+  it('ships a localized restart-onboarding label for every bundled locale catalog', () => {
+    for (const localeDir of localeDirs) {
+      const messages = JSON.parse(fs.readFileSync(path.join(localeRoot, localeDir, 'messages.json'), 'utf8'));
+      expect(messages.settingsRestartOnboarding?.message, `${localeDir} is missing settingsRestartOnboarding`).toBeTruthy();
+    }
+  });
+
+  it('does not leave the raw English onboarding term in non-English restart labels', () => {
+    for (const localeDir of localeDirs.filter((entry) => entry !== 'en')) {
+      const messages = JSON.parse(fs.readFileSync(path.join(localeRoot, localeDir, 'messages.json'), 'utf8'));
+      expect(messages.settingsRestartOnboarding.message.toLowerCase()).not.toContain('onboarding');
+    }
+  });
+});
+
 describe('validator locale support', () => {
   const source = readSource('tests/validate.js');
 

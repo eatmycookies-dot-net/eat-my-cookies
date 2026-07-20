@@ -26,7 +26,7 @@
   // Let OneTrust complete its own close/save lifecycle. Its footer controls remain the
   // source of truth for reopening privacy settings after the initial consent flow.
   const ONETRUST_VISUAL_HIDE_CLOSE_HOSTS = new Set([]);
-  const ONETRUST_SKIP_CONFIRM_HOSTS = new Set(['www.zoom.com']);
+  const ONETRUST_SKIP_CONFIRM_HOSTS = new Set(['www.zoom.com', 'www.fifa.com', 'fifa.com']);
   // Most OneTrust builds need the DOM toggles mirrored after UpdateConsent so visible
   // "Confirm My Choices" / Save actions do not read stale checkbox state. Zoom is the
   // known exception: touching the toggles at all corrupts OneTrust's internal reopen state.
@@ -38,6 +38,8 @@
   // the checkbox state with the native setter only so the UI reflects the API-written
   // consent without retriggering heavy OneTrust processing.
   const ONETRUST_VISUAL_API_DOM_SYNC_HOSTS = new Set([
+    'www.fifa.com',
+    'fifa.com',
     'www.reuters.com',
     'reuters.com',
     'www.thomsonreuters.com',
@@ -2091,6 +2093,14 @@
     try {
       const stopAt = Date.now() + 15000;
       let settling = false;
+      // A real footer/settings click is the user reviewing an already-saved choice.
+      // Stop the automation-only cleanup before OneTrust renders that center.
+      const onSettingsOpenerClick = (event) => {
+        if (!event.isTrusted) return;
+        const target = event.target;
+        if (!target?.closest?.(ONETRUST_OPEN_CONTROL_SELECTORS.join(', '))) return;
+        cleanup();
+      };
       const settleVisibleSurface = async () => {
         if (Date.now() > stopAt) {
           cleanup();
@@ -2117,11 +2127,13 @@
       if (root) {
         observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'aria-hidden'] });
       }
+      document.addEventListener('click', onSettingsOpenerClick, true);
       const cleanupTimer = setTimeout(cleanup, 16000);
       function cleanup() {
         try { clearInterval(intervalId); } catch (_) {}
         try { clearTimeout(cleanupTimer); } catch (_) {}
         try { observer.disconnect(); } catch (_) {}
+        try { document.removeEventListener('click', onSettingsOpenerClick, true); } catch (_) {}
       }
     } catch (_) {}
   }
@@ -2165,6 +2177,42 @@
     } catch (_) {}
   }
 
+  // UpdateConsent persists consent without necessarily updating OneTrust's reusable
+  // preference-center markup. Keep the controls visually aligned whenever that
+  // center is opened again, without dispatching events that can re-run consent
+  // processing on sites such as Reuters.
+  let oneTrustApiVisualStateSync = null;
+
+  function scheduleOneTrustApiVisualStateSync(expectedGroups = null) {
+    if (!expectedGroups || !Object.keys(expectedGroups).length) return;
+    try {
+      if (oneTrustApiVisualStateSync) {
+        oneTrustApiVisualStateSync.expectedGroups = expectedGroups;
+        return;
+      }
+      const state = { expectedGroups };
+      const sync = () => {
+        if (!hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS)) return;
+        for (const [id, checked] of Object.entries(state.expectedGroups)) {
+          applyOneTrustToggleSilentById(`ot-group-id-${id}`, Boolean(checked));
+        }
+      };
+      const burstSync = () => {
+        for (const ms of [0, 50, 150, 350, 750, 1500]) {
+          try { setTimeout(sync, ms); } catch (_) {}
+        }
+      };
+      const onClick = (event) => {
+        const target = event?.target;
+        if (!target?.closest?.(ONETRUST_OPEN_CONTROL_SELECTORS.join(', '))) return;
+        burstSync();
+      };
+      document.addEventListener('click', onClick, true);
+      oneTrustApiVisualStateSync = state;
+      burstSync();
+    } catch (_) {}
+  }
+
   function syncPreservedOneTrustPreferenceCenter(host = window.location.hostname, expectedGroups = null) {
     if (!shouldCloseOneTrustPreservingDom(host) || !expectedGroups) return false;
     let synced = false;
@@ -2205,13 +2253,20 @@
     return true;
   }
 
-  async function commitOneTrustPreferenceProfile(prefs, method, host = window.location.hostname, scrollPosition = null) {
-    const applyMethod = applyOneTrustPreferenceProfile(prefs);
+  async function commitOneTrustPreferenceProfile(
+    prefs,
+    method,
+    host = window.location.hostname,
+    scrollPosition = null,
+    applyMethodOverride = null,
+  ) {
+    const applyMethod = applyMethodOverride ?? applyOneTrustPreferenceProfile(prefs);
     if (!applyMethod) return false;
 
     const expectedGroups = expectedOneTrustConsentGroupsForPrefs(prefs);
     dispatchPreHandleIfOneTrustFlowStarts(expectedGroups, method, prefs?.globalPreference);
     await delay(250);
+    if (applyMethod === 'api') scheduleOneTrustApiVisualStateSync(expectedGroups);
 
     // When UpdateConsent already persisted consent (API path), skip "Confirm My Choices"
     // on hosts where that click corrupts OneTrust's state. settleOneTrustAfterAction

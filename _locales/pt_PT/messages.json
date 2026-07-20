@@ -38,6 +38,21 @@
   "popupMilestoneBuyBeer": {
     "message": "♥ Pague-me uma cerveja"
   },
+  "popupReviewTitle": {
+    "message": "Está a gostar do Eat My Cookies?"
+  },
+  "popupReviewNudge": {
+    "message": "Se o está mesmo a ajudar, deixaria uma avaliação honesta na Chrome Web Store?"
+  },
+  "popupReviewCta": {
+    "message": "Deixar avaliação"
+  },
+  "settingsReviewLink": {
+    "message": "Deixar avaliação ↗"
+  },
+  "settingsVersionLabel": {
+    "message": "Versão $1"
+  },
   "popupMilestoneDismiss": {
     "message": "Continuar →"
   },
@@ -186,7 +201,7 @@
     "message": "Código aberto no GitHub →"
   },
   "settingsRestartOnboarding": {
-    "message": "Reiniciar onboarding"
+    "message": "Reiniciar o guia"
   },
   "siteWarningAutoDisabledTitle": {
     "message": "Desativado automaticamente para $1"

@@ -1,6 +1,7 @@
 import {
   getSettings,
   updateSettings,
+  getStats,
   clearRecentActivity,
   getSiteOverrides,
   setSiteOverride,
@@ -10,6 +11,12 @@ import {
   setUnsupportedSite,
 } from '../utils/storage.js';
 import { formatBadgeCount, recordAction, recordSite, getNewMilestones } from '../utils/stats.js';
+import {
+  buildReviewPopupCard,
+  findTriggeredReviewPromptOpportunity,
+  milestoneCreatesPopupCard,
+  popupCardKey,
+} from '../utils/popup-cards.js';
 import {
   registerRepeatedAction,
   checkDuplicateAction,
@@ -24,6 +31,7 @@ import { getTranslator } from '../utils/i18n.js';
 const BADGE_COLOR = '#f5a623';
 const DEFAULT_ICON_PATHS = buildIconSet('icons/icon');
 const SUPPORTS_OPEN_POPUP = typeof chrome.action?.openPopup === 'function';
+
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   await ensureContextMenus();
   await refreshContextMenusForActiveTab();
@@ -61,6 +69,27 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
     await refreshContextMenusForActiveTab();
   }
 });
+
+async function queuePendingPopupCards(cards, { prepend = false } = {}) {
+  if (!Array.isArray(cards) || cards.length === 0) return;
+
+  const pending = await chrome.storage.local.get({ pendingMilestones: [] });
+  const existingCards = Array.isArray(pending.pendingMilestones) ? pending.pendingMilestones : [];
+  const orderedCards = prepend
+    ? [...cards, ...existingCards]
+    : [...existingCards, ...cards];
+
+  const dedupedCards = [];
+  const seenKeys = new Set();
+  for (const card of orderedCards) {
+    const key = popupCardKey(card);
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    dedupedCards.push(card);
+  }
+
+  await chrome.storage.local.set({ pendingMilestones: dedupedCards });
+}
 
 // Context menu click handler
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -192,7 +221,7 @@ async function handleActionFired({ site, method, preference, actionToken, noReje
   }
 
   const [{ stats, triggeredMilestones }, settings] = await Promise.all([
-    recordAction({ site, method, preference }),
+    recordAction({ site, method, preference, noticeOnly: noRejectAvailable }),
     getSettings(),
   ]);
 
@@ -200,6 +229,7 @@ async function handleActionFired({ site, method, preference, actionToken, noReje
     recordSite(site),
     clearUnsupportedSite(site),
   ]);
+  const statsAfterSiteRecord = await getStats();
 
   if (noRejectAvailable) {
     await setUnsupportedSite(site, {
@@ -221,11 +251,26 @@ async function handleActionFired({ site, method, preference, actionToken, noReje
   }
 
   const newMilestones = getNewMilestones(settings.milestonesShown, triggeredMilestones);
+  const settingsUpdate = {};
+
   if (newMilestones.length > 0) {
-    const shown = [...settings.milestonesShown, ...newMilestones.map((m) => m.id)];
-    await updateSettings({ milestonesShown: shown });
-    // Queue for popup to display on next open
-    await chrome.storage.local.set({ pendingMilestones: newMilestones });
+    settingsUpdate.milestonesShown = [...settings.milestonesShown, ...newMilestones.map((m) => m.id)];
+  }
+
+  if (Object.keys(settingsUpdate).length > 0) {
+    await updateSettings(settingsUpdate);
+  }
+
+  const milestoneCards = newMilestones.filter(milestoneCreatesPopupCard);
+  await queuePendingPopupCards(milestoneCards);
+
+  const triggeredReviewPrompt = findTriggeredReviewPromptOpportunity({
+    settings,
+    stats: statsAfterSiteRecord,
+  });
+
+  if (triggeredReviewPrompt) {
+    await queuePendingPopupCards([buildReviewPopupCard(statsAfterSiteRecord, triggeredReviewPrompt)], { prepend: true });
   }
 
   return { ok: true };

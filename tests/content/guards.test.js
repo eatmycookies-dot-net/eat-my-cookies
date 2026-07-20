@@ -784,7 +784,9 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).not.toContain('shouldUseOneTrustCustomFlow');
     expect(source).toContain("const ONETRUST_PRESERVE_DOM_CLOSE_HOSTS = new Set(['www.canadiantire.ca'])");
     expect(source).toContain('const ONETRUST_VISUAL_HIDE_CLOSE_HOSTS = new Set([]);');
-    expect(source).toContain("const ONETRUST_SKIP_CONFIRM_HOSTS = new Set(['www.zoom.com'])");
+    expect(source).toContain('const ONETRUST_SKIP_CONFIRM_HOSTS = new Set([');
+    expect(source).toContain("'www.zoom.com', 'www.fifa.com', 'fifa.com'");
+    expect(source).toContain("'www.fifa.com',\n    'fifa.com',\n    'www.reuters.com'");
     expect(source).toContain('const ONETRUST_SKIP_API_DOM_SYNC_HOSTS = new Set([');
     expect(source).toContain("'www.zoom.com'");
     expect(source).toContain('function installZoomOneTrustPrivacyChoicesBridge()');
@@ -838,14 +840,27 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain('await settleOneTrustAfterAction(host);');
     expect(source).toContain('return finalizeOneTrustHandled(method, 5000, host);');
     expect(source).toContain("return commitOneTrustPreferenceProfile(prefs, 'cmp_api:OneTrust:custom', host, scrollPosition);");
-    expect(source).toContain('async function commitOneTrustPreferenceProfile(prefs, method, host = window.location.hostname, scrollPosition = null) {');
+    expect(source).toContain('async function commitOneTrustPreferenceProfile(');
+    expect(source).toContain('applyMethodOverride = null');
     expect(source).toContain('if (!clicked) {');
     expect(source).toContain('restoreScrollPosition(scrollPosition);');
     expect(source).toContain('schedulePreservedOneTrustStateSync(host, expectedGroups);');
+    expect(source).toContain('scheduleOneTrustApiVisualStateSync(expectedGroups);');
     expect(source).toContain('scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);');
     expect(source).toContain('function scheduleOneTrustPostSaveSettle(host = window.location.hostname, scrollPosition = null, expectedGroups = null) {');
+    expect(source).toContain('const onSettingsOpenerClick = (event) => {');
+    expect(source).toContain('if (!event.isTrusted) return;');
+    expect(source).toContain('document.addEventListener(\'click\', onSettingsOpenerClick, true);');
+    expect(source).toContain('document.removeEventListener(\'click\', onSettingsOpenerClick, true);');
     expect(source).toContain('function syncPreservedOneTrustPreferenceCenter(host = window.location.hostname, expectedGroups = null) {');
     expect(source).toContain('hideVisibleOneTrustSurfaces();');
+  });
+
+  it('silently reconciles API-saved OneTrust groups whenever the preference center reopens', () => {
+    expect(source).toContain('function scheduleOneTrustApiVisualStateSync(expectedGroups = null) {');
+    expect(source).toContain('if (!hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS)) return;');
+    expect(source).toContain('applyOneTrustToggleSilentById(`ot-group-id-${id}`, Boolean(checked));');
+    expect(source).toContain('ONETRUST_OPEN_CONTROL_SELECTORS.join(\', \')');
   });
 
   it('can open OneTrust preference centers through ToggleInfoDisplay-backed controls', () => {

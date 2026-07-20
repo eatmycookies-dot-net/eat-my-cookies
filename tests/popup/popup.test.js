@@ -5,30 +5,34 @@
  *   renderStats    — total count and sites count displayed correctly
  *   renderPreference — Edit button visibility (custom vs other)
  *   renderBadges   — badge chips rendered with correct icon
- *   showMilestoneCard — uses milestone.icon, not hardcoded emoji
+ *   showMilestoneCard / showReviewCard — popup card content and CTA behavior
  *   formatSiteOverrideLabel helpers
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MILESTONES } from '../../utils/stats.js';
+
+const ROOT = path.resolve(fileURLToPath(import.meta.url), '../../..');
 
 // ── DOM setup ─────────────────────────────────────────────────────────────────
 // Build the minimal popup HTML structure that popup.js expects.
 
 function buildPopupDOM() {
   document.body.innerHTML = `
-    <div id="milestone-card" class="hidden">
-      <div class="milestone-icon">🍪</div>
-      <div id="milestone-name"></div>
-      <div id="milestone-desc"></div>
-      <div id="milestone-nudge"></div>
-      <a id="milestone-donate" href="#">Buy me a coffee</a>
-      <button id="milestone-dismiss">Dismiss</button>
-    </div>
-
     <div id="main-view">
       <div id="total-count">—</div>
       <div id="sites-count">across — sites</div>
+      <div id="milestone-card" class="hidden">
+        <div class="milestone-icon">🍪</div>
+        <div id="milestone-name"></div>
+        <div id="milestone-desc"></div>
+        <div id="milestone-nudge"></div>
+        <a id="milestone-donate" href="#">Buy me a coffee</a>
+        <button id="milestone-dismiss">Dismiss</button>
+      </div>
       <section id="site-warning" class="hidden">
         <div id="site-warning-title"></div>
         <div id="site-warning-text"></div>
@@ -138,22 +142,66 @@ function renderBadges(milestonesShown) {
   ).join('');
 }
 
-function showMilestoneCard(milestone) {
-  const card    = document.getElementById('milestone-card');
-  const iconEl  = card.querySelector('.milestone-icon');
+const CHROME_WEB_STORE_REVIEW_URL = 'https://chromewebstore.google.com/detail/eat-my-cookies/bjkadflopfgeolknbhkhoechfahdjkpf/reviews';
 
-  // ← This is the fix we made: use badge image, not hardcoded emoji
+function renderPopupCard({ icon, title, description, nudgeText, primaryHref, primaryText }) {
+  const card = document.getElementById('milestone-card');
+  const iconEl = card.querySelector('.milestone-icon');
+  const primaryLink = document.getElementById('milestone-donate');
+  const nudge = document.getElementById('milestone-nudge');
+
   if (iconEl) {
-    iconEl.innerHTML = milestone.icon
-      ? `<img src="${milestone.icon}" width="36" height="36" alt="">`
+    iconEl.innerHTML = icon
+      ? `<img src="${icon}" width="36" height="36" alt="">`
       : '🍪';
   }
 
-  document.getElementById('milestone-name').textContent = `${milestone.name} — Unlocked!`;
-  const n = milestone.threshold;
-  document.getElementById('milestone-desc').textContent =
-    `You've handled ${n.toLocaleString()} cookie ${n === 1 ? 'banner' : 'banners'}.`;
+  document.getElementById('milestone-name').textContent = title;
+  document.getElementById('milestone-desc').textContent = description;
+  nudge.textContent = nudgeText ?? '';
+  nudge.classList.toggle('hidden', !nudgeText);
+
+  if (primaryHref && primaryText) {
+    primaryLink.href = primaryHref;
+    primaryLink.textContent = primaryText;
+    primaryLink.classList.remove('hidden');
+  } else {
+    primaryLink.removeAttribute('href');
+    primaryLink.classList.add('hidden');
+  }
+
   card.classList.remove('hidden');
+}
+
+function showMilestoneCard(milestone) {
+  const isBeerTier = milestone.threshold >= 5000;
+  const isFirstMilestone = milestone.id === 'first_action';
+  const count = milestone.threshold;
+  renderPopupCard({
+    icon: milestone.icon,
+    title: `${milestone.name} — Unlocked!`,
+    description: `You've handled ${count.toLocaleString()} cookie ${count === 1 ? 'banner' : 'banners'}.`,
+    nudgeText: isFirstMilestone
+      ? ''
+      : (isBeerTier
+        ? "You've made it absurdly far. If you skipped the coffee, maybe buy me a beer so I can sober up."
+        : "Eat My Cookies is free. If it's saved you a minute, consider buying me a coffee."),
+    primaryHref: isFirstMilestone ? '' : 'https://ko-fi.com/eatmycookies',
+    primaryText: isFirstMilestone ? '' : (isBeerTier ? '♥ Buy Me a Beer' : '♥ Buy Me a Coffee'),
+  });
+}
+
+function showReviewCard(card) {
+  const relatedMilestone = MILESTONES.find((milestone) => milestone.id === (card.relatedMilestoneId ?? 'dozen'));
+  const count = Math.max(Number(card.count) || 0, 12);
+  renderPopupCard({
+    icon: relatedMilestone?.icon,
+    title: 'Enjoying Eat My Cookies?',
+    description: `You've handled ${count.toLocaleString()} cookie ${count === 1 ? 'banner' : 'banners'}.`,
+    nudgeText: 'If it is genuinely helping, would you leave an honest review on the Chrome Web Store?',
+    primaryHref: CHROME_WEB_STORE_REVIEW_URL,
+    primaryText: 'Leave a review',
+  });
 }
 
 function buildIssueUrl({ releaseVersion, issueVersion, currentDomain, buildMeta }) {
@@ -182,7 +230,7 @@ function buildIssueUrl({ releaseVersion, issueVersion, currentDomain, buildMeta 
 function renderVersionMeta(releaseVersion, currentDomain, buildMeta = null) {
   const displayVersion = buildMeta?.displayVersion ?? releaseVersion;
   const issueVersion = buildMeta?.displayVersion ?? releaseVersion;
-  document.getElementById('version-label').textContent = `v${displayVersion}`;
+  document.getElementById('version-label').textContent = `Version v${displayVersion}`;
   document.getElementById('report-bug-link').href = buildIssueUrl({ releaseVersion, issueVersion, currentDomain, buildMeta });
 }
 
@@ -190,6 +238,60 @@ function renderVersionMeta(releaseVersion, currentDomain, buildMeta = null) {
 
 beforeEach(() => {
   buildPopupDOM();
+});
+
+describe('popup.html structure', () => {
+  it('places the popup card between the stats block and the site warning', () => {
+    const source = fs.readFileSync(path.join(ROOT, 'popup/popup.html'), 'utf8');
+    const statsIndex = source.indexOf('<div class="stats-block">');
+    const cardIndex = source.indexOf('<div id="milestone-card" class="milestone-card hidden">');
+    const warningIndex = source.indexOf('<section id="site-warning" class="site-warning hidden">');
+
+    expect(statsIndex).toBeGreaterThan(-1);
+    expect(cardIndex).toBeGreaterThan(statsIndex);
+    expect(warningIndex).toBeGreaterThan(cardIndex);
+  });
+
+  it('places the review link on its own footer row below the support links', () => {
+    const source = fs.readFileSync(path.join(ROOT, 'popup/popup.html'), 'utf8');
+    const footerRowIndex = source.indexOf('<div class="popup-footer-row">');
+    const donateIndex = source.indexOf('<a id="donate-link"', footerRowIndex);
+    const sponsorIndex = source.indexOf('data-i18n="popupSponsorFooter"', footerRowIndex);
+    const reviewIndex = source.indexOf('<a id="review-link"', footerRowIndex);
+    const footerRowCloseIndex = source.indexOf('</div>', footerRowIndex);
+
+    expect(footerRowIndex).toBeGreaterThan(-1);
+    expect(donateIndex).toBeGreaterThan(footerRowIndex);
+    expect(sponsorIndex).toBeGreaterThan(donateIndex);
+    expect(footerRowCloseIndex).toBeGreaterThan(sponsorIndex);
+    expect(reviewIndex).toBeGreaterThan(footerRowCloseIndex);
+  });
+
+  it('places the version label below the restart onboarding button in settings', () => {
+    const source = fs.readFileSync(path.join(ROOT, 'popup/popup.html'), 'utf8');
+    const settingsMetaIndex = source.indexOf('<div class="settings-meta">');
+    const linksGroupIndex = source.indexOf('<div class="settings-meta-links">', settingsMetaIndex);
+    const settingsMetaCloseIndex = source.indexOf('</div>', linksGroupIndex);
+    const restartIndex = source.indexOf('<button id="restart-onboarding-btn"', settingsMetaCloseIndex);
+    const versionIndex = source.indexOf('<span id="version-label"', restartIndex);
+    const reportBugIndex = source.indexOf('<a id="report-bug-link"', linksGroupIndex);
+    const settingsReviewIndex = source.indexOf('<a id="settings-review-link"', linksGroupIndex);
+    const openSourceIndex = source.indexOf('data-i18n="settingsOpenSource"', linksGroupIndex);
+
+    expect(settingsMetaIndex).toBeGreaterThan(-1);
+    expect(linksGroupIndex).toBeGreaterThan(settingsMetaIndex);
+    expect(reportBugIndex).toBeGreaterThan(linksGroupIndex);
+    expect(settingsReviewIndex).toBeGreaterThan(reportBugIndex);
+    expect(openSourceIndex).toBeGreaterThan(settingsReviewIndex);
+    expect(restartIndex).toBeGreaterThan(settingsMetaCloseIndex);
+    expect(versionIndex).toBeGreaterThan(restartIndex);
+  });
+
+  it('uses the settings-specific review label for the settings review link', () => {
+    const source = fs.readFileSync(path.join(ROOT, 'popup/popup.html'), 'utf8');
+    expect(source).toContain('id="settings-review-link"');
+    expect(source).toContain('data-i18n="settingsReviewLink"');
+  });
 });
 
 // renderStats
@@ -339,12 +441,41 @@ describe('showMilestoneCard()', () => {
     showMilestoneCard({ ...firstMilestone, threshold: 12 });
     expect(document.getElementById('milestone-desc').textContent).toContain('banners');
   });
+
+  it('hides the primary CTA on the very first milestone', () => {
+    showMilestoneCard(firstMilestone);
+    expect(document.getElementById('milestone-donate').classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('milestone-nudge').classList.contains('hidden')).toBe(true);
+  });
+
+  it('shows the donation CTA on later milestones like before', () => {
+    showMilestoneCard({ ...firstMilestone, id: 'quarter_crunch', threshold: 25 });
+    expect(document.getElementById('milestone-donate').classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('milestone-donate').textContent).toBe('♥ Buy Me a Coffee');
+    expect(document.getElementById('milestone-nudge').classList.contains('hidden')).toBe(false);
+  });
+});
+
+describe('showReviewCard()', () => {
+  it('renders a review CTA instead of a donation CTA', () => {
+    showReviewCard({ kind: 'review', relatedMilestoneId: 'dozen', count: 12 });
+    expect(document.getElementById('milestone-donate').textContent).toBe('Leave a review');
+    expect(document.getElementById('milestone-donate').href).toBe(CHROME_WEB_STORE_REVIEW_URL);
+  });
+
+  it('uses the dozen badge icon for the review prompt', () => {
+    const dozen = MILESTONES.find((milestone) => milestone.id === 'dozen');
+    showReviewCard({ kind: 'review', relatedMilestoneId: 'dozen', count: 20 });
+    const img = document.querySelector('#milestone-card .milestone-icon img');
+    expect(img).not.toBeNull();
+    expect(img.getAttribute('src')).toBe(dozen.icon);
+  });
 });
 
 describe('renderVersionMeta()', () => {
   it('shows the runtime version', () => {
     renderVersionMeta('1.0.1', 'www.theguardian.com');
-    expect(document.getElementById('version-label').textContent).toBe('v1.0.1');
+    expect(document.getElementById('version-label').textContent).toBe('Version v1.0.1');
   });
 
   it('includes release version and domain in the bug report url', () => {
@@ -361,7 +492,7 @@ describe('renderVersionMeta()', () => {
     renderVersionMeta('1.0.1', 'www.theguardian.com', { displayVersion: '1.0.1-dev.20260429T040500Z' });
     const href = document.getElementById('report-bug-link').href;
     const parsed = new URL(href);
-    expect(document.getElementById('version-label').textContent).toBe('v1.0.1-dev.20260429T040500Z');
+    expect(document.getElementById('version-label').textContent).toBe('Version v1.0.1-dev.20260429T040500Z');
     expect(parsed.searchParams.get('title')).toBe('[Banner not handled][v1.0.1-dev.20260429T040500Z] www.theguardian.com');
     expect(parsed.searchParams.get('body')).toContain('Unpacked build: `1.0.1-dev.20260429T040500Z`');
   });

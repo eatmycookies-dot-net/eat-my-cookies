@@ -86,6 +86,17 @@ describe('recordAction()', () => {
     expect(typeof stats.lastActionDate).toBe('string');
   });
 
+  it('stores whether the latest action was notice-only', async () => {
+    const { stats } = await recordAction({
+      site: 'notice.com',
+      method: 'm',
+      preference: 'reject_all',
+      noticeOnly: true,
+    });
+    expect(stats.lastActionNoticeOnly).toBe(true);
+    expect(stats.recentActivity[0].noticeOnly).toBe(true);
+  });
+
   it('prepends activity to recentActivity', async () => {
     await recordAction({ site: 'first.com', method: 'm', preference: 'reject_all' });
     const { stats } = await recordAction({ site: 'second.com', method: 'm', preference: 'reject_all' });
@@ -95,7 +106,15 @@ describe('recordAction()', () => {
 
   it('trims recentActivity to max 20 entries', async () => {
     // Seed 19 actions
-    await setStats({ totalActionsCount: 19, sitesHandled: 0, handledSites: [], recentActivity: Array(19).fill({ site: 'old.com', method: 'm', preference: 'reject_all', timestamp: 't' }), lastActionDate: null, lastActionSite: null });
+    await setStats({
+      totalActionsCount: 19,
+      sitesHandled: 0,
+      handledSites: [],
+      recentActivity: Array(19).fill({ site: 'old.com', method: 'm', preference: 'reject_all', noticeOnly: false, timestamp: 't' }),
+      lastActionDate: null,
+      lastActionSite: null,
+      lastActionNoticeOnly: false,
+    });
     const { stats } = await recordAction({ site: 'new.com', method: 'm', preference: 'reject_all' });
     expect(stats.recentActivity.length).toBe(20);
     const { stats: s2 } = await recordAction({ site: 'newest.com', method: 'm', preference: 'reject_all' });
@@ -110,7 +129,15 @@ describe('recordAction()', () => {
 
   it('does not re-trigger a milestone already reached', async () => {
     // Seed count at threshold already
-    await setStats({ totalActionsCount: 1, sitesHandled: 0, handledSites: [], recentActivity: [], lastActionDate: null, lastActionSite: null });
+    await setStats({
+      totalActionsCount: 1,
+      sitesHandled: 0,
+      handledSites: [],
+      recentActivity: [],
+      lastActionDate: null,
+      lastActionSite: null,
+      lastActionNoticeOnly: false,
+    });
     const { triggeredMilestones } = await recordAction({ site: 'a.com', method: 'm', preference: 'reject_all' });
     // first_action (threshold=1) should NOT trigger since prev was already 1
     const firstBite = triggeredMilestones.find((m) => m.id === 'first_action');
@@ -118,7 +145,15 @@ describe('recordAction()', () => {
   });
 
   it('triggers baker dozen milestone at threshold=12', async () => {
-    await setStats({ totalActionsCount: 11, sitesHandled: 0, handledSites: [], recentActivity: [], lastActionDate: null, lastActionSite: null });
+    await setStats({
+      totalActionsCount: 11,
+      sitesHandled: 0,
+      handledSites: [],
+      recentActivity: [],
+      lastActionDate: null,
+      lastActionSite: null,
+      lastActionNoticeOnly: false,
+    });
     const { triggeredMilestones } = await recordAction({ site: 'a.com', method: 'm', preference: 'reject_all' });
     const bakers = triggeredMilestones.find((m) => m.id === 'dozen');
     expect(bakers).toBeDefined();

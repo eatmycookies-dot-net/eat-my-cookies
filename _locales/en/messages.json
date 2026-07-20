@@ -51,6 +51,26 @@
     "message": "♥ Buy Me a Beer",
     "description": "Milestone donate CTA for higher thresholds"
   },
+  "popupReviewTitle": {
+    "message": "Enjoying Eat My Cookies?",
+    "description": "Review prompt title shown after a successful streak"
+  },
+  "popupReviewNudge": {
+    "message": "If it's genuinely helping, would you leave an honest review on the Chrome Web Store?",
+    "description": "Review prompt copy asking for an honest Chrome Web Store review"
+  },
+  "popupReviewCta": {
+    "message": "Leave a review",
+    "description": "Review prompt primary CTA"
+  },
+  "settingsReviewLink": {
+    "message": "Leave a review ↗",
+    "description": "Settings footer review link"
+  },
+  "settingsVersionLabel": {
+    "message": "Version $1",
+    "description": "Settings footer version label"
+  },
   "popupMilestoneDismiss": {
     "message": "Keep Going →",
     "description": "Milestone dismiss CTA"
