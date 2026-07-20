@@ -28,6 +28,7 @@ It runs locally in the browser, applies the preference you choose, keeps a runni
 ## Support Status
 
 Current publisher support and caveats are tracked in [docs/site-support-matrix.md](docs/site-support-matrix.md).
+Current CMP expansion priorities and the split between already-implemented families versus genuinely missing ones are tracked in [docs/cmp-roadmap.md](docs/cmp-roadmap.md).
 That file is the best snapshot for questions like:
 
 - which sites are currently solid

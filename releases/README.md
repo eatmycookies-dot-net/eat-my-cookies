@@ -6,15 +6,41 @@ Project message for release context:
 
 Cookie banners are annoying. Eat My Cookies is a free Chrome extension that handles them based on user preferences, so people don't have to fix them site by site. No backend, no tracking, no ads.
 
-## Upcoming (unreleased)
+## v1.3.0
+
+### OneTrust Refactor and Stability Fixes
+
+- Refactored OneTrust handling into a more general privacy-center flow so the extension can:
+  - recognize real OneTrust action surfaces more reliably
+  - open settings through footer / privacy-choice controls when that is the only safe route
+  - preserve and re-sync preference-center state after save instead of relying on brittle one-shot dismissal behavior
+- Generalized OneTrust CCPA / privacy-choice detection away from a small host allowlist and toward structural signals such as privacy-choice controls and `_BG` group ids.
+- Improved OneTrust save handling so the extension now:
+  - prefers the real reject / save UI when available
+  - restores scroll position after preference-center interactions
+  - retries final dismissal more safely after consent is already written
+  - keeps reusable preference-center DOM where the host depends on it
+- Fixed `www.canadiantire.ca` OneTrust behavior by avoiding footer-widget false positives and preserving the reusable preference-center structure instead of tearing down the underlying DOM.
+- Fixed `www.zoom.com` OneTrust behavior with dedicated handling for footer / privacy-choice reopen paths so the extension no longer fights Zoom's own settings links after consent handling.
+- Added broader validation and guard coverage for the OneTrust refactor, including focused regression scripts for Canadian Tire and Zoom plus stronger source assertions in `tests/content/guards.test.js`.
+
+### Cookiebot / Usercentrics Bug Fixes
+
+- Fixed Cookiebot custom-preference handling so custom category consent is written and verified more reliably before the dialog is hidden.
+- Added a host-specific Cookiebot / Usercentrics fix for `allroundautomations.com`.
+
+### Additional CMP Coverage and Validation Tooling
+
+- Added first-class handling for Investis Cookie Manager preference-center flows.
+- Expanded public support and validation documentation around `docs/site-support-matrix.md`, `docs/cmp-impact-map.md`, and `docs/cmp-roadmap.md`, while moving raw CMP research out of the public docs tree so release notes no longer point at stale support claims.
 
 ### Brazil / LGPD Coverage Expansion
 
-- Expanded Brazilian LGPD coverage with first-class support for Globo, SBT, XP, `e-core.com` (HubSpot), the Privacy Tools lightweight banner family, Bradesco, Netshoes, `gov.br`, `sp.gov.br`, and Correios.
+- Expanded Brazilian LGPD coverage with first-class support for Globo, SBT, XP, `e-core.com` (AdOpt / HubSpot hybrid), the Privacy Tools lightweight banner family, Bradesco, Netshoes, `gov.br`, `sp.gov.br`, and Correios.
 - Added fixture coverage for the new Brazil-specific banner families so selector and dismissal regressions are caught locally before live-site validation.
 - Added live regression targets in `tests/sites.json` for `globo.com`, `sbt.com.br`, `e-core.com`, `americanas.com.br`, `banco.bradesco`, `netshoes.com.br`, `gov.br`, `sp.gov.br`, `correios.com.br`, and `tim.com.br`.
 - Non-VPN live e2e validation now passes for the sites above, plus previously added Brazil targets such as `terra.com.br`, `exame.com` (accept path), and `globo.com`.
-- Documented the remaining Browsec/VPN limitation more clearly: in VPN mode the extension still fails to record activity in the browser context (`recorded=none`, `emcPref=n/a`), so current Brazil VPN failures are a validator/runtime issue rather than missing LGPD selectors.
+- Documented the remaining Browsec/VPN limitation more clearly: the old validator-side `emcPref=n/a` issue was fixed by preferring Chromium-based launches in VPN mode, but long Browsec-backed VPN sweeps can still degrade into `ERR_TUNNEL_CONNECTION_FAILED`, so targeted single-site VPN reruns are the trustworthy path.
 
 ### Canada / PIPEDA Initial Wave
 
@@ -23,13 +49,13 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 - Non-VPN live e2e now passes for:
   - `rbcroyalbank.com` → OneTrust (`Accept All` and `Reject All`)
   - `nhl.com` → OneTrust (`Reject All`)
+  - `td.com` → OneTrust (current live path records consent successfully on rerun)
+  - `canadiantire.ca` → OneTrust (current homepage reject/custom paths now pass again)
   - `theweathernetwork.com` → Didomi / `privacy-center.org` preferences modal (`Accept All` and `Reject All`)
 - Strengthened the generic Didomi handler so sites that expose a manage/preferences entry point first, rather than the lightweight notice layer, can still be handled end to end through the full Didomi preferences modal.
 - Strengthened the generic Didomi handler again so that, when the SDK is already present but the site does not expose a visible entry point, the extension can try Didomi's public `preferences.show()` API before giving up.
 - Documented the current honest follow-up set instead of over-claiming support:
-  - `td.com` currently skips because no banner surfaced in the validation session
-  - `canadiantire.ca` currently skips because the visible `Cookie Settings` entry point is persistent, but a first-load dismissible banner was not present on rerun
-  - `lapresse.ca` exposes a public `nuglif.consentHandler`, but in sampled anonymous sessions it still behaves like a no-op wrapper
+  - `lapresse.ca` exposes a public `nuglif.consentHandler`, but in sampled anonymous sessions it still behaves like a no-op wrapper and has not yet produced a stable public automation target
 
 ### Quebec / Law 25 Initial Wave
 
@@ -268,7 +294,7 @@ Cookie banners are annoying. Eat My Cookies is a free Chrome extension that hand
 
 ## Packaging
 
-- Upload artifact: `eat-my-cookies-v<version>.zip`
+- Upload artifact: `eat-my-cookies-v1.3.0.zip`
 - Run `npm run build` to generate a fresh `dist/`.
 - Run `npm run version:patch` (or `version:minor` / `version:major`) before packaging a new public release for an already-published version line.
 - Run `npm run build:zip` to generate a clean Chrome Web Store package in this folder.
