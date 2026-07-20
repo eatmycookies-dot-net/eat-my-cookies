@@ -6,6 +6,20 @@ Project message for release context:
 
 Cookie banners are annoying. Eat My Cookies is a free Chrome extension that handles them based on user preferences, so people don't have to fix them site by site. No backend, no tracking, no ads.
 
+## v1.3.1
+
+### OneTrust Footer Review and State Reliability
+
+- Fixed OneTrust footer/settings reopen behavior for Reuters and the shared API-backed OneTrust path. Once consent is applied, a user opening `Manage Cookies`, `Cookie Settings`, or a comparable structural privacy control now sees the publisher's interactive preference center instead of a second extension dismissal pass.
+- Reopened OneTrust centers silently reflect the consent group IDs already written through the OneTrust API. This is group-id based, does not rely on English button/category text, and avoids synthetic toggle events that can freeze Reuters-class sites.
+- Added focused FIFA persisted-state and Reuters trusted-footer-click regression coverage, plus OneTrust guard coverage and implementation notes.
+
+### Review Request and Popup Polish
+
+- Added an optional, respectful Chrome Web Store review prompt. It is entirely local: it appears only after a recent, meaningful usage streak, never asks for a particular rating, and is limited to one prompt per activity range.
+- Added permanent `Leave a review` links to the popup and Settings screen.
+- Refined milestone/review popup cards, settings metadata layout, and related translations.
+
 ## v1.3.0
 
 ### OneTrust Refactor and Stability Fixes

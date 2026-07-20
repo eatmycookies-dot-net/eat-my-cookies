@@ -21,8 +21,10 @@ It runs locally in the browser, applies the preference you choose, keeps a runni
 - Uses publisher-owned privacy APIs and shared first-party signals when that path is safer than banner clicking, including BBC's Sourcepoint US privacy flow and LA Times' `rdp` / `c_rdp` CCPA path.
 - Falls back to site-specific warning flows when a publisher only exposes accept-or-pay style choices.
 - Tracks recent activity, total handled prompts, and collectible cookie badges.
+- Keeps OneTrust settings links usable after handling: when you open a publisher's footer privacy center to review choices, the extension preserves the saved group-id state but does not dismiss or re-apply the modal.
 - Site exceptions let you disable the extension on individual domains or always accept on specific sites.
 - Popup and context-menu UI now support autodetected language with an optional manual override.
+- Offers an optional, honest Chrome Web Store review prompt only after the extension has been useful over time, with permanent review links in the popup and settings.
 - Packages cleanly for local loading and Chrome Web Store submission.
 
 ## Support Status
@@ -159,6 +161,7 @@ Those are not always the same thing, especially for cross-origin iframe CMPs suc
 - No account.
 - No analytics service.
 - Preferences and stats are stored in Chrome extension storage on the user’s machine.
+- The review prompt is decided locally from on-device activity. It is shown only after a recent successful streak (at least 12 handled prompts across 3 sites, after 3 days), is limited to one prompt per activity range, and never requires a rating or sends usage data anywhere.
 
 ## Local Development
 
