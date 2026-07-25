@@ -811,18 +811,24 @@
       "detectors": [
         { "type": "css_selector", "value": "#shopify-pc__banner" },
         { "type": "css_selector", "value": ".shopify-pc__banner__dialog" },
-        { "type": "css_selector", "value": "#shopify-pc__prefs__dialog" }
+        { "type": "css_selector", "value": "#shopify-pc__prefs__dialog" },
+        { "type": "css_selector", "value": "#privacy-cookie-banner" },
+        { "type": "css_selector", "value": "#privacy-preferences-modal" }
       ],
       "actions": {
         "reject_all": [
           { "type": "click", "selector": "#shopify-pc__banner__btn-decline" },
           { "type": "click", "selector": "#shopify-pc__prefs__header-decline" },
-          { "type": "click", "selector": "button.shopify-pc__banner__btn-decline" }
+          { "type": "click", "selector": "button.shopify-pc__banner__btn-decline" },
+          { "type": "click", "selector": "#privacy-banner-decline-button" },
+          { "type": "click", "selector": "#privacy-preferences-decline-all-button" }
         ],
         "accept_all": [
           { "type": "click", "selector": "#shopify-pc__banner__btn-accept" },
           { "type": "click", "selector": "#shopify-pc__prefs__header-accept" },
-          { "type": "click", "selector": "button.shopify-pc__banner__btn-accept" }
+          { "type": "click", "selector": "button.shopify-pc__banner__btn-accept" },
+          { "type": "click", "selector": "#privacy-banner-accept-button" },
+          { "type": "click", "selector": "#privacy-preferences-accept-all-button" }
         ]
       }
     },

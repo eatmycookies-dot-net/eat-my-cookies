@@ -6,6 +6,28 @@ Project message for release context:
 
 Cookie banners are annoying. Eat My Cookies is a free Chrome extension that handles them based on user preferences, so people don't have to fix them site by site. No backend, no tracking, no ads.
 
+## v1.3.2
+
+### Shopify Account Privacy Support
+
+- Added support for Shopify's newer native account privacy UI, including the bottom `Cookie consent` banner and the `Manage preferences` modal seen on `shopify.com` account pages.
+- Expanded generic Shopify Customer Privacy detection from the older storefront `shopify-pc__*` markup to the newer stable `privacy-*` IDs, including `#privacy-cookie-banner`, `#privacy-banner-manage-preferences-button`, and `#privacy-preferences-modal`.
+- Custom Shopify preferences now handle generated checkbox IDs by matching nearby category labels such as `Personalization`, `Marketing`, and `Analytics`, while preserving the existing storefront toggle-id path.
+- Added local fixture coverage for Shopify account privacy flows:
+  - `Accept`
+  - `Decline`
+  - `Manage preferences` → mixed custom save
+  - direct preferences-modal custom save
+- Updated Shopify validation metadata, CMP fingerprinting, support docs, and impact-map notes. Logged-in `shopify.com` account pages remain marked fixture-covered pending live/session validation.
+
+### Validation
+
+- `npm run test`
+- `npm run verify`
+- `npm run check:support-drift`
+- `npm run check:hygiene`
+- Focused Shopify fixture validation for accept, reject, custom-from-banner, and direct-modal custom paths
+
 ## v1.3.1
 
 ### OneTrust Footer Review and State Reliability

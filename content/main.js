@@ -1108,11 +1108,11 @@ async function handleShopifyBanner(prefs) {
   if (prefs?.globalPreference === 'accept_all') {
     const accepted = clickShopifyButton(
       banner,
-      ['#shopify-pc__banner__btn-accept'],
+      ['#shopify-pc__banner__btn-accept', '#privacy-banner-accept-button'],
       ['accept']
     ) || clickShopifyButton(
       dialog,
-      ['#shopify-pc__prefs__header-accept'],
+      ['#shopify-pc__prefs__header-accept', '#privacy-preferences-accept-all-button'],
       ['accept all']
     );
     if (!accepted) return false;
@@ -1124,11 +1124,11 @@ async function handleShopifyBanner(prefs) {
   if (prefs?.globalPreference === 'reject_all') {
     const rejected = clickShopifyButton(
       banner,
-      ['#shopify-pc__banner__btn-decline'],
+      ['#shopify-pc__banner__btn-decline', '#privacy-banner-decline-button'],
       ['decline']
     ) || clickShopifyButton(
       dialog,
-      ['#shopify-pc__prefs__header-decline'],
+      ['#shopify-pc__prefs__header-decline', '#privacy-preferences-decline-all-button'],
       ['decline all', 'reject all']
     );
     if (!rejected) return false;
@@ -1148,8 +1148,8 @@ async function handleShopifyBanner(prefs) {
   const allDesiredOff = Object.values(desiredStates).every((value) => !value);
 
   if (allDesiredOn) {
-    if (clickShopifyButton(dialog, ['#shopify-pc__prefs__header-accept'], ['accept all']) ||
-      clickShopifyButton(banner, ['#shopify-pc__banner__btn-accept'], ['accept'])) {
+    if (clickShopifyButton(dialog, ['#shopify-pc__prefs__header-accept', '#privacy-preferences-accept-all-button'], ['accept all']) ||
+      clickShopifyButton(banner, ['#shopify-pc__banner__btn-accept', '#privacy-banner-accept-button'], ['accept'])) {
       if (await waitForSelectorsToDisappear(shopifyWatchSelectors(), 7000)) {
         await reportAction('site_specific:shopify:accept_all', prefs.globalPreference);
         return true;
@@ -1158,8 +1158,8 @@ async function handleShopifyBanner(prefs) {
   }
 
   if (allDesiredOff) {
-    if (clickShopifyButton(dialog, ['#shopify-pc__prefs__header-decline'], ['decline all', 'reject all']) ||
-      clickShopifyButton(banner, ['#shopify-pc__banner__btn-decline'], ['decline'])) {
+    if (clickShopifyButton(dialog, ['#shopify-pc__prefs__header-decline', '#privacy-preferences-decline-all-button'], ['decline all', 'reject all']) ||
+      clickShopifyButton(banner, ['#shopify-pc__banner__btn-decline', '#privacy-banner-decline-button'], ['decline'])) {
       if (await waitForSelectorsToDisappear(shopifyWatchSelectors(), 7000)) {
         await reportAction('site_specific:shopify:reject_all', prefs.globalPreference);
         return true;
@@ -1169,22 +1169,35 @@ async function handleShopifyBanner(prefs) {
 
   let activeDialog = dialog;
   if (!activeDialog) {
-    const opened = clickShopifyButton(banner, ['#shopify-pc__banner__btn-manage-prefs'], ['manage preferences', 'manage']);
+    const opened = clickShopifyButton(
+      banner,
+      ['#shopify-pc__banner__btn-manage-prefs', '#privacy-banner-manage-preferences-button'],
+      ['manage preferences', 'manage']
+    );
     if (!opened) return false;
-    const visible = await waitForSiteSelectors(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog'], 5000);
+    const visible = await waitForSiteSelectors(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog', '#privacy-preferences-modal'], 5000);
     if (!visible) return false;
     activeDialog = findVisibleShopifyPrefsDialog();
     if (!activeDialog) return false;
   }
 
-  const appliedPreferences = applyShopifyToggleState(activeDialog, 'shopify-pc__prefs__preferences-input', desiredStates.preferences);
-  const appliedMarketing = applyShopifyToggleState(activeDialog, 'shopify-pc__prefs__marketing-input', desiredStates.marketing);
-  const appliedAnalytics = applyShopifyToggleState(activeDialog, 'shopify-pc__prefs__analytics-input', desiredStates.analytics);
+  const appliedPreferences = applyShopifyGroupState(activeDialog, {
+    ids: ['shopify-pc__prefs__preferences-input'],
+    labels: [/personalization/i, /preferences/i, /functional/i],
+  }, desiredStates.preferences);
+  const appliedMarketing = applyShopifyGroupState(activeDialog, {
+    ids: ['shopify-pc__prefs__marketing-input'],
+    labels: [/marketing/i, /advertising/i],
+  }, desiredStates.marketing);
+  const appliedAnalytics = applyShopifyGroupState(activeDialog, {
+    ids: ['shopify-pc__prefs__analytics-input'],
+    labels: [/analytics/i, /performance/i],
+  }, desiredStates.analytics);
   if (!appliedPreferences || !appliedMarketing || !appliedAnalytics) return false;
 
   await new Promise((resolve) => setTimeout(resolve, 250));
 
-  const saved = clickShopifyButton(activeDialog, ['#shopify-pc__prefs__header-save'], ['save my choices', 'save choices', 'save']);
+  const saved = clickShopifyButton(activeDialog, ['#shopify-pc__prefs__header-save', '#privacy-preferences-save-button'], ['save my choices', 'save choices', 'save']);
   if (!saved) return false;
   if (!(await waitForSelectorsToDisappear(shopifyWatchSelectors(), 7000))) return false;
 
@@ -2955,8 +2968,12 @@ function shouldUseShopifyMainWorldOnly(prefs) {
     '#shopify-pc__prefs',
     '#shopify-pc__prefs__dialog',
     '.shopify-pc__prefs__dialog',
+    '#privacy-cookie-banner',
+    '#privacy-preferences-modal',
     '#shopify-pc__banner__btn-manage-prefs',
+    '#privacy-banner-manage-preferences-button',
     '#shopify-pc__prefs__header-save',
+    '#privacy-preferences-save-button',
   ].some((selector) => document.querySelector(selector));
 }
 
@@ -3088,6 +3105,8 @@ function shopifyWatchSelectors() {
     '#shopify-pc__prefs',
     '#shopify-pc__prefs__dialog',
     '.shopify-pc__prefs__dialog',
+    '#privacy-cookie-banner',
+    '#privacy-preferences-modal',
   ];
 }
 
@@ -3095,6 +3114,7 @@ function findVisibleShopifyBanner() {
   return firstVisibleElementOnPage([
     '#shopify-pc__banner',
     '.shopify-pc__banner__dialog',
+    '#privacy-cookie-banner',
   ]);
 }
 
@@ -3102,6 +3122,7 @@ function findVisibleShopifyPrefsDialog() {
   return firstVisibleElementOnPage([
     '#shopify-pc__prefs__dialog',
     '.shopify-pc__prefs__dialog',
+    '#privacy-preferences-modal',
   ]);
 }
 
@@ -3116,6 +3137,20 @@ function firstVisibleElementOnPage(selectors) {
 
 function applyShopifyToggleState(root, id, checked) {
   const toggle = findShopifyToggleInRoot(root, id);
+  if (!(toggle instanceof HTMLInputElement)) return false;
+  return applyShopifyToggle(toggle, checked);
+}
+
+function applyShopifyGroupState(root, { ids = [], labels = [] }, checked) {
+  for (const id of ids) {
+    if (applyShopifyToggleState(root, id, checked)) return true;
+  }
+  const toggle = findShopifyToggleByLabel(root, labels);
+  if (!toggle) return false;
+  return applyShopifyToggle(toggle, checked);
+}
+
+function applyShopifyToggle(toggle, checked) {
   if (!(toggle instanceof HTMLInputElement)) return false;
   if (toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
   if (Boolean(toggle.checked) === checked) return true;
@@ -3138,6 +3173,30 @@ function findShopifyToggleInRoot(root, id) {
   const escaped = typeof CSS?.escape === 'function' ? CSS.escape(id) : id;
   const matches = Array.from(root.querySelectorAll(`#${escaped}`));
   return matches.find((el) => el instanceof HTMLInputElement && isVisible(el)) ?? null;
+}
+
+function findShopifyToggleByLabel(root, labelPatterns) {
+  if (!root?.querySelectorAll) return null;
+  const toggles = Array.from(root.querySelectorAll('input[type="checkbox"], input[role="switch"]'));
+  return toggles.find((toggle) => {
+    if (!(toggle instanceof HTMLInputElement)) return false;
+    if (toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+    const text = shopifyToggleText(toggle);
+    if (!text) return false;
+    return labelPatterns.some((pattern) => pattern.test(text));
+  }) ?? null;
+}
+
+function shopifyToggleText(toggle) {
+  const pieces = [];
+  for (const label of Array.from(toggle.labels ?? [])) {
+    pieces.push(label.textContent ?? '');
+  }
+  const row = toggle.closest('label, li, div[role="group"], div');
+  if (row) pieces.push(row.textContent ?? '');
+  const parentRow = row?.parentElement?.closest?.('li, div[role="group"], div');
+  if (parentRow) pieces.push(parentRow.textContent ?? '');
+  return pieces.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 async function waitForSelectorsToDisappear(selectors, timeoutMs) {

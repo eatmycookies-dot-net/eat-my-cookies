@@ -300,6 +300,86 @@ const CASES = [
       state?.bannerVisible === false,
   },
   {
+    name: 'Shopify account privacy accept_all',
+    path: '/shopify-account-privacy.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:shopify' &&
+      state?.mode === 'accept_all' &&
+      state?.preferences === true &&
+      state?.analytics === true &&
+      state?.marketing === true &&
+      state?.bannerVisible === false &&
+      state?.modalVisible === false,
+  },
+  {
+    name: 'Shopify account privacy reject_all',
+    path: '/shopify-account-privacy.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:shopify' &&
+      state?.mode === 'reject_all' &&
+      state?.preferences === false &&
+      state?.analytics === false &&
+      state?.marketing === false &&
+      state?.bannerVisible === false &&
+      state?.modalVisible === false,
+  },
+  {
+    name: 'Shopify account privacy custom',
+    path: '/shopify-account-privacy.html',
+    prefs: {
+      globalPreference: 'custom',
+      functional: true,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:shopify:custom' &&
+      state?.mode === 'custom' &&
+      state?.preferences === true &&
+      state?.analytics === false &&
+      state?.marketing === false &&
+      state?.bannerVisible === false &&
+      state?.modalVisible === false,
+  },
+  {
+    name: 'Shopify account privacy direct modal custom',
+    path: '/shopify-account-privacy.html?modal=1',
+    prefs: {
+      globalPreference: 'custom',
+      functional: false,
+      analytics: true,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:shopify:custom' &&
+      state?.mode === 'custom' &&
+      state?.preferences === false &&
+      state?.analytics === true &&
+      state?.marketing === false &&
+      state?.bannerVisible === false &&
+      state?.modalVisible === false,
+  },
+  {
     name: 'Didomi preferences accept_all',
     path: '/didomi-preferences.html',
     prefs: {

@@ -109,14 +109,22 @@ const SBT_LGPD_BANNER_TEXT_PATTERNS = [
 const SHOPIFY_ACTIONABLE_SURFACE_SELECTORS = [
   '#shopify-pc__banner',
   '.shopify-pc__banner__dialog',
+  '#privacy-cookie-banner',
   '#shopify-pc__prefs__dialog',
   '.shopify-pc__prefs__dialog',
+  '#privacy-preferences-modal',
   '#shopify-pc__banner__btn-accept',
   '#shopify-pc__banner__btn-decline',
   '#shopify-pc__banner__btn-manage-prefs',
+  '#privacy-banner-accept-button',
+  '#privacy-banner-decline-button',
+  '#privacy-banner-manage-preferences-button',
   '#shopify-pc__prefs__header-accept',
   '#shopify-pc__prefs__header-decline',
   '#shopify-pc__prefs__header-save',
+  '#privacy-preferences-accept-all-button',
+  '#privacy-preferences-decline-all-button',
+  '#privacy-preferences-save-button',
   '#shopify-pc__prefs__preferences-input',
   '#shopify-pc__prefs__marketing-input',
   '#shopify-pc__prefs__analytics-input',
@@ -124,31 +132,39 @@ const SHOPIFY_ACTIONABLE_SURFACE_SELECTORS = [
 const SHOPIFY_BANNER_ACCEPT_SELECTORS = [
   '#shopify-pc__banner__btn-accept',
   'button.shopify-pc__banner__btn-accept',
+  '#privacy-banner-accept-button',
 ];
 const SHOPIFY_BANNER_DECLINE_SELECTORS = [
   '#shopify-pc__banner__btn-decline',
   'button.shopify-pc__banner__btn-decline',
+  '#privacy-banner-decline-button',
 ];
 const SHOPIFY_BANNER_MANAGE_SELECTORS = [
   '#shopify-pc__banner__btn-manage-prefs',
   'button.shopify-pc__banner__btn-manage-prefs',
   'button[aria-haspopup="dialog"].shopify-pc__banner__btn-manage-prefs',
+  '#privacy-banner-manage-preferences-button',
+  'button[aria-haspopup="dialog"][id*="manage-preferences" i]',
 ];
 const SHOPIFY_PREFS_ACCEPT_SELECTORS = [
   '#shopify-pc__prefs__header-accept',
   'button.shopify-pc__prefs__header-accept',
+  '#privacy-preferences-accept-all-button',
 ];
 const SHOPIFY_PREFS_DECLINE_SELECTORS = [
   '#shopify-pc__prefs__header-decline',
   'button.shopify-pc__prefs__header-decline',
+  '#privacy-preferences-decline-all-button',
 ];
 const SHOPIFY_PREFS_SAVE_SELECTORS = [
   '#shopify-pc__prefs__header-save',
   'button.shopify-pc__prefs__header-save',
+  '#privacy-preferences-save-button',
 ];
 const SHOPIFY_PREFS_CLOSE_SELECTORS = [
   '#shopify-pc__prefs__header-close',
   'button.shopify-pc__prefs__header-close',
+  '#privacy-preferences-close-button',
 ];
 const COOKIESCRIPT_ACTIONABLE_SURFACE_SELECTORS = [
   '#cookiescript_injected',
@@ -694,7 +710,6 @@ async function tryCMPs(cmps, prefs) {
       continue;
     }
     if (cmp.id === 'shopify') {
-      if (prefs.globalPreference === 'custom') continue;
       if (await executeShopifyFlow(cmp, prefs)) {
         const suffix = prefs.globalPreference === 'custom' ? ':custom' : '';
         return { method: `dom:${cmp.id}${suffix}`, cmpName: cmp.name };
@@ -1164,8 +1179,8 @@ async function executeShopifyFlow(cmp, prefs) {
     return false;
   }
 
-  const bannerRoot = firstVisibleElement(['#shopify-pc__banner', '.shopify-pc__banner__dialog']);
-  const prefsRoot = firstVisibleElement(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog']);
+  const bannerRoot = firstVisibleElement(['#shopify-pc__banner', '.shopify-pc__banner__dialog', '#privacy-cookie-banner']);
+  const prefsRoot = firstVisibleElement(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog', '#privacy-preferences-modal']);
   const desiredStates = {
     preferences: Boolean(prefs.functional) || prefs.uncategorized === 'accept',
     marketing: Boolean(prefs.advertising),
@@ -1178,7 +1193,7 @@ async function executeShopifyFlow(cmp, prefs) {
   if (allDesiredOn && (
     clickFirstVisibleWithin(bannerRoot ?? prefsRoot, [...SHOPIFY_BANNER_ACCEPT_SELECTORS, ...SHOPIFY_PREFS_ACCEPT_SELECTORS]) ||
     clickFirstVisible([...SHOPIFY_BANNER_ACCEPT_SELECTORS, ...SHOPIFY_PREFS_ACCEPT_SELECTORS]) ||
-    clickShopifyButtonByText(/accept all/i, bannerRoot ?? prefsRoot)
+    clickShopifyButtonByText(/accept(?: all)?/i, bannerRoot ?? prefsRoot)
   )) {
     return waitForShopifyDismissal(cmp);
   }
@@ -1186,7 +1201,7 @@ async function executeShopifyFlow(cmp, prefs) {
   if (allDesiredOff && (
     clickFirstVisibleWithin(bannerRoot ?? prefsRoot, [...SHOPIFY_BANNER_DECLINE_SELECTORS, ...SHOPIFY_PREFS_DECLINE_SELECTORS]) ||
     clickFirstVisible([...SHOPIFY_BANNER_DECLINE_SELECTORS, ...SHOPIFY_PREFS_DECLINE_SELECTORS]) ||
-    clickShopifyButtonByText(/(?:decline|reject) all/i, bannerRoot ?? prefsRoot)
+    clickShopifyButtonByText(/(?:decline|reject)(?: all)?/i, bannerRoot ?? prefsRoot)
   )) {
     return waitForShopifyDismissal(cmp);
   }
@@ -1207,7 +1222,11 @@ async function executeShopifyFlow(cmp, prefs) {
     return false;
   }
 
-  const activePrefsRoot = firstVisibleElement(['#shopify-pc__prefs__dialog', '.shopify-pc__prefs__dialog']) ?? prefsRoot;
+  const activePrefsRoot = firstVisibleElement([
+    '#shopify-pc__prefs__dialog',
+    '.shopify-pc__prefs__dialog',
+    '#privacy-preferences-modal',
+  ]) ?? prefsRoot;
 
   if (allDesiredOn && (
     clickFirstVisibleWithin(activePrefsRoot, SHOPIFY_PREFS_ACCEPT_SELECTORS) ||
@@ -1225,9 +1244,18 @@ async function executeShopifyFlow(cmp, prefs) {
     return waitForShopifyDismissal(cmp);
   }
 
-  const appliedPreferences = await setShopifyGroupStateById(activePrefsRoot, 'shopify-pc__prefs__preferences-input', desiredStates.preferences);
-  const appliedMarketing = await setShopifyGroupStateById(activePrefsRoot, 'shopify-pc__prefs__marketing-input', desiredStates.marketing);
-  const appliedAnalytics = await setShopifyGroupStateById(activePrefsRoot, 'shopify-pc__prefs__analytics-input', desiredStates.analytics);
+  const appliedPreferences = await setShopifyGroupState(activePrefsRoot, {
+    ids: ['shopify-pc__prefs__preferences-input'],
+    labels: [/personalization/i, /preferences/i, /functional/i],
+  }, desiredStates.preferences);
+  const appliedMarketing = await setShopifyGroupState(activePrefsRoot, {
+    ids: ['shopify-pc__prefs__marketing-input'],
+    labels: [/marketing/i, /advertising/i],
+  }, desiredStates.marketing);
+  const appliedAnalytics = await setShopifyGroupState(activePrefsRoot, {
+    ids: ['shopify-pc__prefs__analytics-input'],
+    labels: [/analytics/i, /performance/i],
+  }, desiredStates.analytics);
 
   if (!appliedPreferences || !appliedMarketing || !appliedAnalytics) {
     return false;
@@ -3020,7 +3048,9 @@ function shopifyPreferencesSurfaceSelectors() {
   return [
     '#shopify-pc__prefs__dialog',
     '.shopify-pc__prefs__dialog',
+    '#privacy-preferences-modal',
     '#shopify-pc__prefs__header-save',
+    '#privacy-preferences-save-button',
     '#shopify-pc__prefs__preferences-input',
     '#shopify-pc__prefs__marketing-input',
     '#shopify-pc__prefs__analytics-input',
@@ -3034,6 +3064,8 @@ function shopifyDismissSelectors() {
     '#shopify-pc__prefs',
     '#shopify-pc__prefs__dialog',
     '.shopify-pc__prefs__dialog',
+    '#privacy-cookie-banner',
+    '#privacy-preferences-modal',
     ...SHOPIFY_BANNER_MANAGE_SELECTORS,
     ...SHOPIFY_BANNER_ACCEPT_SELECTORS,
     ...SHOPIFY_BANNER_DECLINE_SELECTORS,
@@ -3516,7 +3548,22 @@ function clickShopifyButtonByText(pattern, root) {
 
 async function setShopifyGroupStateById(root, id, checked) {
   const toggle = findVisibleElementById(id, root);
-  if (!toggle || toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+  if (!toggle) return false;
+  return setShopifyToggleState(toggle, checked);
+}
+
+async function setShopifyGroupState(root, { ids = [], labels = [] }, checked) {
+  for (const id of ids) {
+    if (await setShopifyGroupStateById(root, id, checked)) return true;
+  }
+  const toggle = findShopifyToggleByLabel(root, labels);
+  if (!toggle) return false;
+  return setShopifyToggleState(toggle, checked);
+}
+
+async function setShopifyToggleState(toggle, checked) {
+  if (!(toggle instanceof HTMLInputElement)) return false;
+  if (toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
   if (Boolean(toggle.checked) === checked) return true;
 
   const interactionTarget = findShopifyToggleInteractionTarget(toggle);
@@ -3526,6 +3573,30 @@ async function setShopifyGroupStateById(root, id, checked) {
 
   forceShopifyToggleState(toggle, checked);
   return waitForShopifyToggleState(toggle, checked, 700);
+}
+
+function findShopifyToggleByLabel(root, labelPatterns) {
+  if (!root) return null;
+  const toggles = Array.from(root.querySelectorAll('input[type="checkbox"], input[role="switch"]'));
+  return toggles.find((toggle) => {
+    if (!(toggle instanceof HTMLInputElement)) return false;
+    if (toggle.disabled || toggle.getAttribute('aria-disabled') === 'true') return false;
+    const text = shopifyToggleText(toggle);
+    if (!text) return false;
+    return labelPatterns.some((pattern) => pattern.test(text));
+  }) ?? null;
+}
+
+function shopifyToggleText(toggle) {
+  const pieces = [];
+  for (const label of Array.from(toggle.labels ?? [])) {
+    pieces.push(label.textContent ?? '');
+  }
+  const row = toggle.closest('label, li, div[role="group"], div');
+  if (row) pieces.push(row.textContent ?? '');
+  const parentRow = row?.parentElement?.closest?.('li, div[role="group"], div');
+  if (parentRow) pieces.push(parentRow.textContent ?? '');
+  return pieces.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 function findShopifyToggleInteractionTarget(toggle) {

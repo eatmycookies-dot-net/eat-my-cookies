@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Shopify Account Privacy Fixture</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 32px; }
+    .hidden { display: none !important; }
+    #privacy-cookie-banner,
+    #privacy-preferences-modal {
+      position: fixed;
+      background: white;
+      color: #111827;
+      border: 1px solid #d1d5db;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+      z-index: 9999;
+    }
+    #privacy-cookie-banner {
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 24px 28px;
+    }
+    #privacy-preferences-modal {
+      left: 50%;
+      top: 8vh;
+      width: min(640px, calc(100vw - 48px));
+      transform: translateX(-50%);
+      padding: 24px;
+    }
+    .actions,
+    .modal-footer {
+      display: flex;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .category {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      border-top: 1px solid #e5e7eb;
+      padding: 16px 0;
+    }
+    button {
+      cursor: pointer;
+      padding: 10px 18px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #fff;
+    }
+    .primary {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Shopify Account Privacy Fixture</h1>
+    <p>Local fixture for Shopify's newer account privacy banner and preferences modal.</p>
+  </main>
+
+  <section id="privacy-cookie-banner" role="dialog" aria-labelledby="privacy-cookie-bannerTitle">
+    <h2 id="privacy-cookie-bannerTitle">Cookie consent</h2>
+    <p>We and our partners, including Shopify, use cookies and other technologies to personalize your experience, show you ads, and perform analytics.</p>
+    <div class="actions">
+      <button id="privacy-banner-manage-preferences-button" type="button" aria-haspopup="dialog">Manage preferences</button>
+      <button id="privacy-banner-accept-button" type="button">Accept</button>
+      <button id="privacy-banner-decline-button" type="button">Decline</button>
+    </div>
+  </section>
+
+  <section id="privacy-preferences-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="privacy-preferences-modalTitle">
+    <h2 id="privacy-preferences-modalTitle">Cookie and privacy preferences</h2>
+    <p><strong>You control your data</strong></p>
+    <div class="category">
+      <div>
+        <strong>Required</strong>
+        <p>These cookies are necessary for the site to function properly.</p>
+      </div>
+      <label for="CheckboxRequired"><input id="CheckboxRequired" type="checkbox" checked disabled> Required</label>
+    </div>
+    <div class="category">
+      <div>
+        <strong>Personalization</strong>
+        <p>These cookies store details about your actions to personalize your next visit.</p>
+      </div>
+      <label for="CheckboxPersonal"><input id="CheckboxPersonal" type="checkbox" checked> Personalization</label>
+    </div>
+    <div class="category">
+      <div>
+        <strong>Marketing</strong>
+        <p>These cookies show you ads on other websites.</p>
+      </div>
+      <label for="CheckboxMarketing"><input id="CheckboxMarketing" type="checkbox" checked> Marketing</label>
+    </div>
+    <div class="category">
+      <div>
+        <strong>Analytics</strong>
+        <p>These cookies help us understand how you interact with the site.</p>
+      </div>
+      <label for="CheckboxAnalytics"><input id="CheckboxAnalytics" type="checkbox" checked> Analytics</label>
+    </div>
+    <div class="modal-footer">
+      <button id="privacy-preferences-accept-all-button" type="button">Accept all</button>
+      <button id="privacy-preferences-decline-all-button" type="button">Decline all</button>
+      <button id="privacy-preferences-save-button" class="primary" type="button">Save my choices</button>
+    </div>
+  </section>
+
+  <script>
+    (() => {
+      const banner = document.getElementById('privacy-cookie-banner');
+      const modal = document.getElementById('privacy-preferences-modal');
+      const personalization = document.getElementById('CheckboxPersonal');
+      const marketing = document.getElementById('CheckboxMarketing');
+      const analytics = document.getElementById('CheckboxAnalytics');
+
+      window.__fixtureState = {
+        mode: null,
+        preferences: personalization.checked,
+        marketing: marketing.checked,
+        analytics: analytics.checked,
+        bannerVisible: true,
+        modalVisible: false,
+      };
+
+      function setAll(next) {
+        personalization.checked = next;
+        marketing.checked = next;
+        analytics.checked = next;
+      }
+
+      function openModal() {
+        banner.classList.add('hidden');
+        modal.classList.remove('hidden');
+        window.__fixtureState.modalVisible = true;
+      }
+
+      function finish(mode) {
+        window.__fixtureState = {
+          mode,
+          preferences: personalization.checked,
+          marketing: marketing.checked,
+          analytics: analytics.checked,
+          bannerVisible: false,
+          modalVisible: false,
+        };
+        banner.remove();
+        modal.remove();
+      }
+
+      document.getElementById('privacy-banner-manage-preferences-button').addEventListener('click', openModal);
+      document.getElementById('privacy-banner-accept-button').addEventListener('click', () => {
+        setAll(true);
+        finish('accept_all');
+      });
+      document.getElementById('privacy-banner-decline-button').addEventListener('click', () => {
+        setAll(false);
+        finish('reject_all');
+      });
+      document.getElementById('privacy-preferences-accept-all-button').addEventListener('click', () => {
+        setAll(true);
+        finish('accept_all');
+      });
+      document.getElementById('privacy-preferences-decline-all-button').addEventListener('click', () => {
+        setAll(false);
+        finish('reject_all');
+      });
+      document.getElementById('privacy-preferences-save-button').addEventListener('click', () => finish('custom'));
+
+      if (new URLSearchParams(location.search).get('modal') === '1') {
+        openModal();
+      }
+    })();
+  </script>
+</body>
+</html>

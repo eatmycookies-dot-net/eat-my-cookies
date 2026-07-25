@@ -114,7 +114,7 @@ const CMP_FINGERPRINTS = [
   { name: 'Usercentrics',   scripts: ['app.usercentrics.eu'],                       globals: ['usercentrics', 'UC_UI'],        selectors: ['#usercentrics-root', '.uc-banner-content'] },
   { name: 'Consentmanager', scripts: ['delivery.consentmanager.net'],               globals: ['cmp2'],                         selectors: ['#cmpbox', '.cmpbox'] },
   { name: 'AppConsent',     scripts: ['appconsent.io', 'figconsent.com'],           globals: ['ACFigConsent'],                 selectors: ['.ac-banner', '#fig-consent-banner'] },
-  { name: 'Shopify',        scripts: ['shopifycloud/privacy-banner'],               globals: ['privacyBanner'],                selectors: ['#shopify-pc__banner', '.shopify-pc__banner__dialog', '#shopify-pc__prefs__dialog'] },
+  { name: 'Shopify',        scripts: ['shopifycloud/privacy-banner'],               globals: ['privacyBanner'],                selectors: ['#shopify-pc__banner', '.shopify-pc__banner__dialog', '#shopify-pc__prefs__dialog', '#privacy-cookie-banner', '#privacy-preferences-modal'] },
   { name: 'Pandectes',      scripts: ['pandectes', 'pandectes-gdpr'],               globals: ['Pandectes'],                    selectors: ['#pandectes-banner', '.pd-cookie-banner-window', '#pd-cp-preferences'] },
   { name: 'Consentmo',      scripts: ['consentmo', 'isenselabs', 'consentmo-gdpr'], globals: ['csmCookieConsent'],            selectors: ['csm-cookie-consent'] },
   { name: 'WooCommerce Store Notice', scripts: ['woocommerce'],                      globals: ['wc_add_to_cart_params'],        selectors: ['.woocommerce-store-notice', '.woocommerce-store-notice__dismiss-link'] },

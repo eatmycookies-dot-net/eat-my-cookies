@@ -169,10 +169,11 @@ What matters:
 | Site | Region | Special notes |
 |------|--------|--------------|
 | `ceespronkstore.com` | EU | Human-validated May 30, 2026 on a VPN storefront session. Shopify's native consent UI can appear first as a compact lower-left banner (`Accept`, `Decline`, `Manage preferences`) or as the larger preferences dialog, so changes to any of the shared Shopify handlers should be rechecked against both surfaces. |
+| `shopify.com` account pages | US/global | User-supplied account-page evidence on July 25, 2026 showed Shopify's newer native privacy UI using stable IDs such as `#privacy-cookie-banner`, `#privacy-banner-manage-preferences-button`, and `#privacy-preferences-modal`. Fixture coverage now exercises the banner, manage-preferences transition, and generated-checkbox modal path. Live logged-in/session validation is still useful. |
 
 What matters:
 - Shopify can render duplicate consent nodes with the same IDs, so visible-element targeting matters more than `querySelector` first-match behavior.
-- The compact banner and the full preferences dialog are both valid entry surfaces; support claims should account for both.
+- The compact banner and the full preferences dialog are both valid entry surfaces; support claims should account for both old `shopify-pc__*` storefront markup and newer `privacy-*` account-page markup.
 - Geo-sensitive validation matters here: many Shopify storefronts only show this flow consistently from an EU IP.
 
 ### Cookiebot

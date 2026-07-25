@@ -424,11 +424,13 @@
         ? activateVisibleElement(firstVisibleElement([
           '#shopify-pc__banner__btn-accept',
           'button.shopify-pc__banner__btn-accept',
+          '#privacy-banner-accept-button',
         ]))
         : prefs.globalPreference === 'reject_all'
           ? activateVisibleElement(firstVisibleElement([
             '#shopify-pc__banner__btn-decline',
             'button.shopify-pc__banner__btn-decline',
+            '#privacy-banner-decline-button',
           ]))
           : false;
       if (bannerClicked) {
@@ -637,8 +639,12 @@
       '#shopify-pc__prefs',
       '#shopify-pc__prefs__dialog',
       '.shopify-pc__prefs__dialog',
+      '#privacy-cookie-banner',
+      '#privacy-preferences-modal',
       '#shopify-pc__prefs__header-save',
       '#shopify-pc__banner__btn-manage-prefs',
+      '#privacy-preferences-save-button',
+      '#privacy-banner-manage-preferences-button',
     ],
     Nike: [],
     Truendo: TRUENDO_VISIBLE_SELECTORS,
@@ -881,7 +887,9 @@
       '#shopify-pc__prefs',
       '#shopify-pc__prefs__dialog',
       '.shopify-pc__prefs__dialog',
+      '#privacy-preferences-modal',
       '#shopify-pc__prefs__header-save',
+      '#privacy-preferences-save-button',
       '#shopify-pc__prefs__preferences-input',
       '#shopify-pc__prefs__marketing-input',
       '#shopify-pc__prefs__analytics-input',
@@ -1362,6 +1370,8 @@
       '#shopify-pc__prefs',
       '#shopify-pc__prefs__dialog',
       '#shopify-pc__prefs__overlay',
+      '#privacy-cookie-banner',
+      '#privacy-preferences-modal',
       '.shopify-pc__banner__dialog',
       '.shopify-pc__prefs__dialog',
       '.shopify-pc__prefs__overlay',
@@ -1384,6 +1394,7 @@
     const closeButton = firstVisibleElement([
       '#shopify-pc__prefs__header-close',
       'button.shopify-pc__prefs__header-close',
+      '#privacy-preferences-close-button',
     ]);
     if (closeButton) {
       dispatchSyntheticClick(closeButton);
