@@ -1,0 +1,74 @@
+name: E2E Consent Validation (Weekly)
+
+# Catches CMP-family drift and reject/consent-flow regressions on live sites
+# without waiting for a maintainer to notice or a user to report it — see
+# docs/cmp-impact-map.md ("CMP family drift detection") for why this exists.
+#
+# Two jobs, deliberately split:
+#   - non-vpn: GitHub-hosted, fully automatic, no setup. Covers most sites
+#     plus the CMP family drift check.
+#   - vpn: self-hosted (your machine), reuses your existing Browsec setup to
+#     cover CCPA/geo-gated sites. GitHub-hosted runners can't do this
+#     reliably — no VPN extension, no display for headed Chrome, and an
+#     unattended tunnel reconnect on an ephemeral runner is exactly the kind
+#     of infra flakiness that erodes trust in the signal. See the PR/commit
+#     that added this workflow for the full reasoning.
+#
+# Setup required for the vpn job: register a self-hosted runner on your
+# machine with the "emc-local" label. See CONTRIBUTING.md → "Weekly VPN
+# runner setup" for steps. Until that's done, the vpn job will simply stay
+# queued (GitHub does not fail a workflow for a runner that never picks up
+# the job) — the non-vpn job is unaffected and still runs on schedule.
+
+on:
+  schedule:
+    # Tuesdays 05:23 UTC — an off-peak, non-round-number time so this doesn't
+    # queue behind everyone else's 00:00/00:30 scheduled jobs.
+    - cron: '23 5 * * 2'
+  workflow_dispatch: {}
+
+concurrency:
+  group: e2e-weekly-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  non-vpn:
+    name: E2E (non-VPN, GitHub-hosted)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e suite (non-VPN)
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+
+  vpn:
+    name: E2E (VPN, self-hosted)
+    runs-on: [self-hosted, emc-local]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Run e2e suite (VPN)
+        run: npm run test:e2e -- --vpn
+        env:
+          CI: 'true'

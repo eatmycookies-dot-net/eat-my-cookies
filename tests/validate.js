@@ -139,6 +139,129 @@ if (!sites.length) {
   process.exit(1);
 }
 
+// ── CMP family drift detection ──────────────────────────────────────────────
+// Cheap, flow-independent signature check: does the CMP actually present on
+// the live page still match what tests/sites.json's "cmp" field declares?
+// This runs on every e2e invocation automatically (no separate command to
+// remember) and exists because both the nytimes.com and spiegel.de August 2026
+// regressions were CMP-family changes on the site's side, not code bugs — the
+// existing pass/fail checks couldn't distinguish "the CMP changed out from
+// under us" from "our handler has a bug", and both looked like plain failures
+// (or worse, silent passes) until someone manually inspected the live page.
+//
+// Deliberately reuses CMPS (rules/cmps.json's own detectors) instead of a
+// second hand-written signature table, so this stays in sync with the
+// extension's real CMP definitions with zero duplication. Only CMPs handled
+// exclusively via dedicated frame content scripts (not a rules/cmps.json
+// declarative entry) need a supplemental signature here — plus Fides, which
+// isn't supported yet but is worth detecting since it's the CMP nytimes.com
+// switched to.
+const SUPPLEMENTAL_CMP_SIGNATURES = [
+  {
+    id: 'appconsent',
+    name: 'AppConsent',
+    detectors: [
+      { type: 'css_selector', value: '#appconsent' },
+      { type: 'css_selector', value: "iframe[title='Consent window']" },
+    ],
+  },
+  {
+    id: 'ketch',
+    name: 'Ketch',
+    detectors: [
+      { type: 'js_global', value: 'window.semaphore' },
+      { type: 'css_selector', value: '[data-testid="ketch"], .ketch-banner' },
+    ],
+  },
+  {
+    id: 'fides',
+    name: 'Fides',
+    detectors: [
+      { type: 'js_global', value: 'window.Fides' },
+      { type: 'css_selector', value: '[id^="fides-"], [class*="fides-banner"]' },
+    ],
+  },
+];
+
+const DRIFT_DETECTION_CMPS = [...CMPS, ...SUPPLEMENTAL_CMP_SIGNATURES];
+
+// "cmp" labels that describe a real unresolved state rather than naming a CMP —
+// nothing to compare a live detection against.
+const CMP_LABEL_IGNORE = new Set(['needs validation']);
+
+// tests/sites.json's "cmp" field is free text for humans ("Sourcepoint (USNat)",
+// "OneTrust / consent-or-pay", "AppConsent / figconsent"). Split on "/" and match
+// each part against known CMP ids/names so hybrid labels resolve to every family
+// they mention, not just the first.
+function expectedCmpFamilyIds(site) {
+  const label = (site.cmp ?? '').toLowerCase().trim();
+  if (!label || CMP_LABEL_IGNORE.has(label)) return [];
+
+  const parts = label.split('/').map((part) => part.trim()).filter(Boolean);
+  const matches = new Set();
+  for (const part of parts) {
+    for (const cmp of DRIFT_DETECTION_CMPS) {
+      const idLower = cmp.id.toLowerCase();
+      const nameLower = (cmp.name ?? '').toLowerCase();
+      if (part.includes(idLower) || idLower.includes(part) || part.includes(nameLower) || nameLower.includes(part)) {
+        matches.add(cmp.id);
+      }
+    }
+  }
+  return [...matches];
+}
+
+async function detectActualCmpFamilies(page) {
+  const detected = new Set();
+  for (const frame of page.frames()) {
+    let frameHits;
+    try {
+      frameHits = await frame.evaluate((cmps) => {
+        const hits = [];
+        for (const cmp of cmps) {
+          for (const detector of cmp.detectors ?? []) {
+            try {
+              if (detector.type === 'css_selector' && document.querySelector(detector.value)) {
+                hits.push(cmp.id);
+                break;
+              }
+              if (detector.type === 'js_global') {
+                const path = detector.value.replace(/^window\./, '');
+                if (path.split('.').reduce((obj, key) => obj?.[key], window) !== undefined) {
+                  hits.push(cmp.id);
+                  break;
+                }
+              }
+              if (detector.type === 'script_src' &&
+                  Array.from(document.scripts).some((s) => s.src.includes(detector.value))) {
+                hits.push(cmp.id);
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+        return hits;
+      }, DRIFT_DETECTION_CMPS);
+    } catch (_) {
+      frameHits = [];
+    }
+    frameHits.forEach((id) => detected.add(id));
+  }
+  return detected;
+}
+
+async function checkCmpFamilyDrift(page, site) {
+  const expected = expectedCmpFamilyIds(site);
+  if (!expected.length) return null; // e.g. "Needs validation" — nothing declared to compare against
+
+  const detected = await detectActualCmpFamilies(page);
+  if (!detected.size) return null; // no CMP signature observed this run — ambiguous (geo/session), not evidence of drift
+
+  if (expected.some((id) => detected.has(id))) return null;
+
+  return `CMP family drift: sites.json declares "${site.cmp}" but the live page matches [${[...detected].join(', ')}] instead. The site's actual CMP likely changed — re-verify which handler needs to run here before trusting any other result on this row.`;
+}
+
 // ── Results ───────────────────────────────────────────────────────────────────
 const results = { pass: [], fail: [], skip: [] };
 
@@ -217,6 +340,15 @@ async function testSite(page, site) {
   if (await isChallengePage(page)) {
     return { status: 'SKIP', detail: 'Blocked by anti-bot challenge during banner detection' };
   }
+
+  // CMP family drift check — independent of whether our own bannerSelectors matched,
+  // since a stale/wrong assumption about which CMP a site uses is exactly what this
+  // catches. See buildDriftDetectionCmps() for why this doesn't duplicate rules/cmps.json.
+  const cmpDriftIssue = await checkCmpFamilyDrift(page, site);
+  if (cmpDriftIssue) {
+    return { status: 'FAIL', detail: cmpDriftIssue };
+  }
+
   if (!bannerFound) {
     await page.waitForTimeout(handleWaitMs);
     const afterStats = await readStatsSnapshot(page.context());
@@ -293,8 +425,12 @@ async function testSite(page, site) {
   }
 
   // Banner still visible — check if the consent button itself is gone
-  // (some CMPs hide but don't remove the container)
-  const consentButtonGone = !(await anyVisible(page, site.consentSelectors));
+  // (some CMPs hide but don't remove the container). An empty/missing
+  // consentSelectors list must never count as "gone" — that would vacuously
+  // pass every site with no selectors configured, regardless of whether the
+  // extension did anything at all.
+  const hasConsentSelectors = Boolean(site.consentSelectors?.length);
+  const consentButtonGone = hasConsentSelectors && !(await anyVisible(page, site.consentSelectors));
   if (!consentHandled && consentButtonGone) {
     consentHandled = true;
     detail = 'Consent recorded (container persists but buttons gone)';
@@ -1007,9 +1143,19 @@ function extractNewActivityForSite(beforeStats, afterStats, site) {
 }
 
 function validateExpectedActivity(recorded, site) {
-  if (!site.expectedActivityMethod) return null;
-  if (recorded?.method === site.expectedActivityMethod) return null;
-  return `activity method expected=${site.expectedActivityMethod} actual=${recorded?.method ?? 'none'}`;
+  if (site.expectedActivityMethod && recorded?.method !== site.expectedActivityMethod) {
+    return `activity method expected=${site.expectedActivityMethod} actual=${recorded?.method ?? 'none'}`;
+  }
+
+  if (site.expectedActivityMethodPrefixes?.length) {
+    const actual = recorded?.method ?? '';
+    const matchesFamily = site.expectedActivityMethodPrefixes.some((prefix) => actual.startsWith(prefix));
+    if (!matchesFamily) {
+      return `activity method expected one of [${site.expectedActivityMethodPrefixes.join(', ')}] but actual=${actual || 'none'} — this usually means the CMP-specific handler didn't fire and a weaker fallback (e.g. heuristic) caught it instead`;
+    }
+  }
+
+  return null;
 }
 
 async function validateForbiddenTextAbsent(page, site) {

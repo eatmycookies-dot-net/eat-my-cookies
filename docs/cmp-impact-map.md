@@ -118,14 +118,18 @@ What matters:
 
 | Site | Region | Special notes |
 |------|--------|--------------|
-| `nytimes.com` | US/global | GDPR + USNat; automation-covered |
+| `nytimes.com` | US/global | GDPR + USNat; CCPA path currently drifted to Fides — see live drift note below. Do not trust the "Sourcepoint" label on this row until re-verified. |
 | `wired.com` | US/global | Sourcepoint; automation-covered |
-| `spiegel.de` | EU | Sourcepoint GDPR; automation-covered |
+| `spiegel.de` | EU | Still genuinely Sourcepoint, but the reject flow is currently broken — see live drift note below |
 | `theguardian.com` | Global | USNat via `_sp_.usnat.postRejectAll`; dedicated handler |
 | `ft.com` | EU/UK | Cross-origin iframe; dedicated page-level opener + frame handler |
 
 **Live drift note (added July 19, 2026):**
 Do not treat `theverge.com` as a current Sourcepoint regression target without re-probing the live page first. A targeted live fingerprint on Sunday, July 19, 2026 found OneTrust SDK assets plus Launchpad / LiveRamp privacy scripts, and the automated US run recorded `dom:onetrust:ccpa`.
+
+**Live drift note (added August 8, 2026):** Two separate live-site changes on the same day, neither caused by a code change here — this is exactly the class of regression the CMP family drift check (see "CMP family drift detection" below) now catches automatically instead of relying on a maintainer noticing.
+- `nytimes.com`: a live VPN/CCPA-path probe found the first-layer banner served by **Fides** (`fides-reject-all-button`, `.fides-banner-button` classes), not Sourcepoint. There is no Fides handler in this codebase yet (no `rules/cmps.json` entry, no `cmp-api-handler.js` API integration), so the only thing that currently clears the banner is `heuristic.js`'s generic text-match fallback — which has no CCPA-specific awareness and doesn't run at all when the user's preference is `custom`. Treat `nytimes.com`'s CCPA/opt-out path as unsupported until real Fides support is added (Tier 2 `window.Fides` API + a declarative DOM rule), not merely "Sourcepoint with a bug." It's plausible NYT is A/B testing Sourcepoint vs. Fides rather than having fully migrated — build the fix as generic Fides detection, not a nytimes.com-specific branch, so it also covers whichever CMP is actually live on a given visit and any other site running Fides.
+- `spiegel.de`: still genuinely Sourcepoint (confirmed via live DOM inspection of the actual `sp-spiegel-de.spiegel.de` iframe), but the first-layer banner changed to a consent-or-pay wall (`Consent and continue` / `Subscribe now` / `Preferences` — `sp_choice_type_11` / `9` / `12`) with **no direct Reject All control** (no `sp_choice_type_REJECT_ALL`, no `data-sp-action="REJECT_ALL"`). Rejecting now requires clicking "Preferences", which opens a *separate* `privacy-manager` iframe that uses per-category `Accept`/`Reject` button pairs instead of a bulk reject-all control. `sp-frame-handler.js`'s `rejectFromPrivacyManager()` is built around finding a single bulk `.sp_choice_type_REJECT_ALL`, with only a generic `text:reject` fallback that isn't reliable against per-category rows — this needs a dedicated fix (iterate every category row, click each `Reject`, then `Save and Exit`), not a Sourcepoint-wide behavior change (see the shared-function caution in `AGENTS.md`).
 
 ### Didomi
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json` + `main.js → handleEuronews`
@@ -422,6 +426,48 @@ surface reappears, it closes or visually hides that surface and restores the ori
 That watcher is strictly automation-only: a trusted click on a structural OneTrust footer/settings
 opener stops it before OneTrust renders the user-requested preference center. Footer review must
 show the saved choices and remain interactive; it must never trigger a second dismissal pass.
+
+---
+
+## CMP family drift detection (added August 8, 2026)
+
+`tests/validate.js` checks, on every `npm run test:e2e` invocation (no separate command), whether
+the CMP actually present on a site's live page still matches what `tests/sites.json`'s `cmp` field
+declares. This exists because both `nytimes.com` and `spiegel.de` drifted on the same day — one
+switched CMP family entirely (Sourcepoint → Fides), the other kept its CMP but changed its banner
+enough that the existing handler no longer works — and neither showed up as an obvious failure:
+the harness's own leniency (an empty `consentSelectors` array vacuously "passing", and no check on
+*which* handler actually fired) let both regressions through silently. See the live drift notes
+under "Sourcepoint" above for what was actually found.
+
+How it works, deliberately without duplicating `rules/cmps.json`:
+- It reuses the same `detectors` (`css_selector`, `js_global`, `script_src`) already declared per
+  CMP in `rules/cmps.json` — the file `dom-handler.js` uses at runtime — so a CMP fingerprint only
+  ever lives in one place. A small supplemental list in `tests/validate.js`
+  (`SUPPLEMENTAL_CMP_SIGNATURES`) covers only the CMPs with no `rules/cmps.json` entry because
+  they're handled exclusively by a dedicated frame content script (`AppConsent`, `Ketch`), plus
+  `Fides` — not supported, but worth detecting given it's what `nytimes.com` switched to.
+- `tests/sites.json`'s free-text `cmp` field (e.g. `"OneTrust / consent-or-pay"`, `"Sourcepoint
+  (USNat)"`) is split on `/` and matched by substring against every known CMP id/name, so hybrid
+  labels resolve against every family they mention. `"Needs validation"` is treated as nothing to
+  compare against.
+- The check scans every frame on the page (not just the top frame) for any detector match, and
+  only flags a mismatch when it found a *different*, known CMP than the one declared — if nothing
+  is detected at all (banner didn't render this run, already consented, geo-gated), that's treated
+  as ambiguous, same as the existing SKIP semantics, not evidence of drift.
+- It runs immediately after the banner-detection wait, before the harness decides whether to SKIP,
+  so a stale `bannerSelectors` assumption (built for the CMP a site *used to* run) doesn't prevent
+  the drift itself from being caught.
+
+A CMP family drift failure means **the site changed, not necessarily the code** — re-verify which
+handler needs to run there (new CMP entirely, or the same CMP with a changed banner) before
+assuming any other test result on that row, or the existing implementation, is at fault.
+
+**Runs on a schedule, not just manually.** `.github/workflows/e2e-weekly.yml` runs the full suite
+every Tuesday — non-VPN sites on a GitHub-hosted runner automatically, VPN/geo-gated sites on a
+self-hosted runner (see `CONTRIBUTING.md` → "Weekly VPN runner setup"). This is what would have
+caught both the `nytimes.com` and `spiegel.de` drift above on the day it happened instead of
+whenever someone next ran the suite manually.
 
 ---
 
