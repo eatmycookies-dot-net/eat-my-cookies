@@ -350,14 +350,37 @@
       w.Cookiebot.hide?.();
       return prefs.globalPreference === 'custom' ? 'cmp_api:Cookiebot:custom' : 'cmp_api:Cookiebot';
     },
-    UC_UI: (w, prefs) => {
-      if (!w.UC_UI) return false;
-      if (prefs.globalPreference === 'accept_all') {
-        w.UC_UI?.acceptAllConsents?.();
-      } else {
-        w.UC_UI?.denyAllConsents?.();
+    UC_UI: async (w, prefs) => {
+      const api = w.UC_UI;
+      const method = prefs.globalPreference === 'custom'
+        ? 'cmp_api:UC_UI:custom'
+        : prefs.globalPreference === 'accept_all'
+          ? 'cmp_api:UC_UI:accept_all'
+          : 'cmp_api:UC_UI:reject_all';
+
+      if (api) {
+        if (prefs.globalPreference === 'custom') {
+          const decisions = await buildUsercentricsServiceDecisions(api, prefs);
+          if (decisions.length && canApplyUsercentricsServiceDecisions(api)) {
+            dispatchUsercentricsPreHandle(method, prefs.globalPreference);
+            if ((await applyUsercentricsServiceDecisions(api, decisions)) &&
+                (await waitForUsercentricsServiceDecisions(api, decisions, 3000))) {
+              return reportUsercentricsHandledAfterDismissal(api, method);
+            }
+          }
+        } else {
+          const accepted = prefs.globalPreference === 'accept_all';
+          if (canApplyUsercentricsBulkConsent(api, accepted)) {
+            dispatchUsercentricsPreHandle(method, prefs.globalPreference);
+            if ((await applyUsercentricsBulkConsent(api, accepted)) &&
+                (await waitForUsercentricsBulkConsent(api, accepted, 3000))) {
+              return reportUsercentricsHandledAfterDismissal(api, method);
+            }
+          }
+        }
       }
-      return true;
+
+      return executeUsercentricsOfficialUiFlow(prefs, method);
     },
     Didomi: (w, prefs) => {
       if (!w.Didomi) return false;
@@ -619,7 +642,7 @@
   const CMP_SELECTORS = {
     OneTrust: [...ONETRUST_VISIBLE_SELECTORS],
     Cookiebot: ['#CybotCookiebotDialog', '#cookiebanner'],
-    UC_UI: ['#usercentrics-root', "[data-testid='uc-banner']"],
+    UC_UI: ['#usercentrics-cmp-ui', '#usercentrics-root', "[data-testid='uc-banner']"],
     Didomi: ['#didomi-popup', '#didomi-notice'],
     truste: ['#truste-consent-track', '.truste_overlay'],
     _axcb: ['#axeptio_overlay', '.axeptio_widget'],
@@ -649,6 +672,10 @@
     Nike: [],
     Truendo: TRUENDO_VISIBLE_SELECTORS,
   };
+  const LEADERS_ISLAND_USERCENTRICS_HOSTS = new Set([
+    'leadersisland.com',
+    'www.leadersisland.com',
+  ]);
 
   const HOST_RESTRICTIONS = {
     'www.repubblica.it': {
@@ -677,6 +704,11 @@
   let _debounceTimer = null;
   let _proactiveSynced = false;
   let _lastTrustedClick = 0;
+  let _usercentricsHostObserver = null;
+  let _usercentricsShadowRoots = new WeakSet();
+  let _usercentricsAttemptTimer = null;
+  let _usercentricsPendingAction = null;
+  let _usercentricsEventListenerInstalled = false;
 
   // Track user-initiated interactions so we don't auto-dismiss preference centers
   // the user intentionally opened via footer links or similar controls.
@@ -757,6 +789,8 @@
 
   document.addEventListener('__emc_prefs__', (e) => {
     setPrefs(e.detail);
+    ensureUsercentricsEventListener();
+    ensureUsercentricsShadowObservers();
     if (GUARDIAN_HOSTS.has(window.location.hostname)) {
       startGuardianRetryLoop();
     }
@@ -765,6 +799,8 @@
   }, { once: true });
 
   bootstrapPrefsFromDataset();
+  ensureUsercentricsEventListener();
+  ensureUsercentricsShadowObservers();
   if (_prefs?.globalPreference) {
     if (GUARDIAN_HOSTS.has(window.location.hostname)) {
       startGuardianRetryLoop();
@@ -779,6 +815,7 @@
     setTimeout(() => {
       if (_handled) return;
       bootstrapPrefsFromDataset();
+      ensureUsercentricsShadowObservers();
       if (!_prefs?.globalPreference) return;
       if (GUARDIAN_HOSTS.has(window.location.hostname)) {
         startGuardianRetryLoop();
@@ -803,6 +840,7 @@
       setTimeout(() => {
         if (_handled) return;
         bootstrapPrefsFromDataset();
+        ensureUsercentricsShadowObservers();
         tryHandlers();
         syncOneTrustConsent();
       }, ms);
@@ -810,6 +848,7 @@
   } else {
     const observer = new MutationObserver(() => {
       bootstrapPrefsFromDataset();
+      ensureUsercentricsShadowObservers();
       if (_handled || _trying) return;
       clearTimeout(_debounceTimer);
       _debounceTimer = setTimeout(() => { tryHandlers(); syncOneTrustConsent(); }, 100);
@@ -817,6 +856,52 @@
     const root = document.documentElement ?? document;
     if (root) observer.observe(root, { childList: true, subtree: true });
     setTimeout(() => { observer.disconnect(); clearTimeout(_debounceTimer); }, 15000);
+  }
+
+  // Usercentrics renders its actionable surface inside an open shadow root. Mutations
+  // below that root do not reach the document observer above, so observe the CMP's
+  // own root and keep a bounded retry for hosts that attach their shadow tree late.
+  function ensureUsercentricsShadowObservers() {
+    const hosts = Array.from(document.querySelectorAll(
+      '#usercentrics-cmp-ui, #usercentrics-root, [data-testid="uc-banner"]'
+    ));
+    if (!hosts.length && !window.UC_UI) return;
+
+    for (const host of hosts) {
+      const root = host.shadowRoot;
+      if (!root || _usercentricsShadowRoots.has(root)) continue;
+      _usercentricsShadowRoots.add(root);
+      const observer = new MutationObserver(() => {
+        if (_handled || !_prefs) return;
+        clearTimeout(_usercentricsAttemptTimer);
+        _usercentricsAttemptTimer = setTimeout(() => {
+          if (_handled || !_prefs) return;
+          bootstrapPrefsFromDataset();
+          void tryHandlers();
+        }, 50);
+      });
+      observer.observe(root, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['aria-checked', 'aria-pressed', 'data-state', 'data-checked', 'aria-hidden', 'class', 'hidden', 'style'],
+      });
+    }
+
+    if (_usercentricsHostObserver) return;
+    const documentRoot = document.documentElement ?? document;
+    if (!documentRoot) return;
+    _usercentricsHostObserver = new MutationObserver(() => {
+      ensureUsercentricsShadowObservers();
+    });
+    _usercentricsHostObserver.observe(documentRoot, { childList: true, subtree: true });
+
+    for (const ms of [250, 750, 1500, 3000, 5000, 8000, 12000, 20000, 30000]) {
+      setTimeout(() => {
+        if (_handled) return;
+        ensureUsercentricsShadowObservers();
+      }, ms);
+    }
   }
 
   // Detects React/Next.js/Nuxt SPAs via page-global markers accessible in MAIN world.
@@ -1434,6 +1519,7 @@
   }
 
   function shouldAttemptHandler(name) {
+    if (name === 'UC_UI' && (hasVisibleUsercentricsActiveSurface() || Boolean(window.UC_UI))) return true;
     if (hasVisibleSelector(CMP_SELECTORS[name] ?? [])) return true;
     if (name === 'Nike') {
       return NIKE_CCPA_HOSTS.has(window.location.hostname) &&
@@ -2902,6 +2988,639 @@
       return true;
     } catch (_) {}
     return dispatchSyntheticClick(el);
+  }
+
+  async function waitForUsercentricsActiveSurfaceDismissed(timeoutMs = 2500) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (!hasVisibleUsercentricsActiveSurface()) return true;
+      await delay(100);
+    }
+    return !hasVisibleUsercentricsActiveSurface();
+  }
+
+  function hasVisibleUsercentricsActiveSurface() {
+    const hosts = Array.from(document.querySelectorAll('#usercentrics-cmp-ui, #usercentrics-root, [data-testid="uc-banner"]'));
+    for (const host of hosts) {
+      const root = host.shadowRoot ?? host;
+      const modal = root.querySelector('[role="dialog"][aria-modal="true"], [role="dialog"][aria-modal=true]');
+      if (isUsercentricsVisible(modal)) return true;
+
+      // Leaders Island retains #uc-main-dialog as the 64px fingerprint launcher
+      // after saving consent. It is not an active CMP surface unless it still
+      // contains a consent action; treating the launcher as a dialog prevents
+      // the completed action from ever being reported.
+      const dialog = root.querySelector('#uc-main-dialog');
+      if (isUsercentricsVisible(dialog) && dialog.querySelector(
+        '#accept, #more, #deny, #reject, #save, [data-testid*="accept"], [data-testid*="deny"], [data-testid*="save"], [data-action-type]:not([data-action-type="more-privacy"]), button[data-action="consent"]:not(.fingerprint)'
+      )) return true;
+
+      const banner = root.querySelector('[data-testid="uc-banner"]');
+      if (isUsercentricsVisible(banner) && banner.querySelector(
+        '[data-action="consent"], [data-action-type], button[aria-label*="Accept" i], button[aria-label*="Deny" i], button[aria-label*="Reject" i], button[aria-label*="Save" i]'
+      )) return true;
+    }
+    return false;
+  }
+
+  function dispatchUsercentricsPreHandle(method, preference) {
+    _usercentricsPendingAction = {
+      method,
+      preference,
+      timestamp: Date.now(),
+    };
+    scheduleUsercentricsDismissalReport(method);
+    document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {
+      detail: {
+        method,
+        preference,
+      },
+    }));
+  }
+
+  function ensureUsercentricsEventListener() {
+    if (_usercentricsEventListenerInstalled || typeof window?.addEventListener !== 'function') return;
+    _usercentricsEventListenerInstalled = true;
+    window.addEventListener('UC_UI_CMP_EVENT', (event) => {
+      const pending = _usercentricsPendingAction;
+      const type = String(
+        event?.detail?.type ?? event?.detail?.event ?? event?.detail?.action ?? event?.detail ?? ''
+      ).toUpperCase();
+      if (pending && Date.now() - pending.timestamp <= 15000) {
+        const expectedType = pending.preference === 'accept_all'
+          ? 'ACCEPT_ALL'
+          : pending.preference === 'reject_all'
+            ? 'DENY_ALL'
+            : 'SAVE';
+        if (type !== expectedType) return;
+        void reportUsercentricsHandledFromConsentEvent(pending.method);
+        return;
+      }
+
+      // A user may open the privacy center manually. In that case there is no
+      // extension pre-handle token, but a completed Usercentrics choice is still
+      // a real action and must be counted after the surface closes.
+      if (!LEADERS_ISLAND_USERCENTRICS_HOSTS.has(window.location.hostname)) return;
+      const method = type === 'ACCEPT_ALL'
+        ? 'cmp_api:UC_UI:accept_all'
+        : type === 'DENY_ALL'
+          ? 'cmp_api:UC_UI:reject_all'
+          : type === 'SAVE'
+            ? 'cmp_api:UC_UI:custom'
+            : null;
+      if (method) void reportUsercentricsHandledFromConsentEvent(method);
+    });
+  }
+
+  async function reportUsercentricsHandledFromConsentEvent(method) {
+    if (_handled) return method;
+    // UC_UI_CMP_EVENT confirms that Usercentrics committed the decision, but it
+    // can fire before the first-layer UI has finished closing. Do not report a
+    // handled action while a visible Usercentrics surface is still present:
+    // main.js stops further handling as soon as __emc_handled__ is dispatched.
+    await delay(150);
+    if (_handled) return method;
+    // Keep the event-backed action alive through a slow CMP close. Some
+    // Usercentrics builds commit immediately but remove the first layer several
+    // seconds later; clearing the pending action at event time loses the only
+    // reliable counter signal in that case.
+    if (!(await waitForUsercentricsActiveSurfaceDismissed(12000))) return false;
+    if (_handled) return method;
+    _usercentricsPendingAction = null;
+    _handled = true;
+    document.dispatchEvent(new CustomEvent('__emc_handled__', {
+      detail: { method }
+    }));
+    return method;
+  }
+
+  function scheduleUsercentricsDismissalReport(method, timeoutMs = 12000) {
+    const pending = _usercentricsPendingAction;
+    if (!pending || pending.method !== method) return;
+    const pendingTimestamp = pending.timestamp;
+    void (async () => {
+      const deadline = Date.now() + timeoutMs;
+      let sawVisibleSurface = false;
+      while (Date.now() < deadline) {
+        if (_handled) return;
+        const current = _usercentricsPendingAction;
+        if (!current || current.method !== method || current.timestamp !== pendingTimestamp) return;
+        if (hasVisibleUsercentricsActiveSurface()) {
+          sawVisibleSurface = true;
+        } else if (sawVisibleSurface) {
+          _usercentricsPendingAction = null;
+          _handled = true;
+          document.dispatchEvent(new CustomEvent('__emc_handled__', {
+            detail: { method }
+          }));
+          return;
+        }
+        await delay(100);
+      }
+    })();
+  }
+
+  async function buildUsercentricsServiceDecisions(api, prefs) {
+    const services = await readUsercentricsServices(api);
+    return services
+      .filter((service) => service && !service.isEssential && !service.isHidden)
+      .map((service) => {
+        const id = usercentricsServiceId(service);
+        if (!id) return null;
+        return {
+          id,
+          serviceId: id,
+          consent: usercentricsDesiredServiceConsent(service, prefs),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  async function readUsercentricsServices(api) {
+    for (const name of ['getServicesBaseInfo', 'getServices', 'getServicesFullInfo']) {
+      const fn = api?.[name];
+      if (typeof fn !== 'function') continue;
+      try {
+        const value = await Promise.resolve(fn.call(api));
+        if (Array.isArray(value)) return value;
+      } catch (_) {}
+    }
+    return [];
+  }
+
+  function usercentricsServiceId(service) {
+    return service?.id ?? service?.serviceId ?? service?.processorId ?? null;
+  }
+
+  function usercentricsDesiredServiceConsent(service, prefs) {
+    if (LEADERS_ISLAND_USERCENTRICS_HOSTS.has(window.location.hostname)) {
+      const description = [service?.description, service?.purpose].filter(Boolean).join(' ');
+      if (/\b(analy[sz]e|analysis|usage behavior|measure|performance|statistics?)\b/i.test(description)) {
+        const descriptionDecision = usercentricsDesiredConsentForText(description, prefs);
+        if (descriptionDecision !== null) return descriptionDecision;
+      }
+    }
+    const category = [
+      service?.categorySlug,
+      service?.category?.slug,
+      service?.category?.name,
+      service?.categoryName,
+    ].filter(Boolean).join(' ');
+    if (LEADERS_ISLAND_USERCENTRICS_HOSTS.has(window.location.hostname) && /\bfunctional\b/i.test(category)) {
+      // This publisher uses Usercentrics' Functional label for usage measurement.
+      return Boolean(prefs.analytics);
+    }
+    const serviceText = [
+      service?.name,
+      service?.description,
+      service?.processorId,
+    ].filter(Boolean).join(' ');
+    const categoryDecision = usercentricsDesiredConsentForText(category, prefs);
+    if (categoryDecision !== null) return categoryDecision;
+    const serviceDecision = usercentricsDesiredConsentForText(serviceText, prefs);
+    if (serviceDecision !== null) return serviceDecision;
+    return prefs.uncategorized === 'accept';
+  }
+
+  function usercentricsDesiredConsentForText(text, prefs) {
+    const normalized = String(text || '').toLowerCase();
+    if (!normalized) return null;
+    if (/\b(essential|necessary|required)\b/.test(normalized)) return true;
+    if (/\b(marketing|advertis(?:ing|ement)?|targeting)\b/.test(normalized)) {
+      return Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;
+    }
+    if (/\b(functional|preferences?|personalization|personalisation)\b/.test(normalized)) {
+      return Boolean(prefs.functional) || prefs.uncategorized === 'accept';
+    }
+    if (/\b(analytics?|statistics?|performance|measurement)\b/.test(normalized)) {
+      return Boolean(prefs.analytics);
+    }
+    return null;
+  }
+
+  async function applyUsercentricsBulkConsent(api, accepted) {
+    const methodNames = accepted
+      ? ['acceptAllConsents', 'acceptAllServices']
+      : ['denyAllConsents', 'denyAllServices'];
+    for (const name of methodNames) {
+      const fn = api?.[name];
+      if (typeof fn !== 'function') continue;
+      try {
+        await Promise.resolve(fn.call(api));
+        return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  function canApplyUsercentricsBulkConsent(api, accepted) {
+    const methodNames = accepted
+      ? ['acceptAllConsents', 'acceptAllServices']
+      : ['denyAllConsents', 'denyAllServices'];
+    return methodNames.some((name) => typeof api?.[name] === 'function');
+  }
+
+  function canApplyUsercentricsServiceDecisions(api) {
+    return ['updateServices', 'updateServicesConsents', 'updateServiceConsent']
+      .some((name) => typeof api?.[name] === 'function');
+  }
+
+  async function applyUsercentricsServiceDecisions(api, decisions) {
+    if (!decisions.length) return false;
+    for (const name of ['updateServices', 'updateServicesConsents']) {
+      const fn = api?.[name];
+      if (typeof fn !== 'function') continue;
+      try {
+        await Promise.resolve(fn.call(api, decisions));
+        await persistUsercentricsConsentsIfNeeded(api);
+        return true;
+      } catch (_) {}
+    }
+
+    const single = api?.updateServiceConsent;
+    if (typeof single === 'function') {
+      try {
+        for (const decision of decisions) {
+          await Promise.resolve(single.call(api, decision));
+        }
+        await persistUsercentricsConsentsIfNeeded(api);
+        return true;
+      } catch (_) {}
+    }
+
+    return false;
+  }
+
+  async function reportUsercentricsHandledAfterDismissal(api, method) {
+    if (_handled) return method;
+    await dismissUsercentricsUi(api);
+    if (await waitForUsercentricsActiveSurfaceDismissed(2500)) {
+      if (_handled) return method;
+      _handled = true;
+      document.dispatchEvent(new CustomEvent('__emc_handled__', {
+        detail: { method }
+      }));
+      return method;
+    }
+    scheduleUsercentricsDismissalReport(method);
+    return false;
+  }
+
+  async function executeUsercentricsOfficialUiFlow(prefs, method) {
+    const roots = usercentricsRoots();
+    if (!roots.length) return false;
+
+    if (prefs.globalPreference === 'accept_all') {
+      const clicked = clickUsercentricsActionWithPreHandle(
+        roots,
+        ['#accept', '[data-action-type="accept"]', '[data-testid="uc-accept-all-button"]', 'button[aria-label*="Accept" i]'],
+        /^(?:accept all|accept|allow all|agree)$/i,
+        method,
+        prefs.globalPreference,
+      );
+      return clicked ? reportUsercentricsHandledFromOfficialUi(method) : false;
+    }
+
+    if (prefs.globalPreference === 'custom') {
+      const opened = clickFirstVisibleInUsercentricsRoots(
+        roots,
+        ['#more', '[data-action-type="more"]', '[data-testid="uc-more-button"]', 'button[aria-label*="More Information" i]'],
+      ) || clickUsercentricsButtonByText(roots, /(?:more information|settings|preferences|privacy settings)/i);
+      if (!opened) return false;
+      const expandedRoots = await waitForUsercentricsPreferenceRoots();
+      if (!expandedRoots.length) return false;
+      if (!(await applyUsercentricsOfficialUiCustomPreferences(expandedRoots, prefs))) return false;
+      const saved = clickUsercentricsActionWithPreHandle(
+        expandedRoots,
+        ['#save', '[data-action-type="save"]', '[data-testid="uc-save-button"]'],
+        /^(?:save services|save settings|save preferences|save)$/i,
+        method,
+        prefs.globalPreference,
+      );
+      return saved ? reportUsercentricsHandledFromOfficialUi(method) : false;
+    }
+
+    const rejectedDirectly = clickUsercentricsActionWithPreHandle(
+      roots,
+      ['#deny', '#reject', '[data-action-type="deny"]', '[data-action-type="reject"]', '[data-testid="uc-deny-all-button"]', 'button[aria-label*="Deny" i]', 'button[aria-label*="Reject" i]'],
+      /^(?:deny all|reject all|decline all|deny|reject|decline)$/i,
+      method,
+      prefs.globalPreference,
+    );
+    if (rejectedDirectly) return reportUsercentricsHandledFromOfficialUi(method);
+
+    const opened = clickFirstVisibleInUsercentricsRoots(
+      roots,
+      ['#more', '[data-action-type="more"]', '[data-testid="uc-more-button"]', 'button[aria-label*="More Information" i]'],
+    ) || clickUsercentricsButtonByText(roots, /(?:more information|settings|preferences|privacy settings)/i);
+    if (!opened) return false;
+    await delay(300);
+    const expandedRoots = usercentricsRoots();
+    const rejectedFromPreferences =
+      clickUsercentricsActionWithPreHandle(
+        expandedRoots,
+        ['#deny', '#reject', '[data-action-type="deny"]', '[data-action-type="reject"]', '[data-testid="uc-deny-all-button"]', 'button[aria-label*="Deny" i]', 'button[aria-label*="Reject" i]'],
+        /^(?:deny all|reject all|decline all|deny|reject|decline)$/i,
+        method,
+        prefs.globalPreference,
+      ) ||
+      clickUsercentricsActionWithPreHandle(
+        expandedRoots,
+        ['#save', '[data-action-type="save"]', '[data-testid="uc-save-button"]'],
+        /^(?:save services|save settings|save preferences|save)$/i,
+        method,
+        prefs.globalPreference,
+      );
+    return rejectedFromPreferences ? reportUsercentricsHandledFromOfficialUi(method) : false;
+  }
+
+  async function reportUsercentricsHandledFromOfficialUi(method) {
+    if (_handled) return method;
+    if (await waitForUsercentricsActiveSurfaceDismissed(5000)) {
+      if (_handled) return method;
+      _handled = true;
+      document.dispatchEvent(new CustomEvent('__emc_handled__', {
+        detail: { method }
+      }));
+      return method;
+    }
+    scheduleUsercentricsDismissalReport(method);
+    return false;
+  }
+
+  function usercentricsRoots() {
+    const roots = [];
+    for (const host of document.querySelectorAll('#usercentrics-cmp-ui, #usercentrics-root, [data-testid="uc-banner"]')) {
+      const root = host.shadowRoot ?? host;
+      if (!roots.includes(root)) roots.push(root);
+    }
+    return roots;
+  }
+
+  function clickFirstVisibleInUsercentricsRoots(roots, selectors, options = {}) {
+    for (const root of roots) {
+      for (const selector of selectors) {
+        for (const el of root.querySelectorAll(selector)) {
+          if (!isUsercentricsVisible(el)) continue;
+          options.beforeClick?.();
+          return activateVisibleElement(el);
+        }
+      }
+    }
+    return false;
+  }
+
+  function clickUsercentricsButtonByText(roots, pattern, options = {}) {
+    for (const root of roots) {
+      for (const button of root.querySelectorAll('button, a, [role="button"]')) {
+        if (!isUsercentricsVisible(button)) continue;
+        const text = button.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+        if (!pattern.test(text)) continue;
+        options.beforeClick?.();
+        return activateVisibleElement(button);
+      }
+    }
+    return false;
+  }
+
+  function clickUsercentricsActionWithPreHandle(roots, selectors, textPattern, method, preference) {
+    const beforeClick = () => dispatchUsercentricsPreHandle(method, preference);
+    return clickFirstVisibleInUsercentricsRoots(roots, selectors, { beforeClick }) ||
+      clickUsercentricsButtonByText(roots, textPattern, { beforeClick });
+  }
+
+  function isUsercentricsVisible(el) {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 &&
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      Number(style.opacity || '1') > 0 &&
+      style.pointerEvents !== 'none' &&
+      el.getAttribute?.('aria-hidden') !== 'true';
+  }
+
+  async function waitForUsercentricsPreferenceRoots(timeoutMs = 1800) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const roots = usercentricsRoots();
+      if (roots.some((root) => usercentricsPreferenceControls(root).length > 0 ||
+        root.querySelector('#save, [data-action-type="save"], [data-testid="uc-save-button"]'))) {
+        return roots;
+      }
+      await delay(100);
+    }
+    return usercentricsRoots();
+  }
+
+  async function applyUsercentricsOfficialUiCustomPreferences(roots, prefs) {
+    const desiredFunctional = Boolean(prefs.functional) || prefs.uncategorized === 'accept';
+    const desiredAnalytics = Boolean(prefs.analytics);
+    const desiredAdvertising = Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;
+    const rules = LEADERS_ISLAND_USERCENTRICS_HOSTS.has(window.location.hostname)
+      ? [
+        // Leaders Island labels its usage-measurement category "Functional". The
+        // category label is the stable identifier; the explanatory text is not
+        // always included in the control's accessible name across CMP revisions.
+        { patterns: [/\bfunctional\b/i, /\banalytics?\b/i, /\b(?:analy[sz]e|analysis|usage behavior|measure|performance|statistics?)\b/i], checked: desiredAnalytics },
+        { patterns: [/\badvertis(?:ing|ement)?\b/i, /\bmarketing\b/i, /\btargeting\b/i], checked: desiredAdvertising },
+      ]
+      : [
+        { patterns: [/\bfunctional\b/i, /\bpreferences?\b/i, /\bpersonalization\b/i], checked: desiredFunctional },
+        { patterns: [/\banalytics?\b/i, /\bstatistics?\b/i, /\bperformance\b/i, /\bmeasurement\b/i], checked: desiredAnalytics },
+        { patterns: [/\badvertis(?:ing|ement)?\b/i, /\bmarketing\b/i, /\btargeting\b/i], checked: desiredAdvertising },
+      ];
+    const applied = [];
+    for (const rule of rules) {
+      const control = findUsercentricsPreferenceControl(roots, rule.patterns);
+      if (!control) {
+        applied.push(null);
+        continue;
+      }
+      applied.push(setUsercentricsPreferenceControlState(control, rule.checked));
+    }
+    return applied.some((result) => result === true) && applied.every((result) => result !== false);
+  }
+
+  function findUsercentricsPreferenceControl(roots, patterns) {
+    for (const root of roots) {
+      for (const control of usercentricsPreferenceControls(root)) {
+        const identity = usercentricsControlIdentity(control, root);
+        if (!identity) continue;
+        if (patterns.some((pattern) => pattern.test(identity))) return control;
+        if (/\b(essential|necessary|required)\b/i.test(identity)) continue;
+      }
+    }
+    return null;
+  }
+
+  function usercentricsPreferenceControls(root) {
+    return Array.from(root.querySelectorAll(
+      'input[type="checkbox"], input[type="radio"], [role="switch"], [role="checkbox"][aria-checked], button[aria-checked], button[aria-pressed], [aria-checked][tabindex], [aria-pressed][tabindex], [data-state="checked"], [data-state="unchecked"], [data-checked]'
+    )).filter((control) => {
+      if (!isVisible(control) && !control.closest?.('label, [role="switch"], [aria-checked]')) return false;
+      if (control.disabled || control.getAttribute?.('aria-disabled') === 'true') return false;
+      return readUsercentricsPreferenceControlState(control) !== null;
+    });
+  }
+
+  function usercentricsControlIdentity(control, root) {
+    const parts = [
+      control.getAttribute?.('aria-label') ?? '',
+      control.getAttribute?.('data-testid') ?? '',
+      control.id ?? '',
+      textFromIdRefs(control, 'aria-labelledby', root),
+      textFromIdRefs(control, 'aria-describedby', root),
+    ];
+    let node = control;
+    for (let depth = 0; node && node !== root && depth < 8; depth += 1) {
+      const text = node.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      if (text && text.length <= 700 && !usercentricsTextLooksLikeWholePanel(text)) {
+        parts.push(text);
+        if (usercentricsTextContainsCategoryLabel(text)) break;
+      }
+      node = node.parentElement;
+    }
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function usercentricsTextLooksLikeWholePanel(text) {
+    return usercentricsCategoryLabelMatchCount(text) > 1;
+  }
+
+  function usercentricsTextContainsCategoryLabel(text) {
+    return usercentricsCategoryLabelMatchCount(text) > 0;
+  }
+
+  function usercentricsCategoryLabelMatchCount(text) {
+    const groups = [
+      [/\bessential\b/i, /\bnecessary\b/i, /\brequired\b/i],
+      [/\bfunctional\b/i, /\bpreferences?\b/i, /\bpersonalization\b/i],
+      [/\banalytics?\b/i, /\bstatistics?\b/i, /\bperformance\b/i, /\bmeasurement\b/i],
+      [/\badvertis(?:ing|ement)?\b/i, /\bmarketing\b/i, /\btargeting\b/i],
+    ];
+    return groups.filter((patterns) => patterns.some((pattern) => pattern.test(text))).length;
+  }
+
+  function textFromIdRefs(control, attr, root) {
+    const ids = (control.getAttribute?.(attr) ?? '').split(/\s+/).filter(Boolean);
+    return ids.map((id) => {
+      const escaped = typeof CSS?.escape === 'function' ? CSS.escape(id) : id;
+      return root.querySelector(`#${escaped}`)?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    }).join(' ');
+  }
+
+  function readUsercentricsPreferenceControlState(control) {
+    if (control instanceof HTMLInputElement) return Boolean(control.checked);
+    const aria = control.getAttribute?.('aria-checked');
+    if (aria === 'true') return true;
+    if (aria === 'false') return false;
+    const pressed = control.getAttribute?.('aria-pressed');
+    if (pressed === 'true') return true;
+    if (pressed === 'false') return false;
+    const dataState = control.getAttribute?.('data-state');
+    if (/^(?:checked|on|active)$/i.test(dataState || '')) return true;
+    if (/^(?:unchecked|off|inactive)$/i.test(dataState || '')) return false;
+    const dataChecked = control.getAttribute?.('data-checked');
+    if (dataChecked === 'true') return true;
+    if (dataChecked === 'false') return false;
+    return null;
+  }
+
+  function setUsercentricsPreferenceControlState(control, checked) {
+    const current = readUsercentricsPreferenceControlState(control);
+    if (current === null) return false;
+    if (current === checked) return true;
+    activateVisibleElement(control);
+    return readUsercentricsPreferenceControlState(control) === checked;
+  }
+
+  async function persistUsercentricsConsentsIfNeeded(api) {
+    for (const name of ['saveConsents', 'saveUserActionPerformed', 'updateStorage']) {
+      const fn = api?.[name];
+      if (typeof fn !== 'function') continue;
+      try {
+        await Promise.resolve(fn.call(api));
+        return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  async function waitForUsercentricsBulkConsent(api, accepted, timeoutMs = 2500) {
+    const started = Date.now();
+    let sawReadableServices = false;
+    while (Date.now() - started < timeoutMs) {
+      const services = await readUsercentricsServices(api);
+      if (services.length) {
+        sawReadableServices = true;
+        if (services
+          .filter((service) => service && !service.isEssential && !service.isHidden)
+          .every((service) => usercentricsConsentGiven(service) === accepted)) {
+          return true;
+        }
+      }
+      await delay(100);
+    }
+    return !sawReadableServices;
+  }
+
+  async function waitForUsercentricsServiceDecisions(api, decisions, timeoutMs = 2500) {
+    const byId = new Map(decisions.map((decision) => [decision.id, Boolean(decision.consent)]));
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const services = await readUsercentricsServices(api);
+      if (services.length && services.every((service) => {
+        const id = usercentricsServiceId(service);
+        if (!byId.has(id)) return true;
+        return usercentricsConsentGiven(service) === byId.get(id);
+      })) {
+        return true;
+      }
+      await delay(100);
+    }
+    return false;
+  }
+
+  function usercentricsConsentGiven(service) {
+    const consent = service?.consent;
+    if (typeof consent === 'boolean') return consent;
+    if (typeof consent?.given === 'boolean') return consent.given;
+    if (typeof consent?.status === 'boolean') return consent.status;
+    if (typeof service?.consentGiven === 'boolean') return service.consentGiven;
+    if (typeof service?.isConsentGiven === 'boolean') return service.isConsentGiven;
+    return null;
+  }
+
+  async function dismissUsercentricsUi(api) {
+    for (const name of ['closeCMP', 'close', 'hide', 'setUIAsClosed']) {
+      const fn = api?.[name];
+      if (typeof fn !== 'function') continue;
+      try {
+        await Promise.resolve(fn.call(api));
+        if (await waitForUsercentricsActiveSurfaceDismissed(500)) return true;
+      } catch (_) {}
+    }
+
+    const closeSelectors = [
+      'button[aria-label*="Close" i]',
+      'button[aria-label*="Dismiss" i]',
+      '[data-testid="uc-close-button"]',
+      '#uc-close-button',
+      '.uc-close-button',
+    ];
+    for (const host of document.querySelectorAll('#usercentrics-cmp-ui, #usercentrics-root, [data-testid="uc-banner"]')) {
+      const root = host.shadowRoot ?? host;
+      for (const selector of closeSelectors) {
+        for (const el of root.querySelectorAll(selector)) {
+          if (!isVisible(el)) continue;
+          activateVisibleElement(el);
+          if (await waitForUsercentricsActiveSurfaceDismissed(500)) return true;
+        }
+      }
+    }
+    return false;
   }
 
   function hasVisibleOneTrustPrivacyChoicesEntry() {

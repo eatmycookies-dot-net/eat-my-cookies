@@ -20,6 +20,8 @@ and which sites to re-test after a change lands.
 
 **Any change to these files can affect every site. Minimum retest set: one site per CMP family (see table below).**
 
+**Manual settings/open invariant (added August 8, 2026):** If the user clicks a footer or privacy/settings link to inspect a CMP surface, automation must stand down. `content/main.js` records a short-lived `__emc_manual_consent_open__` marker for trusted user clicks on cookie/privacy/settings/preferences/choices openers, and the coordinator plus ConsentManager, Sourcepoint, and AppConsent frame handlers check that marker before taking action or reporting a count. Retests for any CMP handler that can reopen settings should prove that a manual opener remains inspectable and does not create another recent activity entry.
+
 ### CMP-scoped files (touch one CMP family)
 
 | File | CMP / Sites affected |
@@ -137,7 +139,7 @@ Do not treat `theverge.com` as a current Sourcepoint regression target without r
 
 | Site | Region | Special notes |
 |------|--------|--------------|
-| `dw.com` | EU | Dedicated handler; automation-covered. Extension-driven privacy-page detours should return to content, but manual/footer-opened visits to `data-privacy-settings` must remain on that page. |
+| `dw.com` | EU/US | Dedicated handler; automation-covered. August 8, 2026 focused reruns cover Accept All, Custom via the first-layer `Settings` link on `/en/top-stories/s-9097`, and the original DW settings/reject path. Extension-driven privacy-page detours must save the real settings surface, return to the original content URL, and clear `__emc_dw_return_pending__` after the detour; manual/footer-opened visits to `data-privacy-settings` must remain on that page and must not create another action count. The DW Accept All fixture verifies that clicking the footer privacy-settings link leaves `Save selection` visible and records no new activity. Accept All must enable eligible purposes and click `Save selection` if DW strands it on the settings page; it must not use the reject-style toggle-off fallback. DW cooldowns are preference-scoped so reject/accept/custom runs do not suppress each other in sequential validation. |
 | `bernstein-sanitarios.pt` | EU | Human-validated May 30, 2026. Top-level Consentmanager storefront using `#cmpwrapper` / `#cmpbox` directly in the page rather than a cross-origin frame. The working path must recognize `cmptxt_btn_save`, avoid misclassifying `.cmpboxbtnyescustomchoices` save buttons as accept buttons, and traverse the left-side category navigation so custom prefs apply across `Function`, `Marketing`, `Preferences`, `Measurement`, `Other`, and `Social media` before `Save + Exit`. |
 
 ### Ketch
@@ -182,6 +184,13 @@ What matters:
 | Site | Region | Special notes |
 |------|--------|--------------|
 | `allroundautomations.com` | US | Targeted single-site e2e passes June 20, 2026 in custom mode (`preferences=true`, `statistics=false`, `marketing=false`). This Usercentrics-branded Cookiebot build records the correct `CookieConsent` values through `submitCustomConsent()` / `withdraw()`, but the visible dialog does not auto-dismiss afterward; the shared handler now calls `Cookiebot.hide()` after consent-state verification. |
+
+### Usercentrics
+**Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `leadersisland.com` | US/global | User-supplied browser evidence on July 30, 2026 showed the modern Usercentrics UI mounted as `aside#usercentrics-cmp-ui` with all actionable buttons inside an open shadow root. The shadow DOM fallback can visually dismiss this site without proving service-level consent persistence, so Leaders Island is host-gated to a single MAIN-world owner. That owner first uses `UC_UI` service APIs when available; if they are missing/not ready, it clicks the official Usercentrics shadow UI from MAIN world for Accept All, Reject All, and Custom. The `#usercentrics-cmp-ui` host may measure as zero-height while shadow children are visible, so handler gating must check visible shadow surfaces, not host-box visibility alone. The MAIN-world handler now observes Usercentrics shadow-root mutations because the page can reveal the modal after the document observer and the original 2.5-second retry window have ended. A `UC_UI_CMP_EVENT` confirms that consent was committed but is not by itself proof that the first-layer modal closed; action reporting must wait for the visible Usercentrics surface to disappear, otherwise the counter can increment while the banner remains open and prevent the official UI fallback. Its post-save check also treats opacity-zero/pointer-events-disabled shells as dismissed, allowing the pre-handle action to be counted when Usercentrics keeps an invisible shadow shell in the DOM. Leaders Island's visible `Functional` category is mapped by its analytics/measurement description, so Custom with Analytics off turns that category off. `tests/usercentrics-shadow-extension.js` maps `leadersisland.com` to local zero-host fixtures and covers the real extension/service-worker stats path for shadow UI Accept All, Reject All, and Custom, including 5-second shadow-only visibility, delayed event-before-dismissal on `/en/podcast/`, semantic category mapping, fade-out dismissal, CMP-triggered reload, and no-double-count manual reload. It also covers `window.UC_UI` API Accept, Reject, and Custom with persisted service decisions. Live headless validation from the local environment did not surface a fresh banner, so keep fixture coverage as the regression source until a fresh human/live pass is available. |
 
 ### Investis Cookie Manager
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
@@ -308,7 +317,7 @@ Generic slider-based handling is implemented. Public live target still needed fo
 
 | Site | Special notes |
 |------|--------------|
-| `lemonde.fr` | Human-validated: all flows work |
+| `lemonde.fr` | Split live behavior. Human-validated from an EU session on August 8, 2026 for both the French root path and `/en/`. The French root path can show a consent-or-pay wall (`Soutenez un journalisme fiable`) where reject/custom are not available without accepting, subscribing, or signing in; the handler must report the site-specific choice warning there and must not record a rejected consent. A site-specific Accept override on this root wall is treated as raw accept only and is validated working: do not run the post-accept settings recovery there, because Le Monde can turn that path into a withdrawal modal (`Souhaitez-vous retirer votre consentement`). If that withdrawal modal is already visible from an automatic recovery attempt, cancel it unless the user manually opened settings. The `/en/` path exposes Le Monde's configurable `gdpr-lmd` CMP and is validated for Reject All, Accept All, Accept All with CCPA do-not-sell, and Custom Functional. Reject clicks only explicit `denyAll`; Accept All uses the settings save path when the configurable surface exists so reopened preferences match the saved state, with `ads=false` only when CCPA do-not-sell is enabled. If the first layer exposes only raw Accept before settings, Accept All with CCPA do-not-sell reopens settings afterward and saves ads off before recording success on `/en/` only. The settings-save path also normalizes the first-party `lmd_consent` purpose map to the intended categories and mirrors the intended payload in extension storage so Le Monde's delayed cleanup cannot turn Custom Functional into reject-all. User-opened footer/settings links are suppressed immediately so users can inspect saved values without auto-dismissal; visible duplicate controls are synced from `lmd_consent` only while the settings surface is visible. Le Monde is gated out of generic DOM fallback so late banners cannot be raw-accepted by the declarative `lemonde` rule before the host-specific settings/CCPA path runs. |
 
 ### BBC (custom, document-start)
 **Handler files:** `bbc-sourcepoint-hook.js`, `bbc-preferences.js`

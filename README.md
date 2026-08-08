@@ -326,6 +326,10 @@ For most contributors, the intended order is:
 3. `npm run test:e2e -- --site="..."`
    Run this when you changed a real site flow or a CMP integration and need live browser coverage.
 
+For Usercentrics changes, also run `npm run test:e2e:usercentrics`. This local Chromium regression checks
+the service-worker counter and saved category state for Accept All, Reject All, and Custom, including
+shadow-root timing and reload behavior; the ordinary unit/static suite does not exercise that path.
+
 Use `npm run test:all` only when you explicitly want the full suite, including live-site validation.
 
 ## Adding Site Support

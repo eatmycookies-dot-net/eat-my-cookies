@@ -32,6 +32,7 @@ const HANDLE_WAIT  = 6000;   // ms to wait for extension to handle it
 const NAV_TIMEOUT  = 30000;
 const FOLLOW_UP_WAIT = 8000;
 const ACCESSIBILITY_HELP_PATH = '/help/accessibility-help';
+const MANUAL_CONSENT_OPEN_KEY = '__emc_manual_consent_open__';
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
 const args     = process.argv.slice(2);
@@ -41,6 +42,37 @@ const region   = argVal(args, '--region');
 const cmpFilter= argVal(args, '--cmp');
 const siteName = argVal(args, '--site');
 
+function hasManifestFile(dir) {
+  try {
+    return fs.statSync(path.join(dir, 'manifest.json')).isFile();
+  } catch (_) {
+    return false;
+  }
+}
+
+function resolveVpnExtensionPath(candidate) {
+  if (!candidate) return null;
+
+  if (hasManifestFile(candidate)) {
+    return candidate;
+  }
+
+  let entries;
+  try {
+    entries = fs.readdirSync(candidate, { withFileTypes: true });
+  } catch (_) {
+    return null;
+  }
+
+  const versionDirs = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(candidate, entry.name))
+    .filter(hasManifestFile)
+    .sort((a, b) => path.basename(a).localeCompare(path.basename(b), undefined, { numeric: true }));
+
+  return versionDirs.at(-1) ?? null;
+}
+
 function discoverBundledVpnExtensionPath() {
   const candidates = [
     path.resolve(__dirname, '..', '..', 'vpn-extension', 'omghfjlpggmjjaagoclmmobgdodcjboh'),
@@ -48,11 +80,8 @@ function discoverBundledVpnExtensionPath() {
   ];
 
   for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-        return candidate;
-      }
-    } catch (_) {}
+    const resolved = resolveVpnExtensionPath(candidate);
+    if (resolved) return resolved;
   }
 
   return null;
@@ -65,11 +94,12 @@ function discoverBundledVpnExtensionPath() {
 //   3. Known local Browsec checkout next to this workspace (when present)
 // See CONTRIBUTING.md → "Testing with a VPN" for setup instructions.
 const vpnExtArg = argVal(args, '--vpn-ext');
-const VPN_EXT_DIR = vpnExtArg
+const VPN_EXT_SOURCE = vpnExtArg
   ? path.resolve(vpnExtArg)
   : process.env.EMC_VPN_EXT
     ? path.resolve(process.env.EMC_VPN_EXT)
-    : discoverBundledVpnExtensionPath();
+    : null;
+const VPN_EXT_DIR = resolveVpnExtensionPath(VPN_EXT_SOURCE) ?? discoverBundledVpnExtensionPath();
 
 // Profile dir for VPN session persistence — project-local so it works on any machine.
 const vpnProfileArg = argVal(args, '--vpn-profile');
@@ -182,7 +212,7 @@ async function testSite(page, site) {
     return { status: 'SKIP', detail: 'Blocked by anti-bot challenge during automated validation' };
   }
 
-  // Wait for the banner to appear
+    // Wait for the banner to appear
   const bannerFound = await waitForAny(page, site.bannerSelectors, bannerWaitMs);
   if (await isChallengePage(page)) {
     return { status: 'SKIP', detail: 'Blocked by anti-bot challenge during banner detection' };
@@ -192,9 +222,46 @@ async function testSite(page, site) {
     const afterStats = await readStatsSnapshot(page.context());
     const recorded = extractNewActivityForSite(beforeStats, afterStats, site);
     if (recorded) {
+      const activityIssue = validateExpectedActivity(recorded, site);
+      if (activityIssue) {
+        return { status: 'FAIL', detail: `Handled before banner polling but ${activityIssue}` };
+      }
+      const forbiddenTextIssue = await validateForbiddenTextAbsent(page, site);
+      if (forbiddenTextIssue) {
+        return { status: 'FAIL', detail: `Handled before banner polling but ${forbiddenTextIssue}` };
+      }
+      if (site.requirePostRecordedBannerGone) {
+        const bannerStillVisible = await anyVisible(page, site.bannerSelectors);
+        if (bannerStillVisible) {
+          return { status: 'FAIL', detail: await buildFailureDetail(page, site, beforeStats, `Handled before banner polling (${recorded.method ?? 'recorded action'}) but banner still visible`) };
+        }
+      }
+      const leMondeMismatch = site.expectedLeMondePurposeStates
+        ? await readLeMondePurposeStateMismatch(page, site.expectedLeMondePurposeStates)
+        : null;
+      if (leMondeMismatch) {
+        return { status: 'FAIL', detail: `Handled before banner polling (${recorded.method ?? 'recorded action'}) but ${formatLeMondeMismatch(leMondeMismatch)}` };
+      }
+      if (site.verifyLeMondeManualReopenNoActivity) {
+        const manualIssue = await verifyLeMondeManualReopenDoesNotRecord(page, site);
+        if (manualIssue) {
+          return { status: 'FAIL', detail: `Handled before banner polling but ${manualIssue}` };
+        }
+      }
+      if (site.verifyManualConsentOpenNoActivity) {
+        const manualIssue = await verifyManualConsentOpenDoesNotRecord(page, site);
+        if (manualIssue) {
+          return { status: 'FAIL', detail: `Handled before banner polling but ${manualIssue}` };
+        }
+      }
+      const suffix = [
+        site.expectedLeMondePurposeStates ? '; Le Monde purpose state verified' : '',
+        site.verifyLeMondeManualReopenNoActivity ? '; manual reopen did not record' : '',
+        site.verifyManualConsentOpenNoActivity ? '; manual consent open did not record' : '',
+      ].join('');
       return {
         status: 'PASS',
-        detail: `Handled before banner polling (${recorded.method ?? 'recorded action'})`,
+        detail: `Handled before banner polling (${recorded.method ?? 'recorded action'})${suffix}`,
       };
     }
 
@@ -238,7 +305,8 @@ async function testSite(page, site) {
     const recorded = extractNewActivityForSite(beforeStats, afterStats, site);
     if (site.allowRecordedActionPass && recorded) {
       const navigationIssue = validateNavigationExpectations(page.url(), visitedTopLevelUrls, site.navigationExpectations);
-      if (!navigationIssue) {
+      const forbiddenTextIssue = await validateForbiddenTextAbsent(page, site);
+      if (!navigationIssue && !forbiddenTextIssue) {
         return { status: 'PASS', detail: `Handled via recorded action (${recorded.method ?? 'recorded action'})` };
       }
     }
@@ -276,7 +344,19 @@ async function testSite(page, site) {
     return { status: 'FAIL', detail: 'Banner dismissed but no activity was recorded' };
   }
   if (recorded) {
+    const activityIssue = validateExpectedActivity(recorded, site);
+    if (activityIssue) {
+      return { status: 'FAIL', detail: activityIssue };
+    }
     detail += `; activity recorded (${recorded.method ?? 'recorded action'})`;
+  }
+
+  const forbiddenTextIssue = await validateForbiddenTextAbsent(page, site);
+  if (forbiddenTextIssue) {
+    return { status: 'FAIL', detail: forbiddenTextIssue };
+  }
+  if (site.forbiddenTextAfterHandle?.length) {
+    detail += '; forbidden text absent';
   }
 
   if (site.expectedOneTrustToggleStates) {
@@ -285,6 +365,22 @@ async function testSite(page, site) {
       return { status: 'FAIL', detail: `Banner dismissed but toggle ${mismatch.id} expected=${mismatch.expected} actual=${mismatch.actual}` };
     }
     detail += '; toggle state verified';
+  }
+
+  if (site.expectedLeMondePurposeStates) {
+    const mismatch = await readLeMondePurposeStateMismatch(page, site.expectedLeMondePurposeStates);
+    if (mismatch) {
+      return { status: 'FAIL', detail: `Banner dismissed${recorded ? ` (${recorded.method ?? 'recorded action'})` : ''} but ${formatLeMondeMismatch(mismatch)}` };
+    }
+    detail += '; Le Monde purpose state verified';
+  }
+
+  if (site.verifyLeMondeManualReopenNoActivity) {
+    const manualIssue = await verifyLeMondeManualReopenDoesNotRecord(page, site);
+    if (manualIssue) {
+      return { status: 'FAIL', detail: manualIssue };
+    }
+    detail += '; manual reopen did not record';
   }
 
   if (site.expectedShopifyConsent) {
@@ -331,6 +427,14 @@ async function testSite(page, site) {
   const navigationIssue = validateNavigationExpectations(page.url(), visitedTopLevelUrls, site.navigationExpectations);
   if (navigationIssue) {
     return { status: 'FAIL', detail: navigationIssue };
+  }
+
+  if (site.verifyManualConsentOpenNoActivity) {
+    const manualIssue = await verifyManualConsentOpenDoesNotRecord(page, site);
+    if (manualIssue) {
+      return { status: 'FAIL', detail: manualIssue };
+    }
+    detail += '; manual consent open did not record';
   }
 
   return { status: 'PASS', detail };
@@ -616,6 +720,12 @@ function prepareExtensionLaunchDir(extDir) {
 async function buildFailureDetail(page, site, beforeStats, prefix) {
   const afterStats = await readStatsSnapshot(page.context());
   const recorded = extractNewActivityForSite(beforeStats, afterStats, site);
+  const visibleSiteSelectors = [];
+  for (const selector of site.bannerSelectors ?? []) {
+    if (await selectorVisible(page, selector).catch(() => false)) {
+      visibleSiteSelectors.push(selector);
+    }
+  }
   const diag = await page.evaluate(() => {
     const isVisible = (el) => {
       if (!el) return false;
@@ -646,7 +756,7 @@ async function buildFailureDetail(page, site, beforeStats, prefix) {
     };
   }).catch(() => null);
 
-  return `${prefix}; recorded=${recorded ? (recorded.method ?? 'yes') : 'none'}; emcPref=${diag?.emcPref ?? 'n/a'}; privacyChoicesVisible=${diag?.privacyChoicesVisible ?? 'n/a'}; confirm=${diag?.confirmText ?? 'n/a'}; confirmVisible=${diag?.confirmVisible ?? 'n/a'}; visible=${(diag?.bannerVisible ?? []).join('|') || 'none'}; toggles=${JSON.stringify(diag?.toggles ?? [])}`;
+  return `${prefix}; recorded=${recorded ? (recorded.method ?? 'yes') : 'none'}; emcPref=${diag?.emcPref ?? 'n/a'}; privacyChoicesVisible=${diag?.privacyChoicesVisible ?? 'n/a'}; confirm=${diag?.confirmText ?? 'n/a'}; confirmVisible=${diag?.confirmVisible ?? 'n/a'}; visible=${(diag?.bannerVisible ?? []).join('|') || 'none'}; siteVisible=${visibleSiteSelectors.join('|') || 'none'}; toggles=${JSON.stringify(diag?.toggles ?? [])}`;
 }
 
 async function readOneTrustToggleStateMismatch(page, expectedStates) {
@@ -666,6 +776,186 @@ async function readOneTrustToggleStateMismatch(page, expectedStates) {
   return null;
 }
 
+async function readLeMondePurposeStateMismatch(page, expectedStates) {
+  await waitForLeMondeConsentCookie(page, 7000);
+  const opened = await openLeMondeCookiePreferences(page);
+  if (!opened) return { purpose: 'settings', expected: 'openable', actual: 'missing' };
+
+  const visible = await waitForAny(page, ['[data-gdpr-params-purpose]'], 7000);
+  if (!visible) return { purpose: 'settings', expected: 'visible', actual: 'hidden' };
+  await page.waitForTimeout(1000);
+
+  const snapshot = await page.evaluate(() => {
+    const visibleEnough = (el) => {
+      const row = el.closest('section, article, li, div') ?? el;
+      const rect = row.getBoundingClientRect();
+      const style = getComputedStyle(row);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const entries = Array.from(document.querySelectorAll('input[data-gdpr-params-purpose]'))
+      .filter(visibleEnough)
+      .map((input) => ({
+        purpose: input.getAttribute('data-gdpr-params-purpose'),
+        checked: Boolean(input.checked),
+      }))
+      .filter((entry) => Boolean(entry.purpose));
+    const rawCookie = document.cookie
+      .split('; ')
+      .filter((part) => part.startsWith('lmd_consent='))
+      .at(-1)
+      ?.slice('lmd_consent='.length) ?? null;
+    let cookiePurposes = null;
+    try {
+      cookiePurposes = rawCookie ? JSON.parse(decodeURIComponent(rawCookie))?.purposes ?? null : null;
+    } catch (_) {
+      cookiePurposes = null;
+    }
+    return {
+      entries,
+      cookiePurposes,
+      emcRunSignature: document.documentElement.dataset.emcRunSignature ?? null,
+    };
+  }).catch(() => ({ entries: [], cookiePurposes: null }));
+
+  const actualEntries = snapshot.entries ?? [];
+
+  for (const [purpose, expected] of Object.entries(expectedStates)) {
+    const controls = actualEntries.filter((entry) => entry.purpose === purpose);
+    if (!controls.length) {
+      return { purpose, expected: Boolean(expected), actual: 'missing', snapshot };
+    }
+    const mismatch = controls.find((entry) => entry.checked !== Boolean(expected));
+    if (mismatch) {
+      return { purpose, expected: Boolean(expected), actual: mismatch.checked, snapshot };
+    }
+  }
+  return null;
+}
+
+async function waitForLeMondeConsentCookie(page, timeoutMs = 7000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const found = await page.evaluate(() => document.cookie.includes('lmd_consent=')).catch(() => false);
+    if (found) return true;
+    await page.waitForTimeout(250);
+  }
+  return page.evaluate(() => document.cookie.includes('lmd_consent=')).catch(() => false);
+}
+
+function formatLeMondeMismatch(mismatch) {
+  const entries = (mismatch.snapshot?.entries ?? [])
+    .map((entry) => `${entry.purpose}:${entry.checked ? 'on' : 'off'}`)
+    .join(',');
+  const cookie = mismatch.snapshot?.cookiePurposes
+    ? Object.entries(mismatch.snapshot.cookiePurposes)
+      .map(([purpose, enabled]) => `${purpose}:${enabled ? 'on' : 'off'}`)
+      .join(',')
+    : 'none';
+  return `Le Monde purpose ${mismatch.purpose} expected=${mismatch.expected} actual=${mismatch.actual}; visible=${entries || 'none'}; cookie=${cookie}; run=${mismatch.snapshot?.emcRunSignature ?? 'none'}`;
+}
+
+async function verifyLeMondeManualReopenDoesNotRecord(page, site) {
+  const beforeStats = await readStatsSnapshot(page.context());
+  const opened = await openLeMondeCookiePreferences(page);
+  if (!opened) return 'Manual Le Monde cookie preferences reopen failed';
+
+  await page.waitForTimeout(5000);
+  const afterStats = await readStatsSnapshot(page.context());
+  const recorded = extractNewActivityForSite(beforeStats, afterStats, site);
+  if (recorded) {
+    return `Manual Le Monde cookie preferences reopen recorded unexpected activity (${recorded.method ?? 'recorded action'})`;
+  }
+  return null;
+}
+
+async function verifyManualConsentOpenDoesNotRecord(page, site) {
+  const config = site.verifyManualConsentOpenNoActivity;
+  if (!config?.selectors?.length) return 'Manual consent-open verification has no selectors';
+
+  const beforeStats = await readStatsSnapshot(page.context());
+  const clicked = await clickFirstConfiguredSelector(page, config.selectors);
+  if (!clicked) return 'Manual consent-open control was not clickable';
+
+  await page.waitForTimeout(config.waitMs ?? 5000);
+  const afterStats = await readStatsSnapshot(page.context());
+  const recorded = extractNewActivityForSite(beforeStats, afterStats, site);
+  if (recorded) {
+    return `Manual consent-open control recorded unexpected activity (${recorded.method ?? 'recorded action'})`;
+  }
+
+  if (config.expectedFinalUrlPattern) {
+    const pattern = new RegExp(config.expectedFinalUrlPattern);
+    if (!pattern.test(page.url())) {
+      return `Manual consent-open expected URL ${config.expectedFinalUrlPattern} but got ${page.url()}`;
+    }
+  }
+
+  for (const selector of config.expectedVisibleSelectors ?? []) {
+    if (!(await selectorVisible(page, selector).catch(() => false))) {
+      return `Manual consent-open expected visible selector ${selector}`;
+    }
+  }
+
+  return null;
+}
+
+async function clickFirstConfiguredSelector(page, selectors) {
+  for (const selector of selectors) {
+    try {
+      if (selector.startsWith('text:')) {
+        await page.getByText(selector.slice(5), { exact: false }).last().click({ timeout: 3000 });
+        return true;
+      }
+      await page.locator(selector).last().click({ timeout: 3000 });
+      return true;
+    } catch (_) {}
+  }
+  return false;
+}
+
+async function openLeMondeCookiePreferences(page) {
+  if (await selectorVisible(page, '[data-gdpr-params-purpose]').catch(() => false)) return true;
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+    await page.waitForTimeout(700);
+
+    const openedByVisibleLink = await page.locator('.footer__link.gdpr-cs-parameters-link:visible, .gdpr-cs-parameters-link:visible, [data-gdpr-action="settings"]:visible')
+      .last()
+      .click({ timeout: 2000, force: true })
+      .then(() => true)
+      .catch(() => false);
+    if (openedByVisibleLink) {
+      await waitForAny(page, ['[data-gdpr-params-purpose]', '.gdpr-lmd-params'], 7000);
+      return true;
+    }
+  }
+
+  const locator = page.locator('.gdpr-cs-parameters-link, [data-gdpr-action="settings"]');
+  const count = await locator.count().catch(() => 0);
+  for (let i = 0; i < count; i += 1) {
+      const candidate = locator.nth(i);
+      if (await candidate.isVisible().catch(() => false)) {
+        if (await candidate.click({ timeout: 5000, force: true }).then(() => true).catch(() => false)) {
+          await waitForAny(page, ['[data-gdpr-params-purpose]', '.gdpr-lmd-params'], 7000);
+          return true;
+        }
+      }
+  }
+
+  const textOpened = await page.getByText(/Cookie Preferences|Cookie Settings|Manage Cookies|Gestion des cookies|Param[eé]trage des cookies|Param[eé]trer les cookies/i)
+    .last()
+    .click({ timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  if (textOpened) {
+    await waitForAny(page, ['[data-gdpr-params-purpose]', '.gdpr-lmd-params'], 7000);
+    return true;
+  }
+
+  return false;
+}
+
 function validateNavigationExpectations(finalUrl, visitedTopLevelUrls, expectations = null) {
   if (!expectations) return null;
 
@@ -676,7 +966,7 @@ function validateNavigationExpectations(finalUrl, visitedTopLevelUrls, expectati
     }
   }
 
-  if (expectations.forbidVisitedUrlPatterns?.length) {
+    if (expectations.forbidVisitedUrlPatterns?.length) {
     for (const patternSource of expectations.forbidVisitedUrlPatterns) {
       const pattern = new RegExp(patternSource);
       const offending = visitedTopLevelUrls.find((url) => pattern.test(url));
@@ -714,6 +1004,22 @@ function extractNewActivityForSite(beforeStats, afterStats, site) {
     if (!beforeLatestStamp) return true;
     return activity.timestamp !== beforeLatestStamp;
   }) ?? null;
+}
+
+function validateExpectedActivity(recorded, site) {
+  if (!site.expectedActivityMethod) return null;
+  if (recorded?.method === site.expectedActivityMethod) return null;
+  return `activity method expected=${site.expectedActivityMethod} actual=${recorded?.method ?? 'none'}`;
+}
+
+async function validateForbiddenTextAbsent(page, site) {
+  const patterns = site.forbiddenTextAfterHandle ?? [];
+  if (!patterns.length) return null;
+
+  const text = await page.evaluate(() => document.body?.innerText ?? '').catch(() => '');
+  const normalized = text.replace(/\s+/g, ' ').toLowerCase();
+  const found = patterns.find((pattern) => new RegExp(pattern, 'i').test(normalized));
+  return found ? `forbidden text still present after handling (${found})` : null;
 }
 
 async function isChallengePage(page) {
@@ -919,6 +1225,12 @@ function buildCategoryPreferences(globalPreference, overrides = {}) {
   };
 }
 
+function categoryPreferencesEqual(actual, expected) {
+  if (!actual || !expected) return false;
+  return ['functional', 'analytics', 'advertising', 'ccpaDoNotSell', 'uncategorized']
+    .every((key) => actual[key] === expected[key]);
+}
+
 function defaultAcceptLanguage(locale) {
   if (!locale) return null;
   const [base] = locale.split('-');
@@ -972,6 +1284,7 @@ async function writePreferences(browser, preference, site = null, profileDir = '
     }),
     milestonesShown: [],
   };
+  const siteOverrides = site?.siteOverrides ?? {};
 
   // When --vpn is active, multiple service workers may be registered (one per extension).
   // Find ours by excluding the VPN extension's ID, and requiring chrome-extension:// URL
@@ -998,8 +1311,19 @@ async function writePreferences(browser, preference, site = null, profileDir = '
 
   if (sw) {
     try {
-      await sw.evaluate((data) => new Promise((resolve) => chrome.storage.sync.set(data, resolve)), payload);
-      return null;
+      const stored = await sw.evaluate(async (data) => {
+        await Promise.all([
+          new Promise((resolve) => chrome.storage.sync.set(data.payload, resolve)),
+          new Promise((resolve) => chrome.storage.local.set({ siteOverrides: data.siteOverrides }, resolve)),
+          new Promise((resolve) => chrome.storage.local.remove(data.manualConsentOpenKey, resolve)),
+        ]);
+        return await new Promise((resolve) => chrome.storage.sync.get(['globalPreference', 'onboardingComplete', 'categoryPreferences'], resolve));
+      }, { payload, siteOverrides, manualConsentOpenKey: MANUAL_CONSENT_OPEN_KEY });
+      if (stored?.globalPreference === payload.globalPreference &&
+          stored?.onboardingComplete === true &&
+          categoryPreferencesEqual(stored?.categoryPreferences, payload.categoryPreferences)) {
+        return null;
+      }
     } catch (_) {
       // SW found but evaluate failed (chrome API not ready) — fall through to page approach
     }
@@ -1059,10 +1383,14 @@ async function writePreferences(browser, preference, site = null, profileDir = '
             timeout: 15000,
           });
           const stored = await swPage.evaluate(async (data) => {
-            await new Promise((resolve) => chrome.storage.sync.set(data, resolve));
-            return await new Promise((resolve) => chrome.storage.sync.get(['globalPreference', 'onboardingComplete'], resolve));
-          }, payload);
-          if (stored?.globalPreference === payload.globalPreference && stored?.onboardingComplete === true) {
+            await new Promise((resolve) => chrome.storage.sync.set(data.payload, resolve));
+            await new Promise((resolve) => chrome.storage.local.set({ siteOverrides: data.siteOverrides }, resolve));
+            await new Promise((resolve) => chrome.storage.local.remove(data.manualConsentOpenKey, resolve));
+            return await new Promise((resolve) => chrome.storage.sync.get(['globalPreference', 'onboardingComplete', 'categoryPreferences'], resolve));
+          }, { payload, siteOverrides, manualConsentOpenKey: MANUAL_CONSENT_OPEN_KEY });
+          if (stored?.globalPreference === payload.globalPreference &&
+              stored?.onboardingComplete === true &&
+              categoryPreferencesEqual(stored?.categoryPreferences, payload.categoryPreferences)) {
             return swPage;
           }
         } catch (_) {}
@@ -1122,6 +1450,17 @@ async function warmupExtensionRoundTrip(browser) {
   console.log(`Sites: ${sites.length}  |  Headed: ${headed || useVpn}  |  VPN: ${useVpn}`);
 
   if (useVpn && !VPN_EXT_DIR) {
+    if (VPN_EXT_SOURCE) {
+      console.error([
+        '',
+        '  The configured VPN extension path is not a readable unpacked extension.',
+        `  Path: ${VPN_EXT_SOURCE}`,
+        '',
+        '  Expected either a directory containing manifest.json or a Chrome Web Store',
+        '  extension folder containing a version subdirectory with manifest.json.',
+        '',
+      ].join('\n'));
+    }
     console.error([
       '',
       '  --vpn requires a path to an unpacked VPN extension.',

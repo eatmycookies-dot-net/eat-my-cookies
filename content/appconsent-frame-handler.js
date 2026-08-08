@@ -2,6 +2,9 @@
 // Le Figaro uses this pattern, so match_about_blank is required in the manifest.
 
 (function () {
+  const MANUAL_CONSENT_OPEN_KEY = '__emc_manual_consent_open__';
+  const MANUAL_CONSENT_SUPPRESS_MS = 120000;
+
   function referrerHost() {
     try { return new URL(document.referrer).hostname; } catch (_) { return 'unknown'; }
   }
@@ -44,6 +47,7 @@
 
   async function run() {
     if (await isDisabledForTopSite()) return;
+    if (await isManualConsentOpenSuppressed(referrerHost())) return;
 
     const settings = await chrome.storage.sync.get({
       globalPreference: 'reject_all',
@@ -63,11 +67,14 @@
     const report = () => {
       try {
         const site = referrerHost();
-        chrome.runtime.sendMessage({
-          type: 'ACTION_FIRED',
-          site,
-          method: 'appconsent:frame',
-          preference: settings.globalPreference,
+        isManualConsentOpenSuppressed(site).then((suppressed) => {
+          if (suppressed) return;
+          chrome.runtime.sendMessage({
+            type: 'ACTION_FIRED',
+            site,
+            method: 'appconsent:frame',
+            preference: settings.globalPreference,
+          });
         });
       } catch (_) {}
     };
@@ -100,6 +107,20 @@
     if (!domain || domain === 'unknown') return false;
     const { siteOverrides } = await chrome.storage.local.get({ siteOverrides: {} });
     return Boolean(siteOverrides?.[domain]?.disabled);
+  }
+
+  async function isManualConsentOpenSuppressed(site) {
+    try {
+      const result = await chrome.storage.local.get({ [MANUAL_CONSENT_OPEN_KEY]: null });
+      const payload = result?.[MANUAL_CONSENT_OPEN_KEY];
+      if (!payload?.timestamp || Date.now() - payload.timestamp >= MANUAL_CONSENT_SUPPRESS_MS) {
+        await chrome.storage.local.remove(MANUAL_CONSENT_OPEN_KEY);
+        return false;
+      }
+      return !payload.site || payload.site === site || payload.site === window.location.hostname;
+    } catch (_) {
+      return false;
+    }
   }
 
   run();

@@ -8,6 +8,8 @@
 const site = location.hostname;
 const RUN_GUARD_PREFIX = '__emc_handled__';
 const FLOW_COOLDOWN_MS = 15000;
+const MANUAL_CONSENT_OPEN_KEY = '__emc_manual_consent_open__';
+const MANUAL_CONSENT_SUPPRESS_MS = 120000;
 const MAIN_WORLD_FLOW_GRACE_MS = 4000;
 const MAIN_WORLD_FLOW_IN_PROGRESS_TTL_MS = 12000;
 const SHOPIFY_MAIN_WORLD_TIMEOUT_MS = 5000;
@@ -40,6 +42,7 @@ const DYNAMIC_SITE_SPECIFIC_HOSTS = new Set([
   'liveramp.com',
   'www.liveramp.com',
   'github.com',
+  'www.lemonde.fr',
 ]);
 const CONSENTMANAGER_TOP_LEVEL_EXCLUDED_SITES = new Set([
   'www.bbc.com',
@@ -60,6 +63,9 @@ const DOCUMENT_START_ONLY_SITES = new Set([
   'www.latimes.com',
   'membership.latimes.com',
 ]);
+const SITE_SPECIFIC_ONLY_SITES = new Set([
+  'www.lemonde.fr',
+]);
 let siteSpecificWatchStarted = false;
 let siteSpecificFlowLock = null;
 let shopifyWatchStarted = false;
@@ -72,9 +78,21 @@ const BLOOMBERG_CCPA_MANUAL_SUPPRESS_MS = 15000;
 let ketchManualOpenGuardInstalled = false;
 let ketchManualOpenUntil = 0;
 const KETCH_MANUAL_SUPPRESS_MS = 120000;
+let leMondeManualOpenGuardInstalled = false;
+let leMondeManualOpenUntil = 0;
+let leMondeAutomationOpenUntil = 0;
+const LEMONDE_MANUAL_SUPPRESS_MS = 120000;
+const LEMONDE_AUTOMATION_SUPPRESS_MS = 15000;
+let manualUsercentricsOutcomeWatchInstalled = false;
+const LEMONDE_CONSENT_MIRROR_KEY = 'emc:lemonde:lmd_consent';
+const DW_RETURN_PENDING_KEY = '__emc_dw_return_pending__';
+const DW_RETURN_DELAY_MS = 5000;
+const DW_RETURN_PENDING_TTL_MS = 60000;
 // Zoom footer openers are handled once in the document-start MAIN-world guard.
 // Keeping this coordinator out of the click path avoids competing with Zoom's
 // own OneTrust event handlers after consent has been applied.
+
+installManualConsentOpenGuard();
 
 const ACCEPT_OR_WARN_SITES = {
   'www.repubblica.it': {
@@ -828,6 +846,11 @@ const MAIN_WORLD_ONLY_SITES = new Set([
   // Zoom's OneTrust preference center must have a single owner. Its native save
   // flow runs in MAIN world; the isolated DOM fallback can leave stale UI state.
   'www.zoom.com',
+  // Leaders Island's Usercentrics shadow UI can visually dismiss from DOM clicks
+  // without persisting service-level choices. Use the MAIN-world UC_UI API path,
+  // which verifies saved service consent before reporting success.
+  'leadersisland.com',
+  'www.leadersisland.com',
 ]);
 
 const DISNEY_FAMILY_USNAT_HOSTS = new Set([
@@ -839,6 +862,27 @@ const DISNEY_FAMILY_USNAT_HOSTS = new Set([
 let latestRunId = 0;
 let currentRunSignature = null;
 let currentMainWorldFlow = null;
+let usercentricsCompletionReportInFlight = false;
+
+// Leaders Island's Usercentrics API can finish just as the generic MAIN-world
+// result wait rolls from its initial timeout into its grace wait. Keep a
+// host-scoped terminal listener so a confirmed completion is never lost in
+// that handoff. The service worker still deduplicates any overlapping report.
+document.addEventListener('__emc_handled__', (event) => {
+  if (!MAIN_WORLD_ONLY_SITES.has(site) || usercentricsCompletionReportInFlight) return;
+  const method = String(event?.detail?.method ?? '');
+  if (!method.startsWith('cmp_api:UC_UI:')) return;
+
+  usercentricsCompletionReportInFlight = true;
+  const preference = method.endsWith(':accept_all')
+    ? 'accept_all'
+    : method.endsWith(':reject_all')
+      ? 'reject_all'
+      : 'custom';
+  void reportAction(method, preference).finally(() => {
+    usercentricsCompletionReportInFlight = false;
+  });
+});
 
 document.addEventListener('__emc_pre_handle__', (event) => {
   const detail = event?.detail ?? {};
@@ -869,16 +913,39 @@ async function bootstrap(force = false) {
   document.documentElement.dataset.emcRunSignature = currentRunSignature;
   document.documentElement.dataset.emcConsentScrollX = String(window.scrollX || 0);
   document.documentElement.dataset.emcConsentScrollY = String(window.scrollY || 0);
+  if (site === 'www.lemonde.fr') {
+    await restoreLeMondeConsentCookieFromMirror(prefs);
+  }
+  if (!force && await isManualConsentOpenSuppressed()) {
+    installManualUsercentricsOutcomeWatch();
+    return;
+  }
   scheduleShopifyWatch(prefs);
   scheduleOsanoWatch(prefs);
   scheduleLateDomWatch(prefs);
   const flushedPendingPreHandleAction = await flushPendingPreHandleAction(currentRunSignature);
-  if (!force && flushedPendingPreHandleAction) return;
+  if (!force && flushedPendingPreHandleAction) {
+    if (site === 'www.lemonde.fr') {
+      persistLeMondeConsentCookie(prefs);
+      scheduleLeMondeConsentCookiePersistence(prefs);
+      scheduleDynamicSiteSpecificWatch();
+    }
+    return;
+  }
   const cooldownScope = runCooldownScope(currentRunSignature);
   if (!force &&
       isFlowCoolingDown(cooldownScope) &&
       !shouldRetryOneTrustAfterReload(currentRunSignature)) return;
-  if (!force && wasHandledForCurrentPage(currentRunSignature)) return;
+  const handledForCurrentPage = wasHandledForCurrentPage(currentRunSignature);
+  const shouldRetryDWPrivacySettings = site === 'www.dw.com' &&
+    isDWPrivacySettingsPage() &&
+    await hasDWAutoReturnPending();
+  if (!force && handledForCurrentPage && !shouldRetryDWPrivacySettings) {
+    if (site === 'www.dw.com' && !isDWPrivacySettingsPage()) {
+      await clearDWAutoReturnPending();
+    }
+    return;
+  }
   if (runId !== latestRunId) return;
 
   if (site === 'www.ft.com') {
@@ -891,7 +958,10 @@ async function bootstrap(force = false) {
     return;
   }
 
-  if (await handleSiteSpecificFlow(siteOverrides, prefs)) return;
+  if (await handleSiteSpecificFlow(siteOverrides, prefs)) {
+    if (site === 'www.lemonde.fr') scheduleDynamicSiteSpecificWatch();
+    return;
+  }
   if (await handleShopifyBanner(prefs)) return;
   scheduleDynamicSiteSpecificWatch();
   if (runId !== latestRunId) return;
@@ -937,6 +1007,10 @@ async function bootstrap(force = false) {
     return;
   }
 
+  if (SITE_SPECIFIC_ONLY_SITES.has(site)) {
+    return;
+  }
+
   const domResult = await runDOMHandler(prefs);
   if (domResult?.preHandled) {
     return;
@@ -965,6 +1039,106 @@ function shouldSkipCurrentUrl() {
   }
 }
 
+function installManualConsentOpenGuard() {
+  document.addEventListener('click', (event) => {
+    if (!event.isTrusted) return;
+    const target = manualConsentClickTarget(event);
+    if (!target || !isManualConsentOpenTarget(target)) return;
+    markManualConsentOpen(target);
+  }, true);
+}
+
+function manualConsentClickTarget(event) {
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  for (const node of path) {
+    if (node instanceof Element) {
+      const target = node.closest?.('a, button, [role="button"], [tabindex]');
+      if (target) return target;
+    }
+  }
+  return event.target instanceof Element
+    ? event.target.closest('a, button, [role="button"], [tabindex]')
+    : null;
+}
+
+function isManualConsentOpenTarget(target) {
+  const textParts = [
+    target.textContent,
+    target.getAttribute?.('aria-label'),
+    target.getAttribute?.('title'),
+    target.getAttribute?.('href'),
+    target.id,
+    target.className,
+  ];
+  const haystack = textParts
+    .map((part) => String(part ?? '').replace(/\s+/g, ' ').trim().toLowerCase())
+    .filter(Boolean)
+    .join(' ');
+  if (!haystack) return false;
+
+  const hasConsentSubject = /cookie|cookies|consent|privacy|gdpr|do not sell|do not share|personal information|data privacy/.test(haystack);
+  const hasOpenIntent = /settings|preferences?|choices?|manage|control|parameters?|param[eé]tr|gestion des cookies|do not sell|do not share|opt[- ]?out|data-privacy-settings|privacy-settings|cookie-settings|cookie-preferences/.test(haystack);
+  if (!hasConsentSubject || !hasOpenIntent) return false;
+
+  const inFooter = Boolean(target.closest?.('footer, [role="contentinfo"], [class*="footer" i], [id*="footer" i]'));
+  const href = target instanceof HTMLAnchorElement ? target.href : target.getAttribute?.('href') ?? '';
+  const privacySettingsUrl = /(?:^|[/#?&-])(?:cookie|cookies|consent|privacy|privacy-settings|data-privacy-settings|cookie-settings|cookie-preferences|do-not-sell|do-not-share|privacy-choices|dnsmpi)(?:$|[/#?&=_-])/i.test(href);
+  return inFooter || privacySettingsUrl;
+}
+
+async function markManualConsentOpen(target) {
+  try {
+    await chrome.storage.local.set({
+      [MANUAL_CONSENT_OPEN_KEY]: {
+        site,
+        timestamp: Date.now(),
+        url: location.href,
+        target: (target.textContent || target.getAttribute?.('aria-label') || target.getAttribute?.('title') || target.getAttribute?.('href') || '')
+          .trim()
+          .replace(/\s+/g, ' ')
+          .slice(0, 120),
+      },
+    });
+  } catch (_) {}
+}
+
+async function isManualConsentOpenSuppressed(host = site) {
+  try {
+    const result = await chrome.storage.local.get({ [MANUAL_CONSENT_OPEN_KEY]: null });
+    const payload = result?.[MANUAL_CONSENT_OPEN_KEY];
+    if (!payload?.timestamp || Date.now() - payload.timestamp >= MANUAL_CONSENT_SUPPRESS_MS) {
+      await chrome.storage.local.remove(MANUAL_CONSENT_OPEN_KEY);
+      return false;
+    }
+    return !payload.site || payload.site === host || payload.site === site;
+  } catch (_) {
+    return false;
+  }
+}
+
+function installManualUsercentricsOutcomeWatch() {
+  if (manualUsercentricsOutcomeWatchInstalled || !MAIN_WORLD_ONLY_SITES.has(site)) return;
+  manualUsercentricsOutcomeWatchInstalled = true;
+  const cleanupTimer = setTimeout(() => {
+    document.removeEventListener('__emc_handled__', handleOutcome);
+  }, 15000);
+
+  function handleOutcome(event) {
+    const method = String(event?.detail?.method ?? '');
+    if (!method.startsWith('cmp_api:UC_UI:')) return;
+    clearTimeout(cleanupTimer);
+    document.removeEventListener('__emc_handled__', handleOutcome);
+    const preference = method.endsWith(':accept_all')
+      ? 'accept_all'
+      : method.endsWith(':reject_all')
+        ? 'reject_all'
+        : 'custom';
+    void reportAction(method, preference);
+  }
+
+  document.addEventListener('__emc_handled__', handleOutcome);
+}
+
 function scheduleDynamicSiteSpecificWatch() {
   if (siteSpecificWatchStarted) return;
   if (!DYNAMIC_SITE_SPECIFIC_HOSTS.has(site) && !isKetchSite()) {
@@ -979,7 +1153,11 @@ function scheduleDynamicSiteSpecificWatch() {
     return;
   }
   siteSpecificWatchStarted = true;
-  const keepWatchingAfterHandle = site === 'forbes.com' || site === 'www.forbes.com' || site === 'www.ketch.com' || site === 'ketch.com';
+  const keepWatchingAfterHandle = site === 'forbes.com' ||
+    site === 'www.forbes.com' ||
+    site === 'www.ketch.com' ||
+    site === 'ketch.com' ||
+    site === 'www.lemonde.fr';
   const watchDurationMs = keepWatchingAfterHandle ? 120000 : 15000;
 
   let settled = false;
@@ -1003,7 +1181,8 @@ function scheduleDynamicSiteSpecificWatch() {
       const prefs = resolvePrefs(settings, siteOverrides);
       document.documentElement.dataset.emcPref = prefs.globalPreference;
       document.dispatchEvent(new CustomEvent('__emc_prefs__', { detail: prefs }));
-      if (wasHandledForCurrentPage(prefsRunSignature(prefs))) return;
+      if (await isManualConsentOpenSuppressed()) return;
+      if (wasHandledForCurrentPage(prefsRunSignature(prefs)) && !(site === 'www.lemonde.fr' && isLeMondeManualOpenSuppressed())) return;
       const handled = await handleSiteSpecificFlow(siteOverrides, prefs);
       if (handled && !keepWatchingAfterHandle) stop();
     } finally {
@@ -1100,6 +1279,7 @@ async function handleSiteSpecificFlow(siteOverrides, prefs) {
 }
 
 async function handleShopifyBanner(prefs) {
+  if (await isManualConsentOpenSuppressed()) return false;
   if (!hasVisibleShopifySurface()) return false;
 
   const dialog = findVisibleShopifyPrefsDialog();
@@ -1218,6 +1398,10 @@ function scheduleShopifyWatch(prefs) {
 
   const tryHandle = async () => {
     if (stopped || running) return;
+    if (await isManualConsentOpenSuppressed()) {
+      stop();
+      return;
+    }
     if (currentRunSignature && wasHandledForCurrentPage(currentRunSignature)) {
       stop();
       return;
@@ -1265,6 +1449,10 @@ function scheduleOsanoWatch(prefs) {
 
   const tryHandle = async () => {
     if (stopped || running) return;
+    if (await isManualConsentOpenSuppressed()) {
+      stop();
+      return;
+    }
     if (currentRunSignature && wasHandledForCurrentPage(currentRunSignature)) {
       stop();
       return;
@@ -1321,6 +1509,10 @@ function scheduleLateDomWatch(prefs) {
 
   const tryHandle = async () => {
     if (stopped || running) return;
+    if (await isManualConsentOpenSuppressed()) {
+      stop();
+      return;
+    }
     if (currentRunSignature && wasHandledForCurrentPage(currentRunSignature)) {
       stop();
       return;
@@ -1705,6 +1897,7 @@ async function handleLiveRampKetch(siteOverrides, prefs, config) {
     return true;
   }
 
+  if (!isDWPrivacySettingsPage()) await clearDWAutoReturnPending();
   return false;
 }
 
@@ -2286,31 +2479,39 @@ async function handleDW(prefs) {
     '.cmptxt_btn_yes2',
     '.cmptxt_btn_no2',
     '.cmptxt_btn_save2',
+    '.cmpboxbtncustom',
     '.cmptogglelink',
     '.cmpboxbtnyescustomchoices',
     '.cmpboxbtnrejectcustomchoices',
+    'text:settings',
   ];
 
   const visible = await waitForSiteSelectors(selectors, 4000);
-  if (!visible) return false;
+  if (!visible) {
+    if (!isDWPrivacySettingsPage()) await clearDWAutoReturnPending();
+    return false;
+  }
+  if (!isDWPrivacySettingsPage()) await markDWAutoReturnPending();
 
   const onSettingsPage = Boolean(queryElement('.cmpboxbtnyescustomchoices') || queryElement('.cmpboxbtnrejectcustomchoices') || queryElement('text:save selection'));
-  if (isFlowCoolingDown('dw') && !onSettingsPage) return true;
+  const dwCooldownScope = `dw:${prefs.globalPreference}`;
+  if (isFlowCoolingDown(dwCooldownScope) && !onSettingsPage) return true;
 
   if (onSettingsPage) {
-    startFlowCooldown('dw');
+    startFlowCooldown(dwCooldownScope);
     const configured = await configureDWSettings(prefs);
     if (configured) {
       await reportAction(
         prefs.globalPreference === 'accept_all' ? 'site_specific:accept_all' : 'site_specific:settings_save',
         prefs.globalPreference,
       );
+      await maybeReturnFromDWPrivacySettingsPage();
       return true;
     }
   }
 
   if (prefs.globalPreference === 'accept_all') {
-    startFlowCooldown('dw');
+    startFlowCooldown(dwCooldownScope);
     const accepted = await clickAndWait(
       ['.cmptxt_btn_yes2', '.cmptxt_btn_yes', '.cmpboxbtnyes', '#cmpbntyestxt'],
       dwWatchSelectors(),
@@ -2318,17 +2519,19 @@ async function handleDW(prefs) {
     );
     if (accepted) {
       await reportAction('site_specific:accept_all', 'accept_all');
+      await maybeReturnFromDWPrivacySettingsPage();
       return true;
     }
     if (await waitForSiteSelectors(['.cmpboxbtnyescustomchoices', '.cmpboxbtnrejectcustomchoices', 'text:save selection'], 1200)) {
       const configured = await configureDWSettings(prefs);
       if (configured) {
         await reportAction('site_specific:accept_all', 'accept_all');
+        await maybeReturnFromDWPrivacySettingsPage();
         return true;
       }
     }
   } else if (prefs.globalPreference === 'reject_all') {
-    startFlowCooldown('dw');
+    startFlowCooldown(dwCooldownScope);
     const rejected = await clickAndWait(
       ['.cmptxt_btn_no2', '.cmptxt_btn_no', '.cmpboxbtnno', '#cmpbntnotxt'],
       dwWatchSelectors(),
@@ -2336,20 +2539,22 @@ async function handleDW(prefs) {
     );
     if (rejected) {
       await reportAction('site_specific:deny_all', prefs.globalPreference);
+      await maybeReturnFromDWPrivacySettingsPage();
       return true;
     }
     if (await waitForSiteSelectors(['.cmpboxbtnyescustomchoices', '.cmpboxbtnrejectcustomchoices', 'text:save selection'], 1200)) {
       const configured = await configureDWSettings(prefs);
       if (configured) {
         await reportAction('site_specific:settings_save', prefs.globalPreference);
+        await maybeReturnFromDWPrivacySettingsPage();
         return true;
       }
     }
   }
 
-  const settingsOpened = clickElement(['.cmpboxbtncustom', '#cmpbntcustomtxt']);
+  const settingsOpened = clickElement(['.cmpboxbtncustom', '#cmpbntcustomtxt', 'text:settings']);
   if (settingsOpened) {
-    startFlowCooldown('dw');
+    startFlowCooldown(dwCooldownScope);
     await new Promise((resolve) => setTimeout(resolve, 250));
     const configured = await configureDWSettings(prefs);
     if (configured) {
@@ -2357,6 +2562,7 @@ async function handleDW(prefs) {
         prefs.globalPreference === 'accept_all' ? 'site_specific:accept_all' : 'site_specific:settings_save',
         prefs.globalPreference,
       );
+      await maybeReturnFromDWPrivacySettingsPage();
       return true;
     }
   }
@@ -2779,53 +2985,122 @@ function githubCategoryValue(normalizedName, prefs, acceptAll) {
 }
 
 async function handleLeMonde(prefs, siteOverrides) {
+  ensureLeMondeManualOpenGuard();
+
   const selectors = [
     '.gdpr-lmd-wall',
+    '.gdpr-lmd-standard',
+    '.gdpr-lmd-params',
     '[data-gdpr-expression="acceptAll"]',
     '[data-gdpr-expression="denyAll"]',
-    '[data-gdpr-action="settings"]',
     '[data-gdpr-action="save"]',
+    '[data-gdpr-params-purpose]',
   ];
 
   const visible = await waitForSiteSelectors(selectors, 4000);
-  if (!visible) return false;
+  if (!visible) {
+    return dismissLeMondeWithdrawalModal();
+  }
+
+  if (isLeMondeManualOpenSuppressed()) {
+    if (isLeMondeSettingsSurfaceVisible()) {
+      syncLeMondeVisibleSettingsFromConsent();
+    }
+    return true;
+  }
+
+  if (await dismissLeMondeWithdrawalModal()) {
+    return true;
+  }
+
+  if (isLeMondeSettingsSurfaceVisible() && !isLeMondeAutomationOpenSuppressed() && readLeMondeConsentCookie()) {
+    syncLeMondeVisibleSettingsFromConsent();
+    return true;
+  }
+
+  const shouldConfigureAccept = shouldConfigureLeMondeAcceptViaSettings(prefs, siteOverrides);
+  if (shouldConfigureAccept) {
+    const result = await configureLeMondeFromVisibleSurface(prefs);
+    if (result === 'manual') return true;
+    if (result === 'configured') {
+      await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+      persistLeMondeConsentCookie(prefs);
+      scheduleLeMondeConsentCookiePersistence(prefs);
+      await reportAction('site_specific:settings_save', 'accept_all');
+      return true;
+    }
+  }
 
   if (prefs.globalPreference === 'accept_all' || siteOverrides.alwaysAccept) {
     const accepted = await clickAndWait(
-      ['[data-gdpr-expression="acceptAll"]', '.gdpr-lmd-button[data-gdpr-expression="acceptAll"]', '.gdpr-lmd-button--slate-darker'],
+      [
+        'button[data-gdpr-expression="acceptAll"]',
+        'a[data-gdpr-expression="acceptAll"]',
+        '[data-gdpr-expression="acceptAll"]',
+        'text:accepter et continuer',
+        'text:accept and continue',
+      ],
       selectors,
+      8000,
     );
     if (accepted) {
+      await waitForLeMondeConsentCookie(5000);
+      if (shouldConfigureAccept && prefs.ccpaDoNotSell !== false) {
+        const adjusted = await configureLeMondeFromFooterSettings(prefs);
+        if (adjusted === 'configured') {
+          await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+          persistLeMondeConsentCookie(prefs);
+          scheduleLeMondeConsentCookiePersistence(prefs);
+          await reportAction('site_specific:settings_save', 'accept_all');
+          return true;
+        }
+        await chrome.runtime.sendMessage({
+          type: 'REPORT_UNSUPPORTED_SITE',
+          site,
+          reason: 'Le Monde accepted cookies before exposing settings, and Eat My Cookies could not reopen the settings panel to apply the CCPA do-not-sell choice on this visit.',
+          allowAcceptOverride: true,
+        });
+        return true;
+      }
       await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
       await reportAction(siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:accept_all', 'accept_all');
       return true;
     }
   }
 
-  const deniedDirectly = await clickAndWait(
-    [
-      '[data-gdpr-expression="denyAll"]',
-      '.gdpr-lmd-wall__refuse-link',
-      'button[data-gdpr-expression="denyAll"]',
-      'a[data-gdpr-expression="denyAll"]',
-    ],
-    selectors,
-  );
-  if (deniedDirectly) {
-    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
-    await reportAction('site_specific:deny_all', prefs.globalPreference);
+  if (isLeMondeConsentOrPayWall()) {
+    await reportLeMondeConsentOrPayUnsupported();
     return true;
   }
 
-  const settingsButton = document.querySelector('[data-gdpr-action="settings"]');
-  if (settingsButton && isVisible(settingsButton)) {
-    dispatchSyntheticClick(settingsButton);
-    const configured = await configureLeMondeSettings(prefs);
-    if (configured) {
+  if (prefs.globalPreference === 'reject_all') {
+    const deniedDirectly = await clickAndWait(
+      [
+        'button[data-gdpr-expression="denyAll"]',
+        'a[data-gdpr-expression="denyAll"]',
+        '[data-gdpr-expression="denyAll"]',
+        '.gdpr-lmd-wall__refuse-link',
+      ],
+      selectors,
+      8000,
+    );
+    if (deniedDirectly) {
       await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
-      await reportAction('site_specific:settings_save', prefs.globalPreference);
+      await reportAction('site_specific:deny_all', prefs.globalPreference);
       return true;
     }
+  }
+
+  if (prefs.globalPreference !== 'custom') return false;
+
+  const result = await configureLeMondeFromVisibleSurface(prefs);
+  if (result === 'manual') return true;
+  if (result === 'configured') {
+    await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
+    persistLeMondeConsentCookie(prefs);
+    scheduleLeMondeConsentCookiePersistence(prefs);
+    await reportAction('site_specific:settings_save', prefs.globalPreference);
+    return true;
   }
 
   await chrome.runtime.sendMessage({
@@ -2837,11 +3112,344 @@ async function handleLeMonde(prefs, siteOverrides) {
   return true;
 }
 
+async function waitForLeMondeConsentCookie(timeoutMs = 5000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (readLeMondeConsentPurposes()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return Boolean(readLeMondeConsentPurposes());
+}
+
+function shouldConfigureLeMondeAcceptViaSettings(prefs, siteOverrides) {
+  if (siteOverrides.alwaysAccept) return false;
+  return prefs.globalPreference === 'accept_all' && isLeMondeEnglishPath();
+}
+
+function isLeMondeEnglishPath() {
+  return /^\/en(?:\/|$)/i.test(location.pathname);
+}
+
+function isLeMondeManualOpenSuppressed() {
+  return Date.now() < leMondeManualOpenUntil;
+}
+
+function isLeMondeAutomationOpenSuppressed() {
+  return Date.now() < leMondeAutomationOpenUntil;
+}
+
+function markLeMondeAutomationOpen() {
+  leMondeAutomationOpenUntil = Date.now() + LEMONDE_AUTOMATION_SUPPRESS_MS;
+}
+
+function isLeMondeSettingsSurfaceVisible() {
+  return hasVisibleLeMondeElement('.gdpr-lmd-params') ||
+    hasVisibleLeMondeElement('[data-gdpr-action="save"]') ||
+    hasVisibleLeMondeElement('[data-gdpr-params-purpose]');
+}
+
+function isLeMondeManualSettingsOpen() {
+  return isLeMondeManualOpenSuppressed() && isLeMondeSettingsSurfaceVisible();
+}
+
+function syncLeMondeVisibleSettingsFromConsent() {
+  const purposes = readLeMondeConsentPurposes();
+  if (!purposes) return false;
+
+  let synced = false;
+  for (const [purpose, enabled] of Object.entries(purposes)) {
+    for (const input of leMondePurposeInputs(purpose)) {
+      setSilentLeMondePurposeState(input, Boolean(enabled));
+      synced = true;
+    }
+  }
+  return synced;
+}
+
+function readLeMondeConsentPurposes() {
+  return readLeMondeConsentCookie()?.purposes ?? null;
+}
+
+function readLeMondeConsentCookie() {
+  const raw = document.cookie
+    .split('; ')
+    .filter((part) => part.startsWith('lmd_consent='))
+    .at(-1)
+    ?.slice('lmd_consent='.length);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(decodeURIComponent(raw));
+  } catch (_) {
+    return null;
+  }
+}
+
+function persistLeMondeConsentCookie(prefs) {
+  const { encoded, purposes } = buildLeMondeConsentCookiePayload(prefs);
+  writeLeMondeConsentCookieValue(encoded);
+  void storeLeMondeConsentMirror(encoded, prefs);
+
+  const stored = readLeMondeConsentPurposes();
+  return Boolean(stored && Object.entries(purposes).every(([purpose, enabled]) => stored[purpose] === enabled));
+}
+
+async function persistLeMondeConsentCookieDurably(prefs) {
+  const { encoded, purposes } = buildLeMondeConsentCookiePayload(prefs);
+  writeLeMondeConsentCookieValue(encoded);
+  await storeLeMondeConsentMirror(encoded, prefs);
+
+  const stored = readLeMondeConsentPurposes();
+  return Boolean(stored && Object.entries(purposes).every(([purpose, enabled]) => stored[purpose] === enabled));
+}
+
+function buildLeMondeConsentCookiePayload(prefs) {
+  const existing = readLeMondeConsentCookie() ?? {};
+  const purposes = leMondeDesiredPurposes(prefs);
+  const payload = {
+    ...existing,
+    userId: existing.userId ?? crypto.randomUUID?.() ?? String(Date.now()),
+    timestamp: String(Date.now() / 1000),
+    version: existing.version ?? 5,
+    cmpId: existing.cmpId ?? 371,
+    displayMode: existing.displayMode ?? 'standard',
+    purposes,
+    optoutAnalytics: !purposes.analytics,
+  };
+
+  const encoded = encodeURIComponent(JSON.stringify(payload));
+  return { encoded, purposes };
+}
+
+function writeLeMondeConsentCookieValue(encoded) {
+  writeCookie('lmd_consent', encoded, {
+    maxAge: 31536000,
+    domain: '.lemonde.fr',
+    sameSite: 'Lax',
+    secure: true,
+  });
+  writeCookie('lmd_consent', encoded, {
+    maxAge: 31536000,
+    sameSite: 'Lax',
+    secure: true,
+  });
+}
+
+function storeLeMondeConsentMirror(encoded, prefs) {
+  const payload = {
+    encoded,
+    signature: prefsRunSignature(prefs),
+    timestamp: Date.now(),
+  };
+  try {
+    localStorage.setItem(LEMONDE_CONSENT_MIRROR_KEY, JSON.stringify(payload));
+  } catch (_) {}
+  try {
+    if (!chrome.storage?.local?.set) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ [LEMONDE_CONSENT_MIRROR_KEY]: payload }, () => resolve(true));
+    });
+  } catch (_) {}
+  return Promise.resolve(false);
+}
+
+async function restoreLeMondeConsentCookieFromMirror(prefs) {
+  let payload = readLeMondeLocalConsentMirror();
+  if (!isMatchingLeMondeConsentMirror(payload, prefs)) {
+    payload = await readLeMondeExtensionConsentMirror();
+  }
+  if (!isMatchingLeMondeConsentMirror(payload, prefs)) return false;
+
+  writeLeMondeConsentCookieValue(payload.encoded);
+  return true;
+}
+
+function readLeMondeLocalConsentMirror() {
+  try {
+    return JSON.parse(localStorage.getItem(LEMONDE_CONSENT_MIRROR_KEY) || 'null');
+  } catch (_) {
+    return null;
+  }
+}
+
+async function readLeMondeExtensionConsentMirror() {
+  try {
+    const stored = await chrome.storage?.local?.get?.(LEMONDE_CONSENT_MIRROR_KEY);
+    return stored?.[LEMONDE_CONSENT_MIRROR_KEY] ?? null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function isMatchingLeMondeConsentMirror(payload, prefs) {
+  return Boolean(payload?.encoded && payload.signature === prefsRunSignature(prefs));
+}
+
+function scheduleLeMondeConsentCookiePersistence(prefs) {
+  const started = Date.now();
+  const interval = setInterval(() => {
+    persistLeMondeConsentCookie(prefs);
+    if (Date.now() - started > LEMONDE_MANUAL_SUPPRESS_MS) clearInterval(interval);
+  }, 500);
+}
+
+function leMondeDesiredPurposes(prefs) {
+  const acceptAll = prefs.globalPreference === 'accept_all';
+  return {
+    analytics: Boolean(prefs.analytics),
+    ads: Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false,
+    personalization: Boolean(prefs.functional) || prefs.uncategorized === 'accept',
+    mediaPlatforms: acceptAll || (Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false),
+    social: acceptAll || (Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false),
+  };
+}
+
+async function configureLeMondeFromVisibleSurface(prefs) {
+  const settingsVisible = hasVisibleLeMondeElement('[data-gdpr-action="save"]') ||
+    hasVisibleLeMondeElement('[data-gdpr-params-purpose]');
+  const initialSurfaceVisible = hasVisibleLeMondeElement('.gdpr-lmd-standard') ||
+    hasVisibleLeMondeElement('.gdpr-lmd-wall');
+  const settingsButton = firstVisibleElementOnPage(['[data-gdpr-action="settings"]']);
+  if (settingsVisible || (initialSurfaceVisible && settingsButton)) {
+    if (Date.now() < leMondeManualOpenUntil) return 'manual';
+    if (!settingsVisible) {
+      startFlowCooldown('lemonde');
+      markLeMondeAutomationOpen();
+      dispatchSyntheticClick(settingsButton);
+    }
+    const configured = await configureLeMondeSettings(prefs);
+    if (configured || await waitForLeMondeSettingsDismissal(2500)) {
+      return 'configured';
+    }
+  }
+
+  return false;
+}
+
+async function configureLeMondeFromFooterSettings(prefs) {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  const opener = firstVisibleElementOnPage([
+    '.footer__link.gdpr-cs-parameters-link',
+    '.gdpr-cs-parameters-link',
+    '[data-gdpr-action="settings"]',
+  ]) || findButtonByText([
+    'gestion des cookies',
+    'paramétrage des cookies',
+    'parametrage des cookies',
+    'paramétrer les cookies',
+    'parametrer les cookies',
+    'cookie settings',
+    'cookie preferences',
+    'manage cookies',
+  ]);
+  if (!opener || !isVisible(opener)) return false;
+
+  startFlowCooldown('lemonde');
+  markLeMondeAutomationOpen();
+  dispatchSyntheticClick(opener);
+  const configured = await configureLeMondeSettings(prefs);
+  return configured ? 'configured' : false;
+}
+
+function ensureLeMondeManualOpenGuard() {
+  if (leMondeManualOpenGuardInstalled) return;
+  leMondeManualOpenGuardInstalled = true;
+  const markIfManualCookieSettingsOpen = (event) => {
+    if (!event.isTrusted) return;
+    const target = findLeMondeManualOpenTarget(event);
+    if (!target && !isLeMondeLikelyFooterInspection(event)) return;
+    leMondeManualOpenUntil = Date.now() + LEMONDE_MANUAL_SUPPRESS_MS;
+  };
+
+  document.addEventListener('pointerdown', markIfManualCookieSettingsOpen, { capture: true, passive: true });
+  document.addEventListener('mousedown', markIfManualCookieSettingsOpen, { capture: true, passive: true });
+  document.addEventListener('click', markIfManualCookieSettingsOpen, { capture: true, passive: true });
+  document.addEventListener('keydown', (event) => {
+    if (!event.isTrusted || !['Enter', ' '].includes(event.key)) return;
+    markIfManualCookieSettingsOpen(event);
+  }, { capture: true, passive: true });
+}
+
+function findLeMondeManualOpenTarget(event) {
+  const candidates = [
+    ...(event.composedPath?.() ?? []),
+    event.target,
+  ].filter((node) => node?.nodeType === Node.ELEMENT_NODE);
+
+  for (const node of candidates) {
+    const target = node.closest?.('a, button, [role="button"], [data-gdpr-action], .gdpr-cs-parameters-link');
+    if (!target) continue;
+    if (isLeMondeCookieSettingsOpenTarget(target)) return target;
+  }
+
+  return null;
+}
+
+function isLeMondeLikelyFooterInspection(event) {
+  if (!readLeMondeConsentCookie()) return false;
+  if (!Number.isFinite(event.clientY)) return false;
+  const viewportBottom = window.scrollY + window.innerHeight;
+  const nearPageBottom = viewportBottom > Math.max(0, document.documentElement.scrollHeight - 1200);
+  const lowerViewportClick = event.clientY > window.innerHeight * 0.55;
+  return nearPageBottom && lowerViewportClick;
+}
+
+function isLeMondeCookieSettingsOpenTarget(target) {
+  if (target.getAttribute?.('data-gdpr-action') === 'settings') return true;
+  if (target.matches?.('.gdpr-cs-parameters-link, .footer__link.gdpr-cs-parameters-link')) return true;
+
+  const targetText = [
+    target.textContent,
+    target.getAttribute?.('aria-label'),
+    target.getAttribute?.('title'),
+    target.getAttribute?.('href'),
+    target.className,
+    target.id,
+  ].filter(Boolean).join(' ');
+  return /(gestion des cookies|param[eé]trage des cookies|param[eé]trer les cookies|cookie settings|cookie preferences|manage cookies|gdpr-cs-parameters-link)/i
+    .test(targetText);
+}
+
+async function dismissLeMondeWithdrawalModal() {
+  if (isLeMondeManualOpenSuppressed()) return false;
+
+  const text = (document.body?.innerText || '').replace(/\s+/g, ' ').toLowerCase();
+  if (!text.includes('souhaitez-vous retirer votre consentement')) return false;
+  if (!text.includes('retirer mon consentement')) return false;
+
+  const cancel = findButtonByText(['annuler', 'cancel']);
+  if (!cancel || !isVisible(cancel)) return false;
+
+  startFlowCooldown('lemonde');
+  dispatchSyntheticClick(cancel);
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  return true;
+}
+
+function isLeMondeConsentOrPayWall() {
+  const text = (document.body?.innerText || '').replace(/\s+/g, ' ').toLowerCase();
+  if (!text.includes('soutenez un journalisme fiable')) return false;
+  if (!text.includes('accepter et continuer')) return false;
+  if (!/s[’']abonner/.test(text)) return false;
+  return !hasVisibleLeMondeElement('[data-gdpr-expression="denyAll"]') &&
+    !hasVisibleLeMondeElement('[data-gdpr-action="settings"]') &&
+    !hasVisibleLeMondeElement('[data-gdpr-action="save"]');
+}
+
+async function reportLeMondeConsentOrPayUnsupported() {
+  await chrome.runtime.sendMessage({
+    type: 'REPORT_UNSUPPORTED_SITE',
+    site,
+    reason: 'Le Monde is showing a consent-or-pay wall on this page. Reject/custom choices are not available here without accepting cookies, subscribing, or signing in.',
+    allowAcceptOverride: true,
+  });
+}
+
 async function configureLeMondeSettings(prefs) {
   const settingsSelectors = [
-    '[data-gdpr-expression="denyAll"]',
     '[data-gdpr-action="save"]',
-    'button[aria-label*="Refuser" i]',
+    '[data-gdpr-params-purpose]',
     'button[aria-label*="Save" i]',
     'button[title*="Save" i]',
   ];
@@ -2849,48 +3457,169 @@ async function configureLeMondeSettings(prefs) {
   const visible = await waitForSiteSelectors(settingsSelectors, 3000);
   if (!visible) return false;
 
-  const directDeny = await clickAndWait(
-    [
-      '[data-gdpr-expression="denyAll"]',
-      'button[aria-label*="Refuser" i]',
-      'button[title*="Refuser" i]',
-      'button[data-gdpr-expression="denyAll"]',
-      'a[data-gdpr-expression="denyAll"]',
-    ],
-    ['.gdpr-lmd-wall', '[data-gdpr-action="save"]'],
-  );
-  if (directDeny) return true;
+  if (!(await applyLeMondeCustomPreferences(prefs))) return false;
 
-  if (prefs.globalPreference !== 'accept_all') {
-    await turnOffLeMondeInputs();
-  }
-
-  const saveButton = document.querySelector('[data-gdpr-action="save"]') ||
-    document.querySelector('button[aria-label*="Save" i]') ||
-    findButtonByText(['save', 'enregistrer']);
+  const saveButton = firstVisibleElementOnPage([
+    '[data-gdpr-action="save"]',
+    'button[aria-label*="Save" i]',
+    'button[aria-label*="Valider" i]',
+    'button[title*="Valider" i]',
+  ]) ||
+    findButtonByText(['valider les paramètres', 'save', 'enregistrer']);
   if (!saveButton || !isVisible(saveButton)) return false;
 
+  persistPendingPreHandleAction(
+    currentRunSignature ?? document.documentElement.dataset.emcRunSignature ?? prefsRunSignature(prefs),
+    'site_specific:settings_save',
+    prefs.globalPreference,
+  );
+  await persistLeMondeConsentCookieDurably(prefs);
+  scheduleLeMondeConsentCookiePersistence(prefs);
   dispatchSyntheticClick(saveButton);
-  return waitForSelectorsToDisappear(['.gdpr-lmd-wall', '[data-gdpr-action="save"]'], 5000);
+  try {
+    const dismissed = await waitForLeMondeSettingsDismissal(10000);
+    await persistLeMondeConsentCookieDurably(prefs);
+    return dismissed;
+  } finally {
+    leMondeAutomationOpenUntil = 0;
+  }
 }
 
-async function turnOffLeMondeInputs() {
-  const toggles = Array.from(document.querySelectorAll('input[type="checkbox"], input[type="radio"], [role="switch"], [aria-checked]'));
-  for (const toggle of toggles) {
-    const text = (toggle.closest('label, [role="button"], button, div')?.textContent || '').toLowerCase();
-    if (/strict|necessary|essentiel|nécessaire/.test(text)) continue;
-
-    if (toggle.matches('[role="switch"], [aria-checked]')) {
-      const checked = toggle.getAttribute('aria-checked') === 'true';
-      if (checked && isVisible(toggle)) dispatchSyntheticClick(toggle);
-      continue;
-    }
-
-    if ('checked' in toggle && toggle.checked && !toggle.disabled && isVisible(toggle)) {
-      dispatchSyntheticClick(toggle);
-    }
+async function waitForLeMondeSettingsDismissal(timeoutMs = 10000) {
+  const selectors = [
+    '.gdpr-lmd-wall',
+    '.gdpr-lmd-standard',
+    '.gdpr-lmd-params',
+    '[data-gdpr-action="save"]',
+  ];
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (!selectors.some((selector) => hasVisibleLeMondeElement(selector))) return true;
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  return !selectors.some((selector) => hasVisibleLeMondeElement(selector));
+}
+
+function hasVisibleLeMondeElement(selector) {
+  return Array.from(document.querySelectorAll(selector)).some((el) => isVisible(el));
+}
+
+async function applyLeMondeCustomPreferences(prefs) {
+  const desired = leMondeDesiredPurposes(prefs);
+  let applied = 0;
+
+  for (const [purpose, checked] of Object.entries(desired)) {
+    const configured = await setLeMondePurposeState(purpose, checked);
+    if (configured === null) continue;
+    if (!configured) return false;
+    applied += 1;
+  }
+
+  return applied > 0;
+}
+
+async function setLeMondePurposeState(purpose, checked) {
+  const desired = Boolean(checked);
+  let sawInput = false;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const inputs = leMondePurposeInputs(purpose);
+    if (!inputs.length) return sawInput ? false : null;
+    sawInput = true;
+
+    if (inputs.every((input) => Boolean(input.checked) === desired)) return true;
+
+    const input = inputs.find((candidate) => Boolean(candidate.checked) !== desired) ?? inputs[0];
+    dispatchSyntheticClick(input);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const afterClick = leMondePurposeInputs(purpose);
+    if (afterClick.length && afterClick.every((candidate) => Boolean(candidate.checked) === desired)) {
+      return true;
+    }
+
+    const target = findLeMondePurposeClickTarget(input);
+    if (target && target !== input) {
+      dispatchSyntheticClick(target);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    const afterTargetClick = leMondePurposeInputs(purpose);
+    if (afterTargetClick.length && afterTargetClick.every((candidate) => Boolean(candidate.checked) === desired)) {
+      return true;
+    }
+
+    for (const candidate of afterTargetClick) {
+      setNativeLeMondePurposeState(candidate, desired);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  const finalInputs = leMondePurposeInputs(purpose);
+  for (const input of finalInputs) {
+    setNativeLeMondePurposeState(input, desired);
+  }
+  return finalInputs.length > 0 && finalInputs.every((input) => Boolean(input.checked) === desired);
+}
+
+function leMondePurposeInputs(purpose) {
+  return Array.from(document.querySelectorAll(`input[data-gdpr-params-purpose="${CSS.escape(purpose)}"]`))
+    .filter((input) => !input.disabled);
+}
+
+function findLeMondePurposeClickTarget(input) {
+  if (!input) return null;
+
+  const localLabel = input.closest('label');
+  if (localLabel && isVisible(localLabel)) return localLabel;
+
+  const containers = [
+    input.parentElement,
+    input.closest('section, article, li'),
+    input.closest('div'),
+  ].filter(Boolean);
+
+  for (const container of containers) {
+    const candidates = [
+      ...(input.id ? Array.from(container.querySelectorAll(`label[for="${CSS.escape(input.id)}"]`)) : []),
+      ...Array.from(container.querySelectorAll('label')),
+    ];
+    const target = candidates.find((candidate) => isVisible(candidate));
+    if (target) return target;
+  }
+
+  return input;
+}
+
+function setNativeLeMondePurposeState(input, checked) {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+    descriptor?.set?.call(input, Boolean(checked));
+    input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+  } catch (_) {
+    input.checked = Boolean(checked);
+  }
+}
+
+function setSilentLeMondePurposeState(input, checked) {
+  try {
+    const desired = Boolean(checked);
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+    descriptor?.set?.call(input, desired);
+    if (desired) {
+      input.setAttribute('checked', '');
+    } else {
+      input.removeAttribute('checked');
+    }
+
+    const target = findLeMondePurposeClickTarget(input);
+    if (target?.hasAttribute?.('aria-checked')) {
+      target.setAttribute('aria-checked', String(desired));
+    }
+  } catch (_) {
+    input.checked = Boolean(checked);
+  }
 }
 
 function scheduleLateMainWorldReport(capturedRunId, prefs) {
@@ -3323,7 +4052,8 @@ async function configureDWSettings(prefs) {
   );
   if (!visible) return false;
 
-  if (prefs.globalPreference === 'accept_all') {
+  const saveSelectionVisible = Boolean(queryElement('text:save selection'));
+  if (prefs.globalPreference === 'accept_all' && !saveSelectionVisible) {
     if (clickElement([
       '.cmptxt_btn_yes2',
       '.cmptxt_btn_yes',
@@ -3348,6 +4078,8 @@ async function configureDWSettings(prefs) {
 
   if (prefs.globalPreference === 'custom') {
     await applyDWCustomRows(prefs);
+  } else if (prefs.globalPreference === 'accept_all') {
+    await applyDWAcceptAllRows();
   } else {
     toggleOffDWRows();
   }
@@ -3360,6 +4092,7 @@ async function configureDWSettings(prefs) {
     '.cmpboxbtnyescustomchoices.cmptxt_btn_save',
     '.cmpboxbtnsave',
     '.cmpsave',
+    'text:save selection',
   ])) {
     return false;
   }
@@ -3407,6 +4140,88 @@ function isDWPrivacySettingsPage() {
   return location.pathname.includes('/data-privacy-settings/');
 }
 
+async function maybeReturnFromDWPrivacySettingsPage() {
+  if (!isDWPrivacySettingsPage()) {
+    await clearDWAutoReturnPending();
+    return true;
+  }
+  if (!(await hasDWAutoReturnPending())) return true;
+  await new Promise((resolve) => setTimeout(resolve, DW_RETURN_DELAY_MS));
+  const targetUrl = dwPrivacyReturnUrl();
+  if (targetUrl) {
+    try {
+      location.replace(targetUrl);
+    } catch (_) {}
+  } else {
+    try {
+      history.back();
+    } catch (_) {}
+  }
+  const returned = await waitForDWArticleReturn(10000);
+  await clearDWAutoReturnPending();
+  return returned;
+}
+
+async function markDWAutoReturnPending() {
+  const returnUrl = validDWReturnUrl(location.href);
+  if (!returnUrl) return;
+  try {
+    await chrome.storage.local.set({
+      [DW_RETURN_PENDING_KEY]: {
+        timestamp: Date.now(),
+        returnUrl,
+      },
+    });
+  } catch (_) {}
+}
+
+function dwPrivacyReturnUrl() {
+  const pendingUrl = document.documentElement.dataset.emcDwReturnUrl;
+  if (pendingUrl) return pendingUrl;
+  try {
+    const referrer = document.referrer ? new URL(document.referrer) : null;
+    if (!referrer) return null;
+    if (referrer.hostname !== 'www.dw.com') return null;
+    if (referrer.pathname.includes('/data-privacy-settings/')) return null;
+    return referrer.href;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function hasDWAutoReturnPending() {
+  try {
+    const result = await chrome.storage.local.get({ [DW_RETURN_PENDING_KEY]: null });
+    const payload = result?.[DW_RETURN_PENDING_KEY];
+    if (!payload?.timestamp || (Date.now() - payload.timestamp) >= DW_RETURN_PENDING_TTL_MS) return false;
+    const returnUrl = validDWReturnUrl(payload.returnUrl);
+    if (returnUrl) {
+      document.documentElement.dataset.emcDwReturnUrl = returnUrl;
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function validDWReturnUrl(returnUrl) {
+  try {
+    if (!returnUrl) return null;
+    const parsed = new URL(returnUrl);
+    if (parsed.hostname !== 'www.dw.com') return null;
+    if (parsed.pathname.includes('/data-privacy-settings/')) return null;
+    return parsed.href;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function clearDWAutoReturnPending() {
+  try {
+    await chrome.storage.local.remove(DW_RETURN_PENDING_KEY);
+  } catch (_) {}
+}
+
 function toggleOffDWRows() {
   const rows = deepQuerySelectorAll('.cmpboxnaviitem, [data-cmp-purpose], .cmpboxnaviitem');
   for (const row of rows) {
@@ -3417,6 +4232,15 @@ function toggleOffDWRows() {
     if (!toggle) continue;
     if (readDWToggleState(row, toggle) === false) continue;
     dispatchSyntheticClick(toggle);
+  }
+}
+
+async function applyDWAcceptAllRows() {
+  const categories = ['function', 'marketing', 'preferences', 'measurement', 'other', 'social media'];
+  for (const category of categories) {
+    const opened = clickDWCategoryNav([category]);
+    if (opened) await new Promise((resolve) => setTimeout(resolve, 180));
+    setDWCurrentPageToggles(true, { allowNecessary: true });
   }
 }
 
@@ -4064,14 +4888,24 @@ function deepQuerySelectorAll(selector, root = document) {
 }
 
 async function reportAction(method, preference, { noRejectAvailable } = {}) {
+  // Manual-open suppression prevents automatic interaction with a preference
+  // center. It must not discard a completed Usercentrics outcome reported by
+  // the MAIN-world CMP handler after the user has made a choice.
+  if (!isUsercentricsActionMethod(method) && await isManualConsentOpenSuppressed()) {
+    return { ok: true, manualOpenSuppressed: true };
+  }
   markHandledForCurrentPage(currentRunSignature ?? preference);
-  await chrome.runtime.sendMessage({
+  const response = await chrome.runtime.sendMessage({
     type: 'ACTION_FIRED',
     site,
     method,
     preference,
     ...(noRejectAvailable ? { noRejectAvailable: true } : {}),
   });
+  if (response?.ok) {
+    clearPendingPreHandleAction(currentRunSignature ?? preference);
+  }
+  return response;
 }
 
 async function reportDomResult(result, prefs) {
@@ -4246,7 +5080,7 @@ function isSiteSpecificFlowLocked(scope) {
 }
 
 function persistPendingPreHandleAction(signature, method, preference, expectedGroups = null) {
-  if (!REJECT_RELOAD_GUARD_HOSTS.has(site)) return;
+  if (!shouldPersistPendingPreHandleAction(method)) return;
   if (!method) return;
   const actionToken = `${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
   try {
@@ -4262,14 +5096,13 @@ function persistPendingPreHandleAction(signature, method, preference, expectedGr
 }
 
 function hasPendingPreHandleAction(signature) {
-  if (!REJECT_RELOAD_GUARD_HOSTS.has(site)) return false;
   let payload = null;
   try {
     payload = JSON.parse(localStorage.getItem(pendingPreHandleActionKey(signature)) || 'null');
   } catch (_) {
     payload = null;
   }
-  return isFreshPendingPreHandleAction(payload);
+  return shouldPersistPendingPreHandleAction(payload?.method) && isFreshPendingPreHandleAction(payload);
 }
 
 function isFreshPendingPreHandleAction(payload) {
@@ -4283,14 +5116,15 @@ function isFreshPendingPreHandleAction(payload) {
 }
 
 async function flushPendingPreHandleAction(signature) {
-  if (!REJECT_RELOAD_GUARD_HOSTS.has(site)) return;
+  if (await isManualConsentOpenSuppressed()) return false;
+
   let payload = null;
   try {
     payload = JSON.parse(localStorage.getItem(pendingPreHandleActionKey(signature)) || 'null');
   } catch (_) {
     payload = null;
   }
-  if (!isFreshPendingPreHandleAction(payload)) {
+  if (!shouldPersistPendingPreHandleAction(payload?.method) || !isFreshPendingPreHandleAction(payload)) {
     clearPendingPreHandleAction(signature);
     return false;
   }
@@ -4312,6 +5146,23 @@ async function flushPendingPreHandleAction(signature) {
     }
   } catch (_) {}
   return false;
+}
+
+function shouldPersistPendingPreHandleAction(method) {
+  return REJECT_RELOAD_GUARD_HOSTS.has(site) ||
+    isUsercentricsActionMethod(method) ||
+    isLeMondeReloadingActionMethod(method);
+}
+
+function isUsercentricsActionMethod(method) {
+  return typeof method === 'string' && (
+    method.startsWith('dom:usercentrics') ||
+    method.startsWith('cmp_api:UC_UI')
+  );
+}
+
+function isLeMondeReloadingActionMethod(method) {
+  return site === 'www.lemonde.fr' && method === 'site_specific:settings_save';
 }
 
 function clearPendingPreHandleAction(signature) {

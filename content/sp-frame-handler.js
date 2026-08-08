@@ -12,6 +12,8 @@
 (function () {
   const FRAME_COOLDOWN_MS = 20000;
   const FRAME_RUN_GUARD_PREFIX = '__emc_spframe__';
+  const MANUAL_CONSENT_OPEN_KEY = '__emc_manual_consent_open__';
+  const MANUAL_CONSENT_SUPPRESS_MS = 120000;
   const GUARDIAN_ACCESSIBILITY_PATH = '/help/accessibility-help';
   const GUARDIAN_HOSTS = new Set(['www.theguardian.com', 'support.theguardian.com']);
   const TEMPORARILY_UNSUPPORTED_TOP_SITES = new Set(['www.bbc.com', 'latimes.com', 'www.latimes.com', 'membership.latimes.com']);
@@ -164,6 +166,7 @@
     if (!isSPFrame() && !isFTShell) return;
     if (!hasConsentSignals() && !isFTShell && !isSourcepointHost(window.location.hostname)) return;
     if (await isDisabledForTopSite()) return;
+    if (await isManualConsentOpenSuppressed(site)) return;
 
     // Determine which framework this banner is — USNat banners contain "sell" text.
     const isUSNat = !!document.body?.textContent?.match(/sell|sharing.*personal/i);
@@ -1077,7 +1080,23 @@
     return Boolean(siteOverrides?.[domain]?.disabled);
   }
 
+  async function isManualConsentOpenSuppressed(site) {
+    try {
+      const result = await chrome.storage.local.get({ [MANUAL_CONSENT_OPEN_KEY]: null });
+      const payload = result?.[MANUAL_CONSENT_OPEN_KEY];
+      if (!payload?.timestamp || Date.now() - payload.timestamp >= MANUAL_CONSENT_SUPPRESS_MS) {
+        await chrome.storage.local.remove(MANUAL_CONSENT_OPEN_KEY);
+        return false;
+      }
+      const currentHost = window.location.hostname;
+      return !payload.site || payload.site === site || payload.site === currentHost;
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function report(site, method, preference) {
+    if (await isManualConsentOpenSuppressed(site)) return;
     startFrameCooldown(site, preference);
     try {
       const response = await chrome.runtime.sendMessage({ type: 'ACTION_FIRED', site, method, preference });

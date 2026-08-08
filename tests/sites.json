@@ -223,16 +223,159 @@
       ]
     },
     {
-      "name": "Le Monde",
+      "name": "Le Monde EN",
+      "url": "https://www.lemonde.fr/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9,fr;q=0.8",
+      "cmp": "Le Monde custom CMP",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "expectActivityRecorded": true,
+      "note": "Le Monde's English path exposes the configurable gdpr-lmd CMP. Reject should use only the explicit denyAll action. The French root path can instead show a consent-or-pay wall and should be treated as an honest site-specific choice for reject/custom.",
+      "bannerSelectors": [
+        ".gdpr-lmd-standard",
+        ".gdpr-lmd-params",
+        "[data-gdpr-expression='acceptAll']",
+        "[data-gdpr-expression='denyAll']"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-expression='denyAll']",
+        "[data-gdpr-action='save']"
+      ]
+    },
+    {
+      "name": "Le Monde Root (Accept Override)",
       "url": "https://www.lemonde.fr/",
       "region": "EU",
       "locale": "fr-FR",
       "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
-      "cmp": "Le Monde (consent-or-pay)",
-      "tier": "n/a",
-      "note": "Current wall offers accept or subscribe only; no visible free reject path was available in validation.",
-      "bannerSelectors": [],
-      "consentSelectors": []
+      "cmp": "Le Monde consent-or-pay",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "siteOverrides": {
+        "www.lemonde.fr": {
+          "alwaysAccept": true
+        }
+      },
+      "expectActivityRecorded": true,
+      "expectedActivityMethod": "site_override:accept_all",
+      "forbiddenTextAfterHandle": [
+        "souhaitez-vous retirer votre consentement",
+        "retirer mon consentement"
+      ],
+      "note": "French root consent-or-pay wall with the user's site-specific Always Accept override. This should accept the wall directly and must not run the /en/ post-accept settings recovery, which can open Le Monde's withdrawal modal.",
+      "bannerSelectors": [
+        ".gdpr-lmd-wall",
+        "[data-gdpr-expression='acceptAll']",
+        "text:accepter et continuer"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-expression='acceptAll']",
+        "text:accepter et continuer"
+      ]
+    },
+    {
+      "name": "Le Monde (Accept)",
+      "url": "https://www.lemonde.fr/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9,fr;q=0.8",
+      "cmp": "Le Monde custom CMP",
+      "tier": "site-specific",
+      "preference": "accept_all",
+      "categoryPreferences": {
+        "ccpaDoNotSell": true
+      },
+      "expectActivityRecorded": true,
+      "expectedLeMondePurposeStates": {
+        "analytics": true,
+        "social": true,
+        "mediaPlatforms": true,
+        "personalization": true,
+        "ads": false
+      },
+      "verifyLeMondeManualReopenNoActivity": true,
+      "note": "Accept All with CCPA do-not-sell enabled must save via Le Monde settings so analytics/personalization/social/media-platform purposes are on while ads stay off.",
+      "bannerSelectors": [
+        ".gdpr-lmd-standard",
+        ".gdpr-lmd-params",
+        "[data-gdpr-expression='acceptAll']"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-expression='acceptAll']",
+        "[data-gdpr-action='save']"
+      ]
+    },
+    {
+      "name": "Le Monde (Accept No CCPA)",
+      "url": "https://www.lemonde.fr/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9,fr;q=0.8",
+      "cmp": "Le Monde custom CMP",
+      "tier": "site-specific",
+      "preference": "accept_all",
+      "categoryPreferences": {
+        "ccpaDoNotSell": false
+      },
+      "expectActivityRecorded": true,
+      "expectedLeMondePurposeStates": {
+        "analytics": true,
+        "social": true,
+        "mediaPlatforms": true,
+        "personalization": true,
+        "ads": true
+      },
+      "verifyLeMondeManualReopenNoActivity": true,
+      "note": "Accept All with CCPA do-not-sell disabled must save via Le Monde settings so every configurable purpose remains enabled when cookie preferences are reopened.",
+      "bannerSelectors": [
+        ".gdpr-lmd-standard",
+        ".gdpr-lmd-params",
+        "[data-gdpr-expression='acceptAll']"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-expression='acceptAll']",
+        "[data-gdpr-action='save']"
+      ]
+    },
+    {
+      "name": "Le Monde (Custom Functional)",
+      "url": "https://www.lemonde.fr/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9,fr;q=0.8",
+      "cmp": "Le Monde custom CMP",
+      "tier": "site-specific",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "expectActivityRecorded": true,
+      "expectedLeMondePurposeStates": {
+        "analytics": false,
+        "social": false,
+        "mediaPlatforms": false,
+        "personalization": true,
+        "ads": false
+      },
+      "verifyLeMondeManualReopenNoActivity": true,
+      "note": "Custom must open settings and save Le Monde purpose toggles on the English gdpr-lmd CMP, not fall through to denyAll. Functional maps to personalization; analytics, social, media-platform, and ads remain off. User-opened footer cookie settings must remain inspectable and not be auto-saved.",
+      "bannerSelectors": [
+        ".gdpr-lmd-standard",
+        ".gdpr-lmd-params",
+        "[data-gdpr-params-purpose]"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-action='save']",
+        "[data-gdpr-params-purpose='personalization']",
+        "[data-gdpr-params-purpose='analytics']",
+        "[data-gdpr-params-purpose='ads']"
+      ]
     },
     {
       "name": "Le Figaro",
@@ -317,6 +460,103 @@
       ]
     },
     {
+      "name": "DW Accept All",
+      "url": "https://www.dw.com/en/top-stories/s-9097",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "ConsentManager",
+      "tier": "cm-frame",
+      "preference": "accept_all",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": true,
+        "advertising": true,
+        "ccpaDoNotSell": false,
+        "uncategorized": "accept"
+      },
+      "expectActivityRecorded": true,
+      "allowRecordedActionPass": true,
+      "requirePostRecordedBannerGone": true,
+      "handleWaitMs": 18000,
+      "forbiddenTextAfterHandle": [
+        "your data\\. your choice"
+      ],
+      "navigationExpectations": {
+        "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/top-stories/s-9097(?:$|[?#])"
+      },
+      "verifyManualConsentOpenNoActivity": {
+        "selectors": [
+          "a[href*=\"data-privacy-settings\"]",
+          "a[href*=\"privacy-settings\"]"
+        ],
+        "waitMs": 9000,
+        "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/data-privacy-settings/privacy-settings-en(?:$|[?#])",
+        "expectedVisibleSelectors": [
+          "text:save selection"
+        ]
+      },
+      "note": "US/no-VPN direct top-stories accept path. If DW detours into the full privacy-settings page, Accept All must save the settings surface and return to content rather than strand the user on Save selection.",
+      "bannerSelectors": [
+        ".cmpboxbtncustom",
+        ".cmpboxbtnno",
+        ".cmpboxbtnyes",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices"
+      ],
+      "consentSelectors": [
+        ".cmpboxbtncustom",
+        ".cmpboxbtnno",
+        ".cmpboxbtnyes",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices",
+        "text:save selection"
+      ]
+    },
+    {
+      "name": "DW Custom",
+      "url": "https://www.dw.com/en/top-stories/s-9097",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "ConsentManager",
+      "tier": "cm-frame",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "expectActivityRecorded": true,
+      "allowRecordedActionPass": true,
+      "requirePostRecordedBannerGone": true,
+      "handleWaitMs": 18000,
+      "forbiddenTextAfterHandle": [
+        "your data\\. your choice"
+      ],
+      "navigationExpectations": {
+        "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/top-stories/s-9097(?:$|[?#])"
+      },
+      "note": "US/no-VPN direct top-stories path. Custom must click DW's plain first-layer Settings link, apply preferences in the ConsentManager settings surface, save, and leave the banner gone.",
+      "bannerSelectors": [
+        ".cmpboxbtncustom",
+        ".cmpboxbtnno",
+        ".cmpboxbtnyes",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices"
+      ],
+      "consentSelectors": [
+        ".cmpboxbtncustom",
+        ".cmpboxbtnno",
+        ".cmpboxbtnyes",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices",
+        "text:save selection"
+      ]
+    },
+    {
       "name": "DW",
       "url": "https://www.dw.com/en/",
       "region": "EU",
@@ -326,13 +566,13 @@
       "tier": "cm-frame",
       "note": "DW sometimes redirects into a full-page privacy manager; validate both the entry banner and settings page paths.",
       "allowRecordedActionPass": true,
+      "requirePostRecordedBannerGone": true,
+      "handleWaitMs": 18000,
       "navigationExpectations": {
         "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/top-stories/s-9097(?:$|[?#])"
       },
       "bannerSelectors": [
-        "#cmpwrapper",
         "#cmpbox",
-        "#cmpinlinepreferencesbox",
         ".cmpboxbtnrejectcustomchoices",
         ".cmpboxbtnyescustomchoices"
       ],

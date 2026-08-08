@@ -300,6 +300,63 @@ const CASES = [
       state?.bannerVisible === false,
   },
   {
+    name: 'Usercentrics shadow accept_all',
+    path: '/usercentrics-shadow.html',
+    prefs: {
+      globalPreference: 'accept_all',
+      functional: true,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'accept',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:usercentrics:accept_all' &&
+      state?.action === 'accept' &&
+      state?.functional === true &&
+      state?.analytics === true &&
+      state?.advertising === true &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Usercentrics shadow reject_all',
+    path: '/usercentrics-shadow.html',
+    prefs: {
+      globalPreference: 'reject_all',
+      functional: false,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:usercentrics:reject_all' &&
+      state?.action === 'deny' &&
+      state?.functional === false &&
+      state?.analytics === false &&
+      state?.advertising === false &&
+      state?.bannerVisible === false,
+  },
+  {
+    name: 'Usercentrics shadow custom',
+    path: '/usercentrics-shadow.html',
+    prefs: {
+      globalPreference: 'custom',
+      functional: true,
+      analytics: false,
+      advertising: false,
+      ccpaDoNotSell: true,
+      uncategorized: 'reject',
+    },
+    verify: (state, result) =>
+      result?.method === 'dom:usercentrics:custom' &&
+      state?.action === 'save' &&
+      state?.functional === true &&
+      state?.analytics === false &&
+      state?.advertising === false &&
+      state?.bannerVisible === false,
+  },
+  {
     name: 'Shopify account privacy accept_all',
     path: '/shopify-account-privacy.html',
     prefs: {

@@ -95,6 +95,12 @@ npm run test:e2e:eu
 npm run test:e2e:us
 ```
 
+For Usercentrics or shadow-DOM consent changes, run the focused extension regression as well:
+
+```bash
+npm run test:e2e:usercentrics
+```
+
 Site entries in `tests/sites.json` may also include:
 
 - `locale`

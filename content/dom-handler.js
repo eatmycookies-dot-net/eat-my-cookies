@@ -580,6 +580,66 @@ const OSANO_ROOT_SELECTORS = [
 ];
 const SHOPIFY_STABLE_HIDDEN_MS = 1500;
 const SHOPIFY_DISMISS_TIMEOUT_MS = 7000;
+const USERCENTRICS_HOST_SELECTORS = [
+  '#usercentrics-cmp-ui',
+  '#usercentrics-root',
+  '[data-testid="uc-banner"]',
+];
+const USERCENTRICS_ACTIVE_SURFACE_SELECTORS = [
+  '#uc-main-dialog',
+  '#uc-overlay',
+  '.cmp-wrapper',
+  '[role="dialog"][aria-modal="true"]',
+  '[role="dialog"][aria-modal=true]',
+  '[data-testid="uc-banner"]',
+];
+const USERCENTRICS_ACCEPT_SELECTORS = [
+  '#accept',
+  '[data-action-type="accept"]',
+  '[data-testid="uc-accept-all-button"]',
+  'button[aria-label*="Accept" i]',
+];
+const USERCENTRICS_REJECT_SELECTORS = [
+  '#deny',
+  '#reject',
+  '[data-action-type="deny"]',
+  '[data-action-type="reject"]',
+  '[data-testid="uc-deny-all-button"]',
+  'button[aria-label*="Deny" i]',
+  'button[aria-label*="Reject" i]',
+];
+const USERCENTRICS_MORE_SELECTORS = [
+  '#more',
+  '[data-action-type="more"]',
+  '[data-testid="uc-more-button"]',
+  'button[aria-label*="More Information" i]',
+];
+const USERCENTRICS_SAVE_SELECTORS = [
+  '#save',
+  '[data-action-type="save"]',
+  '[data-testid="uc-save-button"]',
+];
+const USERCENTRICS_FUNCTIONAL_PATTERNS = [
+  /\bfunctional\b/i,
+  /\bpreferences?\b/i,
+  /\bpersonalization\b/i,
+];
+const USERCENTRICS_ANALYTICS_PATTERNS = [
+  /\banalytics?\b/i,
+  /\bstatistics?\b/i,
+  /\bperformance\b/i,
+  /\bmeasurement\b/i,
+];
+const USERCENTRICS_ADVERTISING_PATTERNS = [
+  /\badvertis(?:ing|ement)?\b/i,
+  /\bmarketing\b/i,
+  /\btargeting\b/i,
+];
+const USERCENTRICS_ESSENTIAL_PATTERNS = [
+  /\bessential\b/i,
+  /\bnecessary\b/i,
+  /\brequired\b/i,
+];
 const GODADDY_PRIVACY_SHADOW_HOST_SELECTOR = '#gtm_privacy';
 const GODADDY_PRIVACY_BANNER_SELECTORS = ['#pw_banner', '.pw_buttons'];
 // The modal is injected into the shadow root via a React portal, not the main DOM.
@@ -699,6 +759,13 @@ async function tryCMPs(cmps, prefs) {
       const didomiResult = await executeDidomiFlow(cmp, prefs);
       if (didomiResult) {
         return { method: didomiResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'usercentrics') {
+      const usercentricsResult = await executeUsercentricsFlow(cmp, prefs);
+      if (usercentricsResult) {
+        return { method: usercentricsResult, cmpName: cmp.name };
       }
       continue;
     }
@@ -1522,6 +1589,82 @@ async function waitForInvestisCookieManagerConsentState(desiredState, timeoutMs 
     await delay(100);
   }
   return false;
+}
+
+async function executeUsercentricsFlow(cmp, prefs) {
+  const roots = usercentricsRoots();
+  if (!roots.length) return false;
+
+  if (prefs.globalPreference === 'accept_all') {
+    const method = 'dom:usercentrics:accept_all';
+    const accepted = clickUsercentricsActionWithPreHandle(
+      roots,
+      USERCENTRICS_ACCEPT_SELECTORS,
+      /^(?:accept all|accept|allow all|agree)$/i,
+      method,
+      prefs.globalPreference,
+    );
+    if (!accepted) return false;
+    if (!(await waitForUsercentricsDismissal(cmp))) return false;
+    return method;
+  }
+
+  if (prefs.globalPreference === 'custom') {
+    const openedPreferences = clickFirstVisibleInUsercentricsRoots(roots, USERCENTRICS_MORE_SELECTORS) ||
+      clickUsercentricsButtonByText(roots, /(?:more information|settings|preferences|privacy settings)/i);
+    if (!openedPreferences) return false;
+    const expandedRoots = await waitForUsercentricsPreferenceRoots();
+    if (!expandedRoots.length) return false;
+    const applied = await applyUsercentricsCustomPreferences(expandedRoots, prefs);
+    if (!applied) return false;
+    const method = 'dom:usercentrics:custom';
+    const saved = clickUsercentricsActionWithPreHandle(
+      expandedRoots,
+      USERCENTRICS_SAVE_SELECTORS,
+      /^(?:save services|save settings|save preferences|save)$/i,
+      method,
+      prefs.globalPreference,
+    );
+    if (!saved) return false;
+    if (!(await waitForUsercentricsDismissal(cmp))) return false;
+    return method;
+  }
+
+  const method = 'dom:usercentrics:reject_all';
+  const rejectedDirectly = clickUsercentricsActionWithPreHandle(
+    roots,
+    USERCENTRICS_REJECT_SELECTORS,
+    /^(?:deny all|reject all|decline all|deny|reject|decline)$/i,
+    method,
+    prefs.globalPreference,
+  );
+
+  if (!rejectedDirectly) {
+    const openedPreferences = clickFirstVisibleInUsercentricsRoots(roots, USERCENTRICS_MORE_SELECTORS) ||
+      clickUsercentricsButtonByText(roots, /(?:more information|settings|preferences|privacy settings)/i);
+    if (!openedPreferences) return false;
+    await delay(300);
+    const expandedRoots = usercentricsRoots();
+    const rejectedFromPreferences =
+      clickUsercentricsActionWithPreHandle(
+        expandedRoots,
+        USERCENTRICS_REJECT_SELECTORS,
+        /^(?:deny all|reject all|decline all|deny|reject|decline)$/i,
+        method,
+        prefs.globalPreference,
+      ) ||
+      clickUsercentricsActionWithPreHandle(
+        expandedRoots,
+        USERCENTRICS_SAVE_SELECTORS,
+        /^(?:save services|save settings|save preferences|save)$/i,
+        method,
+        prefs.globalPreference,
+      );
+    if (!rejectedFromPreferences) return false;
+  }
+
+  if (!(await waitForUsercentricsDismissal(cmp))) return false;
+  return method;
 }
 
 async function executeBigCommerceCatalystFlow(cmp, prefs) {
@@ -5328,6 +5471,197 @@ function firstVisibleElementWithin(root, selectors) {
     }
   }
   return null;
+}
+
+function usercentricsRoots() {
+  const roots = [];
+  for (const selector of USERCENTRICS_HOST_SELECTORS) {
+    for (const host of document.querySelectorAll(selector)) {
+      const root = host.shadowRoot ?? host;
+      if (!roots.includes(root)) roots.push(root);
+    }
+  }
+  return roots;
+}
+
+function clickFirstVisibleInUsercentricsRoots(roots, selectors, options = {}) {
+  for (const root of roots) {
+    for (const selector of selectors) {
+      const el = firstVisibleElementWithin(root, [selector]);
+      if (!el) continue;
+      options.beforeClick?.();
+      return dispatchNativeClick(el) || dispatchSyntheticClick(el);
+    }
+  }
+  return false;
+}
+
+function clickUsercentricsButtonByText(roots, pattern, options = {}) {
+  for (const root of roots) {
+    const buttons = root.querySelectorAll('button, a, [role="button"]');
+    for (const button of buttons) {
+      if (!isVisible(button)) continue;
+      const text = button.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      if (!pattern.test(text)) continue;
+      options.beforeClick?.();
+      return dispatchNativeClick(button) || dispatchSyntheticClick(button);
+    }
+  }
+  return false;
+}
+
+function clickUsercentricsActionWithPreHandle(roots, selectors, textPattern, method, preference) {
+  const beforeClick = () => dispatchUsercentricsPreHandle(method, preference);
+  return clickFirstVisibleInUsercentricsRoots(roots, selectors, { beforeClick }) ||
+    clickUsercentricsButtonByText(roots, textPattern, { beforeClick });
+}
+
+function dispatchUsercentricsPreHandle(method, preference) {
+  document.dispatchEvent(new CustomEvent('__emc_pre_handle__', {
+    detail: {
+      method,
+      preference,
+    },
+  }));
+}
+
+async function waitForUsercentricsPreferenceRoots(timeoutMs = 1800) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const roots = usercentricsRoots();
+    if (roots.some((root) => usercentricsPreferenceControls(root).length > 0 ||
+      firstVisibleElementWithin(root, USERCENTRICS_SAVE_SELECTORS))) {
+      return roots;
+    }
+    await delay(100);
+  }
+  return usercentricsRoots();
+}
+
+async function applyUsercentricsCustomPreferences(roots, prefs) {
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const desiredFunctional = Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept';
+  const desiredAnalytics = Boolean(flowPrefs.analytics);
+  const desiredAdvertising = wantsAdvertisingCategoryConsent(flowPrefs) && flowPrefs.ccpaDoNotSell === false;
+  const rules = [
+    { patterns: USERCENTRICS_FUNCTIONAL_PATTERNS, checked: desiredFunctional },
+    { patterns: USERCENTRICS_ANALYTICS_PATTERNS, checked: desiredAnalytics },
+    { patterns: USERCENTRICS_ADVERTISING_PATTERNS, checked: desiredAdvertising },
+  ];
+  const applied = [];
+
+  for (const rule of rules) {
+    const control = findUsercentricsPreferenceControl(roots, rule.patterns);
+    if (!control) {
+      applied.push(null);
+      continue;
+    }
+    applied.push(await setUsercentricsPreferenceControlState(control, rule.checked));
+  }
+
+  return applied.some((result) => result === true) && applied.every((result) => result !== false);
+}
+
+function findUsercentricsPreferenceControl(roots, patterns) {
+  for (const root of roots) {
+    for (const control of usercentricsPreferenceControls(root)) {
+      const identity = usercentricsControlIdentity(control, root);
+      if (!identity || USERCENTRICS_ESSENTIAL_PATTERNS.some((pattern) => pattern.test(identity))) continue;
+      if (patterns.some((pattern) => pattern.test(identity))) return control;
+    }
+  }
+  return null;
+}
+
+function usercentricsPreferenceControls(root) {
+  const controls = Array.from(root.querySelectorAll(
+    'input[type="checkbox"], input[type="radio"], [role="switch"][aria-checked], button[aria-checked], [aria-checked][tabindex]'
+  ));
+
+  return controls.filter((control) => {
+    if (!isVisible(control) && !control.closest?.('label, [role="switch"], [aria-checked]')) return false;
+    if (control.disabled || control.getAttribute?.('aria-disabled') === 'true') return false;
+    if (control instanceof HTMLInputElement && control.closest('[role="switch"][aria-checked]')) return false;
+    return readUsercentricsPreferenceControlState(control) !== null;
+  });
+}
+
+function usercentricsControlIdentity(control, root) {
+  const parts = [
+    control.getAttribute?.('aria-label') ?? '',
+    control.getAttribute?.('data-testid') ?? '',
+    control.id ?? '',
+    textFromIdRefs(control, 'aria-labelledby', root),
+    textFromIdRefs(control, 'aria-describedby', root),
+  ];
+
+  let node = control;
+  for (let depth = 0; node && node !== root && depth < 8; depth += 1) {
+    const text = node.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (text && text.length <= 700 && !usercentricsTextLooksLikeWholePanel(text)) {
+      parts.push(text);
+      if (usercentricsTextContainsCategoryLabel(text)) break;
+    }
+    node = node.parentElement;
+  }
+
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function usercentricsTextLooksLikeWholePanel(text) {
+  return usercentricsCategoryLabelMatchCount(text) > 1;
+}
+
+function usercentricsTextContainsCategoryLabel(text) {
+  return usercentricsCategoryLabelMatchCount(text) > 0;
+}
+
+function usercentricsCategoryLabelMatchCount(text) {
+  const groups = [
+    USERCENTRICS_ESSENTIAL_PATTERNS,
+    USERCENTRICS_FUNCTIONAL_PATTERNS,
+    USERCENTRICS_ANALYTICS_PATTERNS,
+    USERCENTRICS_ADVERTISING_PATTERNS,
+  ];
+  return groups.filter((patterns) => patterns.some((pattern) => pattern.test(text))).length;
+}
+
+function textFromIdRefs(control, attr, root) {
+  const ids = (control.getAttribute?.(attr) ?? '').split(/\s+/).filter(Boolean);
+  return ids.map((id) => {
+    const el = findVisibleElementById(id, root);
+    return el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  }).join(' ');
+}
+
+function readUsercentricsPreferenceControlState(control) {
+  if (control instanceof HTMLInputElement) return Boolean(control.checked);
+  return readAriaToggleState(control);
+}
+
+async function setUsercentricsPreferenceControlState(control, checked) {
+  const current = readUsercentricsPreferenceControlState(control);
+  if (current === null) return false;
+  if (current === checked) return true;
+  if (control instanceof HTMLInputElement) return setCheckboxState(control, checked);
+  return setAriaToggleState(control, checked);
+}
+
+async function waitForUsercentricsDismissal(cmp, timeoutMs = 5000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (!hasVisibleUsercentricsActiveSurface()) return true;
+    await delay(150);
+  }
+  return false;
+}
+
+function hasVisibleUsercentricsActiveSurface() {
+  return usercentricsRoots().some((root) =>
+    USERCENTRICS_ACTIVE_SURFACE_SELECTORS.some((selector) =>
+      Array.from(root.querySelectorAll(selector)).some((el) => isVisible(el))
+    )
+  );
 }
 
 function findVisibleSbtLgpdBanner() {

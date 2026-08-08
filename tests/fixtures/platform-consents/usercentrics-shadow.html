@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Usercentrics Shadow Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    main { padding: 24px; }
+    #usercentrics-cmp-ui {
+      display: block;
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 0;
+      height: 0;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Usercentrics Shadow Fixture</h1>
+    <p>Local fixture used to validate the modern Usercentrics shadow-root banner.</p>
+  </main>
+
+  <aside id="usercentrics-cmp-ui" data-nosnippet="1" keyboard-events="true"></aside>
+
+  <script>
+    (() => {
+      const host = document.querySelector('#usercentrics-cmp-ui');
+      const shadow = host.attachShadow({ mode: 'open' });
+      const params = new URLSearchParams(location.search);
+      const reloadAfterConsent = params.has('reload');
+      const persistConsent = reloadAfterConsent || params.has('persist');
+      const delayMs = Number(params.get('delay') || '0');
+      const eventBeforeDismissDelayMs = Math.max(Number(params.get('event-before-dismiss') || '350'), 350);
+      let eventBeforeDismissScheduled = false;
+      const reloadStateKey = `__emcUsercentricsFixtureState:${location.pathname}:${params.get('case') || 'default'}`;
+      const storedState = persistConsent
+        ? JSON.parse(localStorage.getItem(reloadStateKey) || 'null')
+        : null;
+
+      if (storedState && storedState.bannerVisible === false) {
+        window.__fixtureState = storedState;
+        renderReopenButton();
+        return;
+      }
+
+      shadow.innerHTML = `
+        <style>
+          .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(17, 24, 39, 0.55);
+          }
+          .cmp {
+            position: fixed;
+            left: 50%;
+            bottom: 28px;
+            transform: translateX(-50%);
+            width: min(620px, calc(100vw - 32px));
+            background: #fff;
+            color: #111827;
+            border: 1px solid #d1d5db;
+            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+            padding: 20px;
+          }
+          .hidden { display: none !important; }
+          .dismissed { opacity: 0; pointer-events: none; }
+          .buttons-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 18px;
+          }
+          .service-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            margin-top: 12px;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+          }
+          .switch {
+            min-width: 52px;
+            height: 28px;
+            border: 1px solid #9ca3af;
+            border-radius: 999px;
+            background: #e5e7eb;
+          }
+          .switch[aria-checked="true"] {
+            background: #2563eb;
+          }
+          .reopen {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 999px;
+          }
+          button {
+            flex: 1;
+            cursor: pointer;
+            padding: 12px 14px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #111827;
+            font-weight: 700;
+          }
+          .accept {
+            background: #0057c2;
+            color: #fff;
+            border-color: #0057c2;
+          }
+        </style>
+        <div id="uc-overlay" class="overlay${delayMs > 0 ? ' hidden' : ''}"></div>
+        <div id="uc-main-dialog" class="cmp first bottom mobile ltr gdpr${delayMs > 0 ? ' hidden' : ''}" role="dialog" aria-modal="true" aria-labelledby="uc-privacy-title">
+          <div id="main-view">
+            <h2 id="uc-privacy-title">Privacy Settings</h2>
+            <p id="uc-privacy-description">This site uses third-party website tracking technologies.</p>
+            <div class="buttons-row">
+              <button id="more" type="button" data-action="consent" data-action-type="more" class="more uc-more-button" aria-label="More Information">More Information</button>
+              <button id="accept" type="button" data-action="consent" data-action-type="accept" class="accept uc-accept-button" aria-label="Accept All">Accept All</button>
+            </div>
+          </div>
+          <div id="preferences-view" class="hidden">
+            <h2>Privacy Settings</h2>
+            <p>Choose which services may run on this site.</p>
+            <div class="service-row">
+              <span id="essential-label">Essential</span>
+              <button id="essential-switch" type="button" role="switch" aria-checked="true" aria-disabled="true" aria-labelledby="essential-label" class="switch"></button>
+            </div>
+            <div class="service-row">
+              <span id="functional-label">Functional</span>
+              <span class="category-description">${params.has('semantic') ? 'These technologies enable us to analyse usage behavior in order to measure and improve performance.' : 'These technologies enable us to manage preferences.'}</span>
+              <button id="functional-switch" type="button" role="switch" aria-checked="false" aria-labelledby="functional-label" class="switch"></button>
+            </div>
+            <div class="service-row">
+              <span id="analytics-label">Analytics</span>
+              <button id="analytics-switch" type="button" role="switch" aria-checked="false" aria-labelledby="analytics-label" class="switch"></button>
+            </div>
+            <div class="service-row">
+              <span id="advertising-label">Marketing</span>
+              <button id="advertising-switch" type="button" role="switch" aria-checked="false" aria-labelledby="advertising-label" class="switch"></button>
+            </div>
+            <div class="buttons-row">
+              <button id="deny" type="button" data-action="consent" data-action-type="deny" class="deny uc-deny-button" aria-label="Deny All">Deny All</button>
+              <button id="save" type="button" data-action="consent" data-action-type="save" class="save uc-save-button" aria-label="Save Services">Save Services</button>
+              <button id="accept-preferences" type="button" data-action="consent" data-action-type="accept" class="accept uc-accept-button" aria-label="Accept All">Accept All</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      window.__fixtureState = {
+        action: null,
+        functional: false,
+        analytics: false,
+        advertising: false,
+        bannerVisible: true,
+      };
+      if (delayMs > 0) {
+        setTimeout(() => {
+          shadow.querySelector('#uc-overlay')?.classList.remove('hidden');
+          shadow.querySelector('#uc-main-dialog')?.classList.remove('hidden');
+        }, delayMs);
+      }
+
+      function renderReopenButton() {
+        shadow.innerHTML = `
+          <style>
+            .reopen {
+              position: fixed;
+              right: 16px;
+              bottom: 16px;
+              width: 44px;
+              height: 44px;
+              border-radius: 999px;
+            }
+          </style>
+          <div id="uc-main-dialog" class="privacyButton left desktop ltr gdpr">
+            <button id="uc-reopen" type="button" class="fingerprint reopen" aria-label="Privacy settings" data-action="consent" data-action-type="more-privacy">i</button>
+          </div>
+        `;
+      }
+
+      function finish(action) {
+        if (params.has('event-before-dismiss') && eventBeforeDismissScheduled) return;
+        window.__fixtureState = {
+          action,
+          functional: shadow.querySelector('#functional-switch').getAttribute('aria-checked') === 'true',
+          analytics: shadow.querySelector('#analytics-switch').getAttribute('aria-checked') === 'true',
+          advertising: shadow.querySelector('#advertising-switch').getAttribute('aria-checked') === 'true',
+          bannerVisible: false,
+        };
+        if (!params.has('no-event')) {
+          window.dispatchEvent(new CustomEvent('UC_UI_CMP_EVENT', {
+            detail: {
+              type: action === 'accept' ? 'ACCEPT_ALL' : action === 'deny' ? 'DENY_ALL' : 'SAVE',
+            },
+          }));
+        }
+        if (persistConsent) {
+          localStorage.setItem(reloadStateKey, JSON.stringify(window.__fixtureState));
+        }
+        if (reloadAfterConsent) {
+          location.reload();
+          return;
+        }
+        if (params.has('event-before-dismiss')) {
+          // Mirror the real CMP race: consent is committed and the event is
+          // emitted while the first-layer dialog is still visible.
+          eventBeforeDismissScheduled = true;
+          setTimeout(() => renderReopenButton(), eventBeforeDismissDelayMs);
+          return;
+        }
+        if (params.has('fade')) {
+          shadow.querySelector('#uc-overlay')?.classList.add('dismissed');
+          shadow.querySelector('#uc-main-dialog')?.classList.add('dismissed');
+          return;
+        }
+        renderReopenButton();
+      }
+
+      function setSwitch(id, checked) {
+        shadow.querySelector(id).setAttribute('aria-checked', checked ? 'true' : 'false');
+      }
+
+      function setAll(checked) {
+        setSwitch('#functional-switch', checked);
+        setSwitch('#analytics-switch', checked);
+        setSwitch('#advertising-switch', checked);
+      }
+
+      shadow.querySelector('#more').addEventListener('click', () => {
+        shadow.querySelector('#main-view').classList.add('hidden');
+        shadow.querySelector('#preferences-view').classList.remove('hidden');
+      });
+      shadow.querySelector('#accept').addEventListener('click', () => {
+        setAll(true);
+        finish('accept');
+      });
+      shadow.querySelector('#accept-preferences').addEventListener('click', () => {
+        setAll(true);
+        finish('accept');
+      });
+      shadow.querySelector('#deny').addEventListener('click', () => {
+        setAll(false);
+        finish('deny');
+      });
+      shadow.querySelector('#save').addEventListener('click', () => finish('save'));
+      for (const toggle of shadow.querySelectorAll('[role="switch"]:not([aria-disabled="true"])')) {
+        toggle.addEventListener('click', () => {
+          const current = toggle.getAttribute('aria-checked') === 'true';
+          toggle.setAttribute('aria-checked', current ? 'false' : 'true');
+        });
+      }
+
+      const autoAction = params.get('auto-action');
+      if (autoAction) {
+        setTimeout(() => shadow.querySelector(`#${autoAction}`)?.click(), 300);
+      }
+    })();
+  </script>
+</body>
+</html>

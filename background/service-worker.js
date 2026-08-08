@@ -31,6 +31,8 @@ import { getTranslator } from '../utils/i18n.js';
 const BADGE_COLOR = '#f5a623';
 const DEFAULT_ICON_PATHS = buildIconSet('icons/icon');
 const SUPPORTS_OPEN_POPUP = typeof chrome.action?.openPopup === 'function';
+const DW_RETURN_PENDING_KEY = '__emc_dw_return_pending__';
+const DW_RETURN_CLEANUP_DELAY_MS = 12000;
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   await ensureContextMenus();
@@ -230,6 +232,7 @@ async function handleActionFired({ site, method, preference, actionToken, noReje
     clearUnsupportedSite(site),
   ]);
   const statsAfterSiteRecord = await getStats();
+  scheduleDWReturnPendingCleanup(site);
 
   if (noRejectAvailable) {
     await setUnsupportedSite(site, {
@@ -274,6 +277,20 @@ async function handleActionFired({ site, method, preference, actionToken, noReje
   }
 
   return { ok: true };
+}
+
+function scheduleDWReturnPendingCleanup(site) {
+  if (site !== 'www.dw.com') return;
+  const scheduledAt = Date.now();
+  setTimeout(async () => {
+    try {
+      const result = await chrome.storage.local.get({ [DW_RETURN_PENDING_KEY]: null });
+      const payload = result?.[DW_RETURN_PENDING_KEY];
+      if (!payload?.timestamp || payload.timestamp <= scheduledAt) {
+        await chrome.storage.local.remove(DW_RETURN_PENDING_KEY);
+      }
+    } catch (_) {}
+  }, DW_RETURN_CLEANUP_DELAY_MS);
 }
 
 async function executeFrameClick(sender, selectors) {
