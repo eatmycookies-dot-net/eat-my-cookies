@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Usercentrics API Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    main { padding: 24px; }
+    #usercentrics-root {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+    }
+    #uc-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.55);
+    }
+    #uc-main-dialog {
+      position: fixed;
+      left: 50%;
+      bottom: 28px;
+      transform: translateX(-50%);
+      width: min(620px, calc(100vw - 32px));
+      background: #fff;
+      color: #111827;
+      border: 1px solid #d1d5db;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+      padding: 20px;
+    }
+    button {
+      cursor: pointer;
+      padding: 12px 14px;
+      border: 1px solid #d1d5db;
+      background: #f9fafb;
+      color: #111827;
+      font-weight: 700;
+    }
+    .accept {
+      background: #0057c2;
+      color: #fff;
+      border-color: #0057c2;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Usercentrics API Fixture</h1>
+    <p>Local fixture used to validate the MAIN-world Usercentrics API path.</p>
+  </main>
+
+  <div id="usercentrics-root">
+    <div id="uc-overlay"></div>
+    <div id="uc-main-dialog" role="dialog" aria-modal="true" aria-labelledby="uc-privacy-title">
+      <h2 id="uc-privacy-title">Privacy Settings</h2>
+      <p>This fixture exposes window.UC_UI accept and deny methods.</p>
+      <button id="deny" type="button">Deny All</button>
+      <button id="accept" type="button" class="accept">Accept All</button>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      window.__fixtureState = {
+        action: null,
+        functional: false,
+        analytics: false,
+        advertising: false,
+        bannerVisible: true,
+      };
+      const services = [
+        { id: 'essential-service', name: 'Usercentrics Consent Management Platform', categorySlug: 'essential', isEssential: true, consent: { given: true } },
+        { id: 'functional-service', name: 'Functional Service', categorySlug: 'functional', isEssential: false, consent: { given: false } },
+        { id: 'analytics-service', name: 'Analytics Service', categorySlug: 'analytics', isEssential: false, consent: { given: false } },
+        { id: 'marketing-service', name: 'Marketing Service', categorySlug: 'marketing', isEssential: false, consent: { given: false } },
+      ];
+
+      function syncState(action, bannerVisible) {
+        const serviceById = Object.fromEntries(services.map((service) => [service.id, service]));
+        window.__fixtureState = {
+          action,
+          functional: serviceById['functional-service'].consent.given,
+          analytics: serviceById['analytics-service'].consent.given,
+          advertising: serviceById['marketing-service'].consent.given,
+          bannerVisible,
+        };
+      }
+
+      function finish(action) {
+        syncState(action, false);
+        document.querySelector('#uc-overlay')?.remove();
+        document.querySelector('#uc-main-dialog')?.remove();
+      }
+
+      window.UC_UI = {
+        getServicesBaseInfo() {
+          return services;
+        },
+        acceptAllConsents() {
+          for (const service of services) {
+            if (!service.isEssential) service.consent.given = true;
+          }
+          finish('accept');
+        },
+        denyAllConsents() {
+          for (const service of services) {
+            if (!service.isEssential) service.consent.given = false;
+          }
+          finish('deny');
+        },
+        updateServices(decisions) {
+          for (const decision of decisions) {
+            const service = services.find((candidate) => candidate.id === decision.id || candidate.id === decision.serviceId);
+            if (!service || service.isEssential) continue;
+            service.consent.given = Boolean(decision.consent);
+          }
+          syncState('save', true);
+        },
+        saveConsents() {
+          syncState('save', true);
+        },
+        closeCMP() {
+          finish(window.__fixtureState.action || 'close');
+        },
+      };
+
+      document.querySelector('#accept').addEventListener('click', () => window.UC_UI.acceptAllConsents());
+      document.querySelector('#deny').addEventListener('click', () => window.UC_UI.denyAllConsents());
+    })();
+  </script>
+</body>
+</html>

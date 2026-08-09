@@ -40,6 +40,10 @@ That file is the best snapshot for questions like:
 
 Recent live-validated examples include:
 
+- `spiegel.de` → Sourcepoint consent-or-pay wall + privacy manager
+- `fedex.com` → Usercentrics shadow-DOM UI (Accept, Reject, Custom)
+- `lemonde.fr/en/` → Le Monde configurable CMP (Accept, Reject, Custom)
+- `dw.com` → ConsentManager privacy-settings detour
 - `cluse.com` → Pandectes
 - `barebiology.com` → Consentmo
 - `qualityminds.com` → Complianz
@@ -48,8 +52,6 @@ Recent live-validated examples include:
 - `americanas.com.br` → Privacy Tools lightweight banner
 - `banco.bradesco` → custom LGPD banner
 - `gov.br` → shared government cookie bar
-- `sp.gov.br` → Sao Paulo state LGPD modal
-- `correios.com.br` → custom cookie notice
 - `rbcroyalbank.com` → OneTrust
 - `nhl.com` → OneTrust
 - `theweathernetwork.com` → Didomi preferences modal
@@ -325,6 +327,10 @@ For most contributors, the intended order is:
    Run this when you changed runtime logic, storage logic, popup behavior, or anything covered by unit tests.
 3. `npm run test:e2e -- --site="..."`
    Run this when you changed a real site flow or a CMP integration and need live browser coverage.
+
+For Usercentrics changes, also run `npm run test:e2e:usercentrics`. This local Chromium regression checks
+the service-worker counter and saved category state for Accept All, Reject All, and Custom, including
+shadow-root timing and reload behavior; the ordinary unit/static suite does not exercise that path.
 
 Use `npm run test:all` only when you explicitly want the full suite, including live-site validation.
 

@@ -327,15 +327,19 @@
       "name": "Usercentrics",
       "detectors": [
         { "type": "js_global",    "value": "window.UC_UI" },
+        { "type": "css_selector", "value": "#usercentrics-cmp-ui" },
         { "type": "css_selector", "value": "#usercentrics-root" },
         { "type": "css_selector", "value": "[data-testid='uc-banner']" }
       ],
       "actions": {
         "reject_all": [
+          { "type": "click", "selector": "[data-action-type='deny']" },
+          { "type": "click", "selector": "[data-action-type='reject']" },
           { "type": "click", "selector": "[data-testid='uc-deny-all-button']" },
           { "type": "click", "selector": "button[aria-label*='Deny']" }
         ],
         "accept_all": [
+          { "type": "click", "selector": "[data-action-type='accept']" },
           { "type": "click", "selector": "[data-testid='uc-accept-all-button']" }
         ]
       }

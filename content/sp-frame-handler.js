@@ -12,6 +12,8 @@
 (function () {
   const FRAME_COOLDOWN_MS = 20000;
   const FRAME_RUN_GUARD_PREFIX = '__emc_spframe__';
+  const MANUAL_CONSENT_OPEN_KEY = '__emc_manual_consent_open__';
+  const MANUAL_CONSENT_SUPPRESS_MS = 120000;
   const GUARDIAN_ACCESSIBILITY_PATH = '/help/accessibility-help';
   const GUARDIAN_HOSTS = new Set(['www.theguardian.com', 'support.theguardian.com']);
   const TEMPORARILY_UNSUPPORTED_TOP_SITES = new Set(['www.bbc.com', 'latimes.com', 'www.latimes.com', 'membership.latimes.com']);
@@ -161,12 +163,41 @@
     if (TEMPORARILY_UNSUPPORTED_TOP_SITES.has(site) || TEMPORARILY_UNSUPPORTED_TOP_SITES.has(window.location.hostname)) return;
 
     const isFTShell = isPotentialFTShell(site);
-    if (!isSPFrame() && !isFTShell) return;
-    if (!hasConsentSignals() && !isFTShell && !isSourcepointHost(window.location.hostname)) return;
-    if (await isDisabledForTopSite()) return;
+    // isSPFrame()/hasConsentSignals() rely on DOM content (sp_choice_type classes,
+    // data-sp-action, cookie/consent keywords) that Sourcepoint's own JS renders
+    // asynchronously. On document_idle — when this content script first runs — that
+    // content may not exist yet, especially on custom first-party CNAME domains
+    // (e.g. sp-spiegel-de.spiegel.de) that also don't match isSourcepointHost()'s
+    // hostname fast path. Without a retry, a page where SP simply hasn't painted
+    // yet looks identical to a page with no SP banner at all, and this frame gives
+    // up permanently with no later chance to catch the banner once it renders.
+    const gateDeadline = Date.now() + 6000;
+    let framePresent = isSPFrame();
+    while (!framePresent && !isFTShell && Date.now() < gateDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      framePresent = isSPFrame();
+    }
+    if (!framePresent && !isFTShell) return;
 
-    // Determine which framework this banner is — USNat banners contain "sell" text.
-    const isUSNat = !!document.body?.textContent?.match(/sell|sharing.*personal/i);
+    let signalsPresent = hasConsentSignals();
+    while (!signalsPresent && !isFTShell && !isSourcepointHost(window.location.hostname) && Date.now() < gateDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      signalsPresent = hasConsentSignals();
+    }
+    if (!signalsPresent && !isFTShell && !isSourcepointHost(window.location.hostname)) return;
+    if (await isDisabledForTopSite()) return;
+    if (await isManualConsentOpenSuppressed(site)) return;
+
+    // Determine which framework this banner is. USNat/CCPA banners contain explicit
+    // "sell"/"sale" language, or "sharing"/"share" paired closely with "personal"
+    // (e.g. "Do Not Sell or Share My Personal Information"). The sharing/personal
+    // gap must stay bounded — unbounded .* previously spanned the entire page text
+    // and false-matched unrelated GDPR marketing copy on the same page (e.g.
+    // "personalized advertising" in one sentence, "No sharing of your data" in a
+    // completely unrelated one), misclassifying a GDPR-only banner as USNat. That
+    // silently broke Accept All on spiegel.de: USNat selectors don't include the
+    // GDPR accept button, so the misrouted click never found anything to click.
+    const isUSNat = !!document.body?.textContent?.match(/\bsell(?:ing|s)?\b|\bsale\b|shar(?:e|ing)[\s\S]{0,40}personal/i);
 
     const settings = await chrome.storage.sync.get({
       globalPreference: 'reject_all',
@@ -225,9 +256,18 @@
         if (await applySourcepointUsNatPrivacyChoice(wantsUsNatOptOut, site, settings.globalPreference)) {
           return;
         }
-      } else if (!accept && await rejectFromPrivacyManager()) {
-        await report(site, `sourcepoint:${framework}:privacy-manager`, settings.globalPreference);
-        return;
+      } else if (!accept) {
+        const rejected = await rejectFromPrivacyManager();
+        if (rejected) {
+          // Report before clicking Save — saving can trigger a full page reload
+          // (confirmed on spiegel.de), which can destroy this frame's execution
+          // context mid-click and silently drop the report if it were sent after.
+          // A confirmed rejection of every category plus a genuinely visible Save
+          // control is itself sufficient evidence of a completed save.
+          await report(site, `sourcepoint:${framework}:privacy-manager`, settings.globalPreference);
+          clickPrivacyManagerSaveAndExit();
+          return;
+        }
       }
       return;
     }
@@ -242,6 +282,27 @@
       !isUSNat &&
       accept &&
       hasVisibleSelector(bloombergImmediateAcceptSelectors);
+    // spiegel.de tears down this SP iframe (removes it from the DOM) within
+    // ~1s of a successful Accept click, same as the privacy-manager Save race
+    // documented above. waitForDismissal() below polls via setTimeout inside
+    // this frame's own JS context; once the iframe is detached that context is
+    // discarded and the pending poll never resumes, so a report() issued after
+    // the click never fires even though the click genuinely worked (verified:
+    // outgoing ad-partner requests carry a real, non-zero TC consent string
+    // immediately after). Unlike the Bloomberg cases below, reporting right
+    // after dispatching the click isn't safe here either -- the teardown can
+    // race the message send itself. Report BEFORE dispatching the click
+    // instead (same fix as the privacy-manager Save race above): tryClick()
+    // already validates a real, visible Accept control is present, which is
+    // sufficient evidence the click will register.
+    if (site === 'www.spiegel.de' && !isUSNat && accept) {
+      const target = findClickTarget(selectors);
+      if (target) {
+        await report(site, `sourcepoint:${framework}:frame`, settings.globalPreference);
+        dispatchSyntheticClick(target);
+        return;
+      }
+    }
 
     if (tryClick(selectors)) {
       if (shouldReportBloombergImmediateDismiss) {
@@ -281,6 +342,17 @@
         !isUSNat &&
         accept &&
         hasVisibleSelector(bloombergImmediateAcceptSelectors);
+      // Same report-before-click reasoning as the initial (non-deferred) check
+      // above: spiegel.de's teardown can race a report sent after the click.
+      if (site === 'www.spiegel.de' && !isUSNat && accept) {
+        const deferredTarget = findClickTarget(selectors);
+        if (deferredTarget) {
+          observer.disconnect();
+          await report(site, `sourcepoint:${framework}:frame:deferred`, settings.globalPreference);
+          dispatchSyntheticClick(deferredTarget);
+          return;
+        }
+      }
 
       if (tryClick(selectors)) {
         if (shouldReportDeferredBloombergImmediateDismiss) {
@@ -420,7 +492,7 @@
     return phrases.map(p => `text:${p}`);
   }
 
-  function tryClick(selectors) {
+  function findClickTarget(selectors) {
     for (const sel of selectors) {
       let el;
       if (sel.startsWith('text:')) {
@@ -428,19 +500,73 @@
       } else {
         el = document.querySelector(sel);
       }
-      if (el && isVisible(el)) {
-        dispatchSyntheticClick(el);
-        return true;
-      }
+      if (el && isVisible(el)) return el;
+    }
+    return null;
+  }
+
+  function tryClick(selectors) {
+    const el = findClickTarget(selectors);
+    if (!el) return false;
+    dispatchSyntheticClick(el);
+    return true;
+  }
+
+  // Checks every element matching each selector, not just the first DOM match.
+  // querySelector()'s first match isn't necessarily representative: Sourcepoint
+  // privacy managers render one .pur-buttons-container per purpose row, and the
+  // first one in DOM order can be a zero-size locked/essential row (confirmed
+  // on spiegel.de: getBoundingClientRect() 0x0) even while every other row is
+  // fully rendered and visible. Stopping at that first, unrepresentative match
+  // made waitForAny() below report "not visible yet" for the entire purpose
+  // list and poll its full timeout budget before proceeding, even though the
+  // list had already rendered -- a multi-second delay attributed to nothing
+  // (confirmed via a live MutationObserver: zero DOM activity for ~5.8s of a
+  // ~6s reject/custom flow, immediately followed by every reject click landing
+  // back-to-back once the timeout finally expired).
+  function hasVisibleSelector(selectors) {
+    return selectors.some((sel) => {
+      if (sel.startsWith('text:')) return Boolean(findByText(sel.slice(5)));
+      return Array.from(document.querySelectorAll(sel)).some((el) => isVisible(el));
+    });
+  }
+
+  async function waitForAny(selectors, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    if (hasVisibleSelector(selectors)) return true;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      if (hasVisibleSelector(selectors)) return true;
     }
     return false;
   }
 
-  function hasVisibleSelector(selectors) {
-    return selectors.some((sel) => {
-      const el = sel.startsWith('text:') ? findByText(sel.slice(5)) : document.querySelector(sel);
-      return el && isVisible(el);
-    });
+  // waitForAny() above confirms at least one match exists, not that every
+  // expected match has rendered -- Sourcepoint privacy managers can paint
+  // purpose rows one at a time rather than all at once, especially now that
+  // waitForAny() (via hasVisibleSelector()'s querySelectorAll fix) resolves
+  // almost immediately on the first visible row instead of only after
+  // burning several seconds of poll budget. Acting on an incomplete row set
+  // silently skips whichever purposes hadn't painted yet -- confirmed live on
+  // spiegel.de's Custom flow, where 3 of 7 purpose rows were still missing at
+  // the moment the row list was read. Waits for the matched-element count to
+  // stop changing across consecutive polls before treating the list as final.
+  async function waitForStableCount(selector, timeoutMs = 3000) {
+    const deadline = Date.now() + timeoutMs;
+    let lastCount = -1;
+    let stableStreak = 0;
+    while (Date.now() < deadline) {
+      const count = document.querySelectorAll(selector).length;
+      if (count > 0 && count === lastCount) {
+        stableStreak++;
+        if (stableStreak >= 2) return count;
+      } else {
+        stableStreak = 0;
+      }
+      lastCount = count;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return document.querySelectorAll(selector).length;
   }
 
   function isPrivacyManagerFrame() {
@@ -955,23 +1081,104 @@
     });
   }
 
+  // Purpose rows on spiegel.de's privacy manager fade in with a staggered
+  // per-row animation rather than all becoming interactive at once (confirmed
+  // live: some rows' Reject buttons were still non-visible for over a
+  // second after the row itself, and its sibling rows, already had visible
+  // buttons). A single upfront wait for the purpose list to exist isn't
+  // enough -- each row's own target button needs its own short visibility
+  // wait immediately before it's clicked.
+  async function waitForElementVisible(el, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    if (isVisible(el)) return true;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (isVisible(el)) return true;
+    }
+    return false;
+  }
+
   async function rejectFromPrivacyManager() {
-    const rejectClicked = tryClick([
+    // The privacy manager's purpose list (bulk reject-all button, or the
+    // per-category pur-buttons-container rows) can still be loading/rendering
+    // when this frame's content script first runs — wait for one of them
+    // before deciding there's nothing to click.
+    await waitForAny([
       '.sp_choice_type_REJECT_ALL',
       'button[data-sp-action="REJECT_ALL"]',
-      'text:reject all',
-      'text:decline all',
-      'text:refuse all',
-      'text:reject',
+      '.pur-buttons-container',
+    ], 6000);
+
+    // Most Sourcepoint privacy managers expose a single bulk reject-all control.
+    let rejectClicked = tryClick([
+      '.sp_choice_type_REJECT_ALL',
+      'button[data-sp-action="REJECT_ALL"]',
     ]);
     if (rejectClicked) {
       await new Promise((resolve) => setTimeout(resolve, 120));
+    } else {
+      // Some builds (e.g. spiegel.de as of August 2026) present each purpose as its
+      // own Accept/Reject pair instead of a bulk control — reject every row.
+      rejectClicked = await rejectAllPrivacyManagerCategories();
+      if (!rejectClicked) {
+        // Last-resort single-match text fallback for any other layout not covered above.
+        rejectClicked = tryClick(['text:reject all', 'text:decline all', 'text:refuse all', 'text:reject']);
+        if (rejectClicked) {
+          await new Promise((resolve) => setTimeout(resolve, 120));
+        }
+      }
     }
 
+    // Never save if nothing was actually rejected — that would silently persist
+    // whatever the page's default (typically accept-leaning) state is and still
+    // report a successful reject_all.
+    if (!rejectClicked) return false;
+
     const saveButton = document.querySelector('.sp_choice_type_SAVE_AND_EXIT');
-    if (!saveButton || !isVisible(saveButton)) return false;
-    dispatchSyntheticClick(saveButton);
-    return waitForDismissal(5000);
+    return Boolean(saveButton && isVisible(saveButton));
+  }
+
+  // Clicks Save and Exit without waiting to confirm dismissal afterward — saving
+  // can trigger a full page reload (confirmed on spiegel.de), which can destroy
+  // this frame's execution context mid-wait. The caller reports success before
+  // calling this, once rejection + a genuinely visible Save control are both
+  // confirmed, since that confirmation can't rely on anything after the click.
+  function clickPrivacyManagerSaveAndExit() {
+    const saveButton = document.querySelector('.sp_choice_type_SAVE_AND_EXIT');
+    if (saveButton && isVisible(saveButton)) {
+      dispatchSyntheticClick(saveButton);
+    }
+  }
+
+  // Rejects every purpose row in Sourcepoint privacy managers that use per-category
+  // Accept/Reject button pairs (class="pur-buttons-container") instead of a single
+  // bulk reject-all control. The Reject button is consistently the last button in
+  // each pair — confirmed structural, not text-based, so this works regardless of
+  // the page's language (Sourcepoint renders "Accept"/"Reject", "Zustimmen"/
+  // "Ablehnen", etc. with identical markup/ordering, only the label text differs).
+  async function rejectAllPrivacyManagerCategories() {
+    await waitForStableCount('.pur-buttons-container');
+    const containers = document.querySelectorAll('.pur-buttons-container');
+    if (!containers.length) return false;
+
+    let rejectedAny = false;
+    for (const container of containers) {
+      const buttons = container.querySelectorAll('button');
+      const rejectButton = buttons[buttons.length - 1];
+      if (!rejectButton) continue;
+      // Rows can fade in with a staggered per-row animation (confirmed live
+      // on spiegel.de: some rows' buttons were still non-visible for over a
+      // second after sibling rows' buttons already were) -- a single
+      // isVisible() check here without a short wait/retry silently skips
+      // whichever categories hadn't finished animating in yet, meaning
+      // "reject everything" could previously leave some categories at
+      // whatever their default state was instead of actually rejecting them.
+      if (!(await waitForElementVisible(rejectButton, 2000))) continue;
+      dispatchSyntheticClick(rejectButton);
+      rejectedAny = true;
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    return rejectedAny;
   }
 
   async function waitForDismissal(timeoutMs = 4000) {
@@ -1077,7 +1284,23 @@
     return Boolean(siteOverrides?.[domain]?.disabled);
   }
 
+  async function isManualConsentOpenSuppressed(site) {
+    try {
+      const result = await chrome.storage.local.get({ [MANUAL_CONSENT_OPEN_KEY]: null });
+      const payload = result?.[MANUAL_CONSENT_OPEN_KEY];
+      if (!payload?.timestamp || Date.now() - payload.timestamp >= MANUAL_CONSENT_SUPPRESS_MS) {
+        await chrome.storage.local.remove(MANUAL_CONSENT_OPEN_KEY);
+        return false;
+      }
+      const currentHost = window.location.hostname;
+      return !payload.site || payload.site === site || payload.site === currentHost;
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function report(site, method, preference) {
+    if (await isManualConsentOpenSuppressed(site)) return;
     startFrameCooldown(site, preference);
     try {
       const response = await chrome.runtime.sendMessage({ type: 'ACTION_FIRED', site, method, preference });

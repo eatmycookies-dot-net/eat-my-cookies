@@ -95,6 +95,12 @@ npm run test:e2e:eu
 npm run test:e2e:us
 ```
 
+For Usercentrics or shadow-DOM consent changes, run the focused extension regression as well:
+
+```bash
+npm run test:e2e:usercentrics
+```
+
 Site entries in `tests/sites.json` may also include:
 
 - `locale`
@@ -219,6 +225,25 @@ npm run test:detect-cmp                        # CMP discovery scan
 If VPN validations suddenly show `emcPref=n/a` or every site starts failing before any extension activity is recorded, update to the latest repo version before investigating the sites themselves. The current validator prefers Chromium-based launches in VPN mode because some system-Chrome paths can hide the extension service worker and leave `onboardingComplete` unset.
 
 Prefer `npm run verify` during normal iteration, `npm run test` before opening a PR when code behavior changed, and targeted `npm run test:e2e` when you touched a supported site or CMP flow.
+
+### Weekly VPN runner setup (for CI)
+
+`.github/workflows/e2e-weekly.yml` runs the full e2e suite every Tuesday to catch CMP drift and
+consent-flow regressions on live sites automatically — see `docs/cmp-impact-map.md` ("CMP family
+drift detection") for why. The non-VPN half runs on GitHub-hosted runners with zero setup. The VPN
+half needs a **self-hosted runner on a machine with a working Browsec setup** (the one above),
+because GitHub-hosted runners can't reliably provision a real VPN extension, a display for headed
+Chrome, and an unattended tunnel reconnect all at once — that combination produces infra flakiness,
+not trustworthy signal.
+
+**One-time setup**, on the machine that will run the weekly VPN job:
+
+1. Complete the "Testing with a VPN" setup above first (`EMC_VPN_EXT` exported, `npm run test:vpn-setup` run at least once).
+2. In the repo on GitHub: **Settings → Actions → Runners → New self-hosted runner**, choose macOS, and follow GitHub's generated `./config.sh` command. When prompted for labels, add `emc-local` (the workflow targets `[self-hosted, emc-local]` specifically, so it won't accidentally pick up jobs from other repos' runners of the same name).
+3. Start the runner **interactively** (`./run.sh` in a Terminal you leave open, or as a `launchd` **LaunchAgent** under your logged-in user — not a system-level LaunchDaemon). VPN mode launches a real, visible Chrome window; a runner with no GUI session has no display for it to open into.
+4. Leave that Terminal/session running (or the LaunchAgent active) so the runner is online when the schedule fires each Tuesday. If it's offline, the `vpn` job just stays queued — it does not fail the workflow, and the `non-vpn` job is unaffected either way.
+
+To test the setup without waiting for Tuesday: **Actions tab → E2E Consent Validation (Weekly) → Run workflow**.
 
 ## Public Repo Hygiene
 

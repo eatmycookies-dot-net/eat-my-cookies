@@ -1,5 +1,5 @@
 {
-  "version": "1.3.2",
+  "version": "1.3.3",
   "sites": [
     {
       "name": "The Guardian (EU/GDPR)",
@@ -112,6 +112,11 @@
       "region": "US",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": [
+        "sourcepoint:",
+        "dom:sourcepoint"
+      ],
       "bannerSelectors": [
         "[id^='sp_message_container']"
       ],
@@ -223,16 +228,159 @@
       ]
     },
     {
-      "name": "Le Monde",
+      "name": "Le Monde EN",
+      "url": "https://www.lemonde.fr/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9,fr;q=0.8",
+      "cmp": "Le Monde custom CMP",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "expectActivityRecorded": true,
+      "note": "Le Monde's English path exposes the configurable gdpr-lmd CMP. Reject should use only the explicit denyAll action. The French root path can instead show a consent-or-pay wall and should be treated as an honest site-specific choice for reject/custom.",
+      "bannerSelectors": [
+        ".gdpr-lmd-standard",
+        ".gdpr-lmd-params",
+        "[data-gdpr-expression='acceptAll']",
+        "[data-gdpr-expression='denyAll']"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-expression='denyAll']",
+        "[data-gdpr-action='save']"
+      ]
+    },
+    {
+      "name": "Le Monde Root (Accept Override)",
       "url": "https://www.lemonde.fr/",
       "region": "EU",
       "locale": "fr-FR",
       "acceptLanguage": "fr-FR,fr;q=0.9,en;q=0.8",
-      "cmp": "Le Monde (consent-or-pay)",
-      "tier": "n/a",
-      "note": "Current wall offers accept or subscribe only; no visible free reject path was available in validation.",
-      "bannerSelectors": [],
-      "consentSelectors": []
+      "cmp": "Le Monde consent-or-pay",
+      "tier": "site-specific",
+      "preference": "reject_all",
+      "siteOverrides": {
+        "www.lemonde.fr": {
+          "alwaysAccept": true
+        }
+      },
+      "expectActivityRecorded": true,
+      "expectedActivityMethod": "site_override:accept_all",
+      "forbiddenTextAfterHandle": [
+        "souhaitez-vous retirer votre consentement",
+        "retirer mon consentement"
+      ],
+      "note": "French root consent-or-pay wall with the user's site-specific Always Accept override. This should accept the wall directly and must not run the /en/ post-accept settings recovery, which can open Le Monde's withdrawal modal.",
+      "bannerSelectors": [
+        ".gdpr-lmd-wall",
+        "[data-gdpr-expression='acceptAll']",
+        "text:accepter et continuer"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-expression='acceptAll']",
+        "text:accepter et continuer"
+      ]
+    },
+    {
+      "name": "Le Monde (Accept)",
+      "url": "https://www.lemonde.fr/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9,fr;q=0.8",
+      "cmp": "Le Monde custom CMP",
+      "tier": "site-specific",
+      "preference": "accept_all",
+      "categoryPreferences": {
+        "ccpaDoNotSell": true
+      },
+      "expectActivityRecorded": true,
+      "expectedLeMondePurposeStates": {
+        "analytics": true,
+        "social": true,
+        "mediaPlatforms": true,
+        "personalization": true,
+        "ads": false
+      },
+      "verifyLeMondeManualReopenNoActivity": true,
+      "note": "Accept All with CCPA do-not-sell enabled must save via Le Monde settings so analytics/personalization/social/media-platform purposes are on while ads stay off.",
+      "bannerSelectors": [
+        ".gdpr-lmd-standard",
+        ".gdpr-lmd-params",
+        "[data-gdpr-expression='acceptAll']"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-expression='acceptAll']",
+        "[data-gdpr-action='save']"
+      ]
+    },
+    {
+      "name": "Le Monde (Accept No CCPA)",
+      "url": "https://www.lemonde.fr/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9,fr;q=0.8",
+      "cmp": "Le Monde custom CMP",
+      "tier": "site-specific",
+      "preference": "accept_all",
+      "categoryPreferences": {
+        "ccpaDoNotSell": false
+      },
+      "expectActivityRecorded": true,
+      "expectedLeMondePurposeStates": {
+        "analytics": true,
+        "social": true,
+        "mediaPlatforms": true,
+        "personalization": true,
+        "ads": true
+      },
+      "verifyLeMondeManualReopenNoActivity": true,
+      "note": "Accept All with CCPA do-not-sell disabled must save via Le Monde settings so every configurable purpose remains enabled when cookie preferences are reopened.",
+      "bannerSelectors": [
+        ".gdpr-lmd-standard",
+        ".gdpr-lmd-params",
+        "[data-gdpr-expression='acceptAll']"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-expression='acceptAll']",
+        "[data-gdpr-action='save']"
+      ]
+    },
+    {
+      "name": "Le Monde (Custom Functional)",
+      "url": "https://www.lemonde.fr/en/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9,fr;q=0.8",
+      "cmp": "Le Monde custom CMP",
+      "tier": "site-specific",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "expectActivityRecorded": true,
+      "expectedLeMondePurposeStates": {
+        "analytics": false,
+        "social": false,
+        "mediaPlatforms": false,
+        "personalization": true,
+        "ads": false
+      },
+      "verifyLeMondeManualReopenNoActivity": true,
+      "note": "Custom must open settings and save Le Monde purpose toggles on the English gdpr-lmd CMP, not fall through to denyAll. Functional maps to personalization; analytics, social, media-platform, and ads remain off. User-opened footer cookie settings must remain inspectable and not be auto-saved.",
+      "bannerSelectors": [
+        ".gdpr-lmd-standard",
+        ".gdpr-lmd-params",
+        "[data-gdpr-params-purpose]"
+      ],
+      "consentSelectors": [
+        "[data-gdpr-action='save']",
+        "[data-gdpr-params-purpose='personalization']",
+        "[data-gdpr-params-purpose='analytics']",
+        "[data-gdpr-params-purpose='ads']"
+      ]
     },
     {
       "name": "Le Figaro",
@@ -256,11 +404,70 @@
       "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": [
+        "sourcepoint:",
+        "dom:sourcepoint"
+      ],
+      "handleWaitMs": 18000,
+      "note": "As of August 8, 2026 the first-layer banner is a consent-or-pay wall (Consent and continue / Subscribe now / Preferences, sp_choice_type_11/9/12) with no direct Reject All (no sp_choice_type_REJECT_ALL, no data-sp-action=REJECT_ALL). Reject requires opening Preferences, which loads a separate privacy-manager frame using per-category Accept/Reject button pairs instead of a bulk reject-all control (sp-frame-handler.js's rejectFromPrivacyManager() now handles this via rejectAllPrivacyManagerCategories()). The full open-frame-load-reject-save sequence needs more time than the default handleWaitMs.",
       "bannerSelectors": [
         "[id^='sp_message_container']",
         "[id^='sp_message_iframe']"
       ],
-      "consentSelectors": []
+      "consentSelectors": [
+        ".sp_choice_type_11",
+        ".sp_choice_type_9",
+        ".sp_choice_type_12"
+      ]
+    },
+    {
+      "name": "Der Spiegel (Accept)",
+      "url": "https://www.spiegel.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "preference": "accept_all",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": [
+        "sourcepoint:gdpr:frame"
+      ],
+      "requireBannerDismissal": true,
+      "note": "Accept All must click the consent-or-pay wall's Consent and continue button (sp_choice_type_11) directly, no privacy-manager detour. Fixed August 9, 2026: isUSNat's regex previously false-matched unrelated GDPR marketing copy elsewhere on the page, misclassifying this GDPR-only banner as USNat and routing Accept through USNat selectors that don't include sp_choice_type_11, so nothing was ever clicked. A second, separate bug meant even a successful click lost its own activity report: this site's SP iframe self-destructs within ~1s of a successful Accept click, discarding this frame's JS context mid-poll before a report() issued after the click could fire. Both are fixed in sp-frame-handler.js (bounded isUSNat regex; host-gated report-before-click ordering for this site, mirroring the existing privacy-manager Save race fix).",
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_11"
+      ]
+    },
+    {
+      "name": "Der Spiegel (Custom)",
+      "url": "https://www.spiegel.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "preference": "custom",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": [
+        "sourcepoint:gdpr:privacy-manager"
+      ],
+      "handleWaitMs": 18000,
+      "note": "Sourcepoint's GDPR privacy-manager handling in sp-frame-handler.js does not read categoryPreferences: rejectFromPrivacyManager()/rejectAllPrivacyManagerCategories() always reject every category regardless of the user's granular selections. This entry currently exercises the identical code path as the default (reject_all) Der Spiegel entry above; it exists as standing regression coverage for the custom preference, not because Spiegel supports distinct custom behavior today. If genuine per-category support is added for Sourcepoint, this entry should gain its own expected-category-state assertions.",
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_11",
+        ".sp_choice_type_9",
+        ".sp_choice_type_12"
+      ]
     },
     {
       "name": "ZEIT",
@@ -317,6 +524,103 @@
       ]
     },
     {
+      "name": "DW Accept All",
+      "url": "https://www.dw.com/en/top-stories/s-9097",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "ConsentManager",
+      "tier": "cm-frame",
+      "preference": "accept_all",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": true,
+        "advertising": true,
+        "ccpaDoNotSell": false,
+        "uncategorized": "accept"
+      },
+      "expectActivityRecorded": true,
+      "allowRecordedActionPass": true,
+      "requirePostRecordedBannerGone": true,
+      "handleWaitMs": 18000,
+      "forbiddenTextAfterHandle": [
+        "your data\\. your choice"
+      ],
+      "navigationExpectations": {
+        "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/top-stories/s-9097(?:$|[?#])"
+      },
+      "verifyManualConsentOpenNoActivity": {
+        "selectors": [
+          "a[href*=\"data-privacy-settings\"]",
+          "a[href*=\"privacy-settings\"]"
+        ],
+        "waitMs": 9000,
+        "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/data-privacy-settings/privacy-settings-en(?:$|[?#])",
+        "expectedVisibleSelectors": [
+          "text:save selection"
+        ]
+      },
+      "note": "US/no-VPN direct top-stories accept path. If DW detours into the full privacy-settings page, Accept All must save the settings surface and return to content rather than strand the user on Save selection.",
+      "bannerSelectors": [
+        ".cmpboxbtncustom",
+        ".cmpboxbtnno",
+        ".cmpboxbtnyes",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices"
+      ],
+      "consentSelectors": [
+        ".cmpboxbtncustom",
+        ".cmpboxbtnno",
+        ".cmpboxbtnyes",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices",
+        "text:save selection"
+      ]
+    },
+    {
+      "name": "DW Custom",
+      "url": "https://www.dw.com/en/top-stories/s-9097",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "ConsentManager",
+      "tier": "cm-frame",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "expectActivityRecorded": true,
+      "allowRecordedActionPass": true,
+      "requirePostRecordedBannerGone": true,
+      "handleWaitMs": 18000,
+      "forbiddenTextAfterHandle": [
+        "your data\\. your choice"
+      ],
+      "navigationExpectations": {
+        "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/top-stories/s-9097(?:$|[?#])"
+      },
+      "note": "US/no-VPN direct top-stories path. Custom must click DW's plain first-layer Settings link, apply preferences in the ConsentManager settings surface, save, and leave the banner gone.",
+      "bannerSelectors": [
+        ".cmpboxbtncustom",
+        ".cmpboxbtnno",
+        ".cmpboxbtnyes",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices"
+      ],
+      "consentSelectors": [
+        ".cmpboxbtncustom",
+        ".cmpboxbtnno",
+        ".cmpboxbtnyes",
+        ".cmpboxbtnrejectcustomchoices",
+        ".cmpboxbtnyescustomchoices",
+        "text:save selection"
+      ]
+    },
+    {
       "name": "DW",
       "url": "https://www.dw.com/en/",
       "region": "EU",
@@ -326,13 +630,13 @@
       "tier": "cm-frame",
       "note": "DW sometimes redirects into a full-page privacy manager; validate both the entry banner and settings page paths.",
       "allowRecordedActionPass": true,
+      "requirePostRecordedBannerGone": true,
+      "handleWaitMs": 18000,
       "navigationExpectations": {
         "expectedFinalUrlPattern": "https://www\\.dw\\.com/en/top-stories/s-9097(?:$|[?#])"
       },
       "bannerSelectors": [
-        "#cmpwrapper",
         "#cmpbox",
-        "#cmpinlinepreferencesbox",
         ".cmpboxbtnrejectcustomchoices",
         ".cmpboxbtnyescustomchoices"
       ],
@@ -1437,6 +1741,66 @@
         "statistics": false,
         "marketing": false
       }
+    },
+    {
+      "name": "FedEx",
+      "url": "https://www.fedex.com/",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "Usercentrics",
+      "tier": "cmp-api",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:", "dom:usercentrics:"],
+      "note": "Live-validated August 9, 2026 (headed real-Chrome run; this used not to work). window.UC_UI is genuinely present. Reject All can fire through either the real UC_UI service API (cmp_api:UC_UI:reject_all) or the DOM shadow-root fallback (dom:usercentrics:reject_all) depending on page-load timing -- both are legitimate, verified paths. No banner element (#usercentrics-cmp-ui) left visible afterward either way.",
+      "bannerSelectors": [
+        "#usercentrics-cmp-ui",
+        "#usercentrics-root"
+      ],
+      "consentSelectors": []
+    },
+    {
+      "name": "FedEx (Accept)",
+      "url": "https://www.fedex.com/",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "Usercentrics",
+      "tier": "cmp-api",
+      "preference": "accept_all",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:accept_all", "dom:usercentrics:accept_all"],
+      "note": "Live-validated August 9, 2026. Accept All can fire through either the real UC_UI service API (cmp_api:UC_UI:accept_all) or the DOM shadow-root fallback (dom:usercentrics:accept_all) depending on page-load timing -- both are legitimate, verified paths, not a fallback-vs-real-handler distinction. No banner element left visible afterward either way.",
+      "bannerSelectors": [
+        "#usercentrics-cmp-ui",
+        "#usercentrics-root"
+      ],
+      "consentSelectors": []
+    },
+    {
+      "name": "FedEx (Custom)",
+      "url": "https://www.fedex.com/",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "Usercentrics",
+      "tier": "cmp-api",
+      "preference": "custom",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:custom", "dom:usercentrics:custom"],
+      "note": "Live-validated August 9, 2026. Custom can fire through either the real UC_UI service API (cmp_api:UC_UI:custom) or the DOM shadow-root fallback (dom:usercentrics:custom) depending on page-load timing -- both are legitimate, verified paths. No banner element left visible afterward either way.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#usercentrics-cmp-ui",
+        "#usercentrics-root"
+      ],
+      "consentSelectors": []
     },
     {
       "name": "LVMH",

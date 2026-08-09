@@ -6,6 +6,55 @@ Project message for release context:
 
 Cookie banners are annoying. Eat My Cookies is a free Chrome extension that handles them based on user preferences, so people don't have to fix them site by site. No backend, no tracking, no ads.
 
+## v1.3.3
+
+### Der Spiegel (spiegel.de)
+
+- Fixed Reject All and Custom, which had stopped working after the site's first-layer banner changed to a consent-or-pay wall (`Consent and continue` / `Subscribe now` / `Preferences`) with no direct Reject All control. Rejecting now opens Preferences into the privacy-manager frame and rejects every purpose row individually when no bulk reject-all control is present.
+- Fixed Accept All, which was being misrouted through the wrong (USNat/CCPA) button set due to an overly broad text match and so never dismissed the banner.
+- Fixed a bug where a successful Accept could still fail to record as handled, because the site's consent iframe tears itself down within about a second of a successful click.
+- Fixed a save delay on Reject/Custom (previously ~5–6 seconds) caused by the extension waiting out a full timeout budget even though the purpose list had already finished rendering; saving now completes in well under a second.
+- Fixed a narrower timing bug where a purpose row's Reject button could still be mid-animation when the extension tried to click it, occasionally leaving that one category unrejected.
+- Custom still behaves the same as Reject All on this site for now — Sourcepoint's privacy manager here doesn't expose a reliable way to save individual category choices yet, so honest full-reject remains the safer default rather than a granular selection that can't be verified as actually saved.
+
+### Le Monde (lemonde.fr)
+
+- Human-validated Accept All, Reject All, Accept All with CCPA do-not-sell, and Custom on `lemonde.fr/en/`, Le Monde's configurable CMP surface.
+- The French root path's consent-or-pay wall (`Soutenez un journalisme fiable`) is now handled as an honest site-specific choice — Reject/Custom show the site's real limitation instead of falsely claiming a rejection was recorded, while the Accept path works cleanly without accidentally triggering Le Monde's consent-withdrawal modal.
+- Fixed a bug where reopening Le Monde's footer cookie settings to inspect saved preferences could itself trigger an unwanted auto-save or auto-dismiss.
+
+### DW (dw.com)
+
+- Fixed Accept All and Custom to correctly complete DW's privacy-settings detour: the extension now saves the real settings page, returns to the original article, and no longer mistakenly discards the saved selection.
+- Manually opening DW's footer privacy settings now stays on that page for the user to inspect, instead of being redirected or double-counted.
+
+### Usercentrics
+
+- Added coverage for the modern Usercentrics shadow-DOM UI (Accept All, Reject All, Custom). Live-validated on `fedex.com` (previously did not work) across repeated runs of all three modes — Reject, Accept, and Custom each complete successfully whether the real `UC_UI` service API or the DOM shadow-root fallback happens to win the race on a given page load. `leadersisland.com` remains a second example, still pending its own live/human validation pass.
+
+### Manual settings inspection
+
+- Across ConsentManager, Sourcepoint, and AppConsent-powered sites, manually opening a footer "cookie settings" or "privacy preferences" link now suppresses automatic re-handling for a short window, so users can actually inspect their saved choices instead of the extension immediately re-applying and closing them.
+
+### Known regression: New York Times (nytimes.com)
+
+- `nytimes.com` has moved from "Automation-covered" to "Needs implementation." A live check found the site now serving a different consent platform (Fides) instead of the previously-detected Sourcepoint, and this extension has no Fides handler yet. The CCPA/opt-out path on this site should be treated as unsupported until Fides support is added — see `docs/site-support-matrix.md` for the full detail.
+
+### Validation tooling
+
+- Added automatic CMP-family drift detection to `npm run test:e2e`: every run now checks whether a site's actual live CMP still matches what's declared, so a site quietly switching consent platforms (like the NYT regression above) shows up as a clear signal instead of a silent pass.
+- Added a weekly scheduled CI run (`.github/workflows/e2e-weekly.yml`, Tuesdays) covering both non-VPN and VPN/geo-gated sites, so this kind of drift is caught automatically going forward instead of waiting for someone to notice.
+- Fixed several test-harness reliability gaps that could let a real regression pass silently: an empty selector list that always "passed," no check on which handler actually fired, and incorrect fallback behavior when reading extension stats or writing preferences under real Chrome.
+
+### Validation
+
+- `npm run test`
+- `npm run verify`
+- `npm run test:e2e -- --site="Der Spiegel"` (Reject, Accept, and Custom entries)
+- `npm run test:e2e -- --site="FedEx"` (Reject, Accept, and Custom entries, multiple runs each)
+- `npm run test:e2e:usercentrics`
+- Live human-validated sessions for `lemonde.fr/en/`, `lemonde.fr`, and `dw.com`
+
 ## v1.3.2
 
 ### Shopify Account Privacy Support

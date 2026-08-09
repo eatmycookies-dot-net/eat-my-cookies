@@ -35,7 +35,7 @@ describe('sp-frame-handler.js — guardian top-frame guard', () => {
 
   it('top-frame guard appears before isSPFrame() check', () => {
     const guardPos    = source.indexOf('GUARDIAN_HOSTS.has(window.location.hostname)');
-    const spFramePos  = source.indexOf('if (!isSPFrame() && !isFTShell)');
+    const spFramePos  = source.indexOf('let framePresent = isSPFrame();');
     expect(guardPos).toBeGreaterThan(-1);
     expect(spFramePos).toBeGreaterThan(-1);
     expect(guardPos).toBeLessThan(spFramePos);
@@ -207,6 +207,17 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('if (DOCUMENT_START_ONLY_SITES.has(site)) return;');
   });
 
+  it('opens DW custom settings from the current plain Settings link', () => {
+    expect(source).toContain('async function handleDW');
+    expect(source).toContain("'.cmpboxbtncustom'");
+    expect(source).toContain("'#cmpbntcustomtxt'");
+    expect(source).toContain("'text:settings'");
+    expect(source).toContain("const settingsOpened = clickElement(['.cmpboxbtncustom', '#cmpbntcustomtxt', 'text:settings']);");
+    expect(source).toContain('async function maybeReturnFromDWPrivacySettingsPage');
+    expect(source).toContain('function dwPrivacyReturnUrl');
+    expect(source).toContain('async function hasDWAutoReturnPending');
+  });
+
   it('has a Bloomberg terms-gate handler that keys off cookie acceptance only, not the CCPA toggle', () => {
     expect(source).toContain("if (site === 'www.bloomberg.com')");
     expect(source).toContain('handleBloombergTermsGate');
@@ -242,6 +253,91 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).not.toContain("|SP Consent Message");
   });
 
+  it('keeps Le Monde custom preferences separate from deny-all', () => {
+    expect(source).toContain("if (site === 'www.lemonde.fr')");
+    expect(source).toContain('SITE_SPECIFIC_ONLY_SITES');
+    expect(source).toContain("const SITE_SPECIFIC_ONLY_SITES = new Set([\n  'www.lemonde.fr',\n]);");
+    expect(source).toContain('if (SITE_SPECIFIC_ONLY_SITES.has(site))');
+    expect(source).toContain('async function handleLeMonde');
+    expect(source).toContain('ensureLeMondeManualOpenGuard();');
+    expect(source).toContain('function isLeMondeConsentOrPayWall');
+    expect(source).toContain('function reportLeMondeConsentOrPayUnsupported');
+    expect(source).toContain('function shouldConfigureLeMondeAcceptViaSettings');
+    expect(source).toContain('function isLeMondeEnglishPath');
+    expect(source).toContain('function isLeMondeManualOpenSuppressed');
+    expect(source).toContain('function isLeMondeAutomationOpenSuppressed');
+    expect(source).toContain('function markLeMondeAutomationOpen');
+    expect(source).toContain('function isLeMondeSettingsSurfaceVisible');
+    expect(source).toContain('function isLeMondeManualSettingsOpen');
+    expect(source).toContain('if (isLeMondeManualOpenSuppressed()) {');
+    expect(source).toContain('if (isLeMondeSettingsSurfaceVisible() && !isLeMondeAutomationOpenSuppressed() && readLeMondeConsentCookie())');
+    expect(source).toContain('syncLeMondeVisibleSettingsFromConsent();');
+    expect(source).toContain('async function dismissLeMondeWithdrawalModal');
+    expect(source).toContain('function syncLeMondeVisibleSettingsFromConsent');
+    expect(source).toContain('function readLeMondeConsentPurposes');
+    expect(source).toContain('function readLeMondeConsentCookie');
+    expect(source).toContain('function persistLeMondeConsentCookie');
+    expect(source).toContain('async function persistLeMondeConsentCookieDurably');
+    expect(source).toContain('function buildLeMondeConsentCookiePayload');
+    expect(source).toContain('LEMONDE_CONSENT_MIRROR_KEY');
+    expect(source).toContain('function writeLeMondeConsentCookieValue');
+    expect(source).toContain('function storeLeMondeConsentMirror');
+    expect(source).toContain('function restoreLeMondeConsentCookieFromMirror');
+    expect(source).toContain('function readLeMondeLocalConsentMirror');
+    expect(source).toContain('function readLeMondeExtensionConsentMirror');
+    expect(source).toContain('function isMatchingLeMondeConsentMirror');
+    expect(source).toContain("chrome.storage.local.set({ [LEMONDE_CONSENT_MIRROR_KEY]: payload }, () => resolve(true))");
+    expect(source).toContain('await persistLeMondeConsentCookieDurably(prefs);');
+    expect(source).toContain("payload.signature === prefsRunSignature(prefs)");
+    expect(source).toContain('function scheduleLeMondeConsentCookiePersistence');
+    expect(source).toContain('function leMondeDesiredPurposes');
+    expect(source).toContain('function setSilentLeMondePurposeState');
+    expect(source).toContain('async function configureLeMondeFromVisibleSurface');
+    expect(source).toContain('async function configureLeMondeFromFooterSettings');
+    expect(source).toContain('async function waitForLeMondeConsentCookie');
+    expect(source).toContain("if (siteOverrides.alwaysAccept) return false;");
+    expect(source).toContain("prefs.globalPreference === 'accept_all' && isLeMondeEnglishPath()");
+    expect(source).toContain('prefs.ccpaDoNotSell !== false');
+    expect(source).toContain('Date.now() < leMondeManualOpenUntil');
+    expect(source).toContain('Date.now() < leMondeAutomationOpenUntil');
+    expect(source).toContain('LEMONDE_MANUAL_SUPPRESS_MS');
+    expect(source).toContain('LEMONDE_AUTOMATION_SUPPRESS_MS');
+    expect(source).toContain('scheduleLeMondeConsentCookiePersistence(prefs);');
+    expect(source).toContain("document.addEventListener('pointerdown', markIfManualCookieSettingsOpen");
+    expect(source).toContain("document.addEventListener('keydown', (event) => {");
+    expect(source).toContain('function findLeMondeManualOpenTarget');
+    expect(source).toContain('function isLeMondeCookieSettingsOpenTarget');
+    expect(source).toContain(".gdpr-cs-parameters-link, .footer__link.gdpr-cs-parameters-link");
+    expect(source).toContain('cookie preferences');
+    expect(source).toContain('souhaitez-vous retirer votre consentement');
+    expect(source).toContain('retirer mon consentement');
+    expect(source).toContain("findButtonByText(['annuler', 'cancel'])");
+    expect(source).toContain('Le Monde is showing a consent-or-pay wall on this page.');
+    expect(source).toContain('text:accepter et continuer');
+    expect(source).toContain('const initialSurfaceVisible = hasVisibleLeMondeElement');
+    expect(source).toContain('settingsVisible || (initialSurfaceVisible && settingsButton)');
+    expect(source).toContain("if (result === 'manual') return true;");
+    expect(source).toContain("if (result === 'configured')");
+    expect(source).toContain('Le Monde accepted cookies before exposing settings');
+    expect(source).toContain("return 'manual';");
+    expect(source).toContain("return 'configured';");
+    expect(source).toContain("'site_specific:settings_save'");
+    expect(source).toContain("writeCookie('lmd_consent'");
+    expect(source).toContain('function isLeMondeReloadingActionMethod');
+    expect(source).toContain("site === 'www.lemonde.fr' && method === 'site_specific:settings_save'");
+    expect(source).toContain("if (prefs.globalPreference === 'reject_all')");
+    expect(source).toContain("if (prefs.globalPreference !== 'custom') return false;");
+    expect(source).toContain('function applyLeMondeCustomPreferences');
+    expect(source).toContain('document.querySelectorAll(`input[data-gdpr-params-purpose="${CSS.escape(purpose)}"]`)');
+    expect(source).toContain('function setNativeLeMondePurposeState');
+    expect(source).toContain('personalization: Boolean(prefs.functional)');
+    expect(source).toContain("social: acceptAll || (Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false)");
+    expect(source).toContain("mediaPlatforms: acceptAll || (Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false)");
+    expect(source).toContain('ads: Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false');
+    expect(source).not.toContain('.gdpr-lmd-button--slate-darker');
+    expect(source).not.toContain('turnOffLeMondeInputs');
+  });
+
   it('has a reusable Ketch privacy-center handler wired for Forbes', () => {
     expect(source).toContain('const ketchConfig = getKetchSiteConfig(site);');
     expect(source).toContain('if (ketchConfig) {');
@@ -253,6 +349,7 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain("'www.forbes.com'");
     expect(source).toContain("'www.ketch.com'");
     expect(source).toContain("'ketch.com'");
+    expect(source).toContain("'www.lemonde.fr'");
     expect(source).toContain("siteLabel: 'Forbes'");
     expect(source).toContain("siteLabel: 'Ketch'");
     expect(source).toContain("privacyCenterTitle: 'forbes privacy center'");
@@ -462,8 +559,9 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain("const siteOverrides = await chrome.runtime.sendMessage({ type: 'GET_SITE_OVERRIDES', domain: site }) ?? {};");
     expect(source).toContain('const prefs = resolvePrefs(settings, siteOverrides);');
     expect(source).toContain('document.documentElement.dataset.emcPref = prefs.globalPreference;');
-    expect(source).toContain("const keepWatchingAfterHandle = site === 'forbes.com' || site === 'www.forbes.com' || site === 'www.ketch.com' || site === 'ketch.com';");
+    expect(source).toContain("site === 'www.lemonde.fr'");
     expect(source).toContain('const watchDurationMs = keepWatchingAfterHandle ? 120000 : 15000;');
+    expect(source).toContain("wasHandledForCurrentPage(prefsRunSignature(prefs)) && !(site === 'www.lemonde.fr' && isLeMondeManualOpenSuppressed())");
     expect(source).toContain('if (handled && !keepWatchingAfterHandle) stop();');
     expect(source).toContain('}, watchDurationMs);');
     expect(source).toContain('let siteSpecificFlowLock = null;');
@@ -485,7 +583,9 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).not.toContain('firePreHandleAction(detail.method, preference, actionToken);');
     expect(source).not.toContain('markHandledForCurrentPage(signature);');
     expect(source).toContain('const flushedPendingPreHandleAction = await flushPendingPreHandleAction(currentRunSignature);');
-    expect(source).toContain('if (!force && flushedPendingPreHandleAction) return;');
+    expect(source).toContain('if (!force && flushedPendingPreHandleAction) {');
+    expect(source).toContain('persistLeMondeConsentCookie(prefs);');
+    expect(source).toContain('scheduleDynamicSiteSpecificWatch();');
     expect(source).toContain('if (payload.expectedGroups && !oneTrustConsentGroupsMatch(payload.expectedGroups)) {');
     expect(source).toContain('const cooldownScope = runCooldownScope(currentRunSignature);');
     expect(source).toContain('!shouldRetryOneTrustAfterReload(currentRunSignature)) return;');
@@ -1237,6 +1337,7 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
 describe('frame handlers — temporary skip guards', () => {
   const spSource = readSource('content/sp-frame-handler.js');
   const cmSource = readSource('content/cm-frame-handler.js');
+  const appConsentSource = readSource('content/appconsent-frame-handler.js');
   const heuristicSource = readSource('content/heuristic.js');
   const bbcPrefsSource = readSource('content/bbc-preferences.js');
   const bbcHookSource = readSource('content/bbc-sourcepoint-hook.js');
@@ -1256,7 +1357,7 @@ describe('frame handlers — temporary skip guards', () => {
     expect(spSource).toContain('sourcepointUsNatSwitchTargetSelectors');
     expect(spSource).toContain("button.pm-toggle span.on");
     expect(spSource).toContain("button.pm-toggle span.off");
-    expect(spSource).toContain('if (!hasConsentSignals() && !isFTShell && !isSourcepointHost(window.location.hostname)) return;');
+    expect(spSource).toContain('if (!signalsPresent && !isFTShell && !isSourcepointHost(window.location.hostname)) return;');
   });
 
   it('generic Sourcepoint privacy-manager reject path clicks Reject All before Save and Close', () => {
@@ -1353,6 +1454,40 @@ describe('frame handlers — temporary skip guards', () => {
     expect(cmSource).toContain('return /consentmanager\\.net|consensu\\.org/.test(host) ||');
     expect(cmSource).not.toContain("REJECT_SELS.concat(ACCEPT_SELS, SETTINGS_SELS, SAVE_SELS).some");
     expect(cmSource).not.toContain("/only necessary|necessary cookies|cmpbox|consentmanager/i");
+  });
+
+  it('consentmanager frame handler gives custom mode its own settings-save path', () => {
+    const mainSource = readSource('content/main.js');
+    expect(cmSource).toContain("const custom = prefs.globalPreference === 'custom';");
+    expect(cmSource).toContain('if (custom) {');
+    expect(cmSource).toContain('await configureCustomChoices(prefs)');
+    expect(cmSource).toContain("report('consentmanager:frame:custom-settings'");
+    expect(cmSource).toContain('async function configureCustomChoices(prefs)');
+    expect(cmSource).toContain('async function applyCustomPurposeChoices(prefs)');
+    expect(cmSource).toContain("if (!custom && tryClick(sels) && await waitForDismissal())");
+    expect(cmSource).toContain('if (!accept && !custom) {');
+    expect(cmSource).toContain('if (await configureNecessaryOnly())');
+    expect(cmSource).not.toContain("if (await openDWSettingsDetour()) {\n        report('consentmanager:frame:custom-settings'");
+    expect(cmSource).toContain('setCurrentPurposeToggles(true, { allowNecessary: true });');
+    expect(mainSource).toContain('async function applyDWAcceptAllRows()');
+    expect(mainSource).toContain('await applyDWAcceptAllRows();');
+    expect(mainSource).toContain("'text:save selection'");
+  });
+
+  it('manual footer privacy/settings opens suppress automatic CMP actions and counts', () => {
+    const mainSource = readSource('content/main.js');
+    expect(mainSource).toContain("const MANUAL_CONSENT_OPEN_KEY = '__emc_manual_consent_open__';");
+    expect(mainSource).toContain('installManualConsentOpenGuard();');
+    expect(mainSource).toContain('event.isTrusted');
+    expect(mainSource).toContain('isManualConsentOpenTarget(target)');
+    expect(mainSource).toContain('await isManualConsentOpenSuppressed()');
+    expect(mainSource).toContain('if (await isManualConsentOpenSuppressed()) return { ok: true, manualOpenSuppressed: true };');
+    expect(mainSource).toContain('async function flushPendingPreHandleAction(signature) {\n  if (await isManualConsentOpenSuppressed()) return false;');
+    expect(mainSource.indexOf('if (!force && await isManualConsentOpenSuppressed())')).toBeLessThan(mainSource.indexOf('scheduleShopifyWatch(prefs);'));
+    expect(spSource).toContain('if (await isManualConsentOpenSuppressed(site)) return;');
+    expect(cmSource).toContain('if (await isManualConsentOpenSuppressed(topSite)) return;');
+    expect(appConsentSource).toContain('if (await isManualConsentOpenSuppressed(referrerHost())) return;');
+    expect(cmSource).toContain('if (!suppressed) chrome.runtime.sendMessage');
   });
 
   it('heuristic fallback skips BBC and LA Times', () => {
