@@ -35,7 +35,7 @@ describe('sp-frame-handler.js — guardian top-frame guard', () => {
 
   it('top-frame guard appears before isSPFrame() check', () => {
     const guardPos    = source.indexOf('GUARDIAN_HOSTS.has(window.location.hostname)');
-    const spFramePos  = source.indexOf('if (!isSPFrame() && !isFTShell)');
+    const spFramePos  = source.indexOf('let framePresent = isSPFrame();');
     expect(guardPos).toBeGreaterThan(-1);
     expect(spFramePos).toBeGreaterThan(-1);
     expect(guardPos).toBeLessThan(spFramePos);
@@ -1357,7 +1357,7 @@ describe('frame handlers — temporary skip guards', () => {
     expect(spSource).toContain('sourcepointUsNatSwitchTargetSelectors');
     expect(spSource).toContain("button.pm-toggle span.on");
     expect(spSource).toContain("button.pm-toggle span.off");
-    expect(spSource).toContain('if (!hasConsentSignals() && !isFTShell && !isSourcepointHost(window.location.hostname)) return;');
+    expect(spSource).toContain('if (!signalsPresent && !isFTShell && !isSourcepointHost(window.location.hostname)) return;');
   });
 
   it('generic Sourcepoint privacy-manager reject path clicks Reject All before Save and Close', () => {

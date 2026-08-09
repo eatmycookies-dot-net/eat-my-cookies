@@ -188,8 +188,16 @@
     if (await isDisabledForTopSite()) return;
     if (await isManualConsentOpenSuppressed(site)) return;
 
-    // Determine which framework this banner is — USNat banners contain "sell" text.
-    const isUSNat = !!document.body?.textContent?.match(/sell|sharing.*personal/i);
+    // Determine which framework this banner is. USNat/CCPA banners contain explicit
+    // "sell"/"sale" language, or "sharing"/"share" paired closely with "personal"
+    // (e.g. "Do Not Sell or Share My Personal Information"). The sharing/personal
+    // gap must stay bounded — unbounded .* previously spanned the entire page text
+    // and false-matched unrelated GDPR marketing copy on the same page (e.g.
+    // "personalized advertising" in one sentence, "No sharing of your data" in a
+    // completely unrelated one), misclassifying a GDPR-only banner as USNat. That
+    // silently broke Accept All on spiegel.de: USNat selectors don't include the
+    // GDPR accept button, so the misrouted click never found anything to click.
+    const isUSNat = !!document.body?.textContent?.match(/\bsell(?:ing|s)?\b|\bsale\b|shar(?:e|ing)[\s\S]{0,40}personal/i);
 
     const settings = await chrome.storage.sync.get({
       globalPreference: 'reject_all',
@@ -274,6 +282,27 @@
       !isUSNat &&
       accept &&
       hasVisibleSelector(bloombergImmediateAcceptSelectors);
+    // spiegel.de tears down this SP iframe (removes it from the DOM) within
+    // ~1s of a successful Accept click, same as the privacy-manager Save race
+    // documented above. waitForDismissal() below polls via setTimeout inside
+    // this frame's own JS context; once the iframe is detached that context is
+    // discarded and the pending poll never resumes, so a report() issued after
+    // the click never fires even though the click genuinely worked (verified:
+    // outgoing ad-partner requests carry a real, non-zero TC consent string
+    // immediately after). Unlike the Bloomberg cases below, reporting right
+    // after dispatching the click isn't safe here either -- the teardown can
+    // race the message send itself. Report BEFORE dispatching the click
+    // instead (same fix as the privacy-manager Save race above): tryClick()
+    // already validates a real, visible Accept control is present, which is
+    // sufficient evidence the click will register.
+    if (site === 'www.spiegel.de' && !isUSNat && accept) {
+      const target = findClickTarget(selectors);
+      if (target) {
+        await report(site, `sourcepoint:${framework}:frame`, settings.globalPreference);
+        dispatchSyntheticClick(target);
+        return;
+      }
+    }
 
     if (tryClick(selectors)) {
       if (shouldReportBloombergImmediateDismiss) {
@@ -313,6 +342,17 @@
         !isUSNat &&
         accept &&
         hasVisibleSelector(bloombergImmediateAcceptSelectors);
+      // Same report-before-click reasoning as the initial (non-deferred) check
+      // above: spiegel.de's teardown can race a report sent after the click.
+      if (site === 'www.spiegel.de' && !isUSNat && accept) {
+        const deferredTarget = findClickTarget(selectors);
+        if (deferredTarget) {
+          observer.disconnect();
+          await report(site, `sourcepoint:${framework}:frame:deferred`, settings.globalPreference);
+          dispatchSyntheticClick(deferredTarget);
+          return;
+        }
+      }
 
       if (tryClick(selectors)) {
         if (shouldReportDeferredBloombergImmediateDismiss) {
@@ -452,7 +492,7 @@
     return phrases.map(p => `text:${p}`);
   }
 
-  function tryClick(selectors) {
+  function findClickTarget(selectors) {
     for (const sel of selectors) {
       let el;
       if (sel.startsWith('text:')) {
@@ -460,12 +500,16 @@
       } else {
         el = document.querySelector(sel);
       }
-      if (el && isVisible(el)) {
-        dispatchSyntheticClick(el);
-        return true;
-      }
+      if (el && isVisible(el)) return el;
     }
-    return false;
+    return null;
+  }
+
+  function tryClick(selectors) {
+    const el = findClickTarget(selectors);
+    if (!el) return false;
+    dispatchSyntheticClick(el);
+    return true;
   }
 
   function hasVisibleSelector(selectors) {

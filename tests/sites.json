@@ -416,6 +416,50 @@
       ]
     },
     {
+      "name": "Der Spiegel (Accept)",
+      "url": "https://www.spiegel.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "preference": "accept_all",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": ["sourcepoint:gdpr:frame"],
+      "requireBannerDismissal": true,
+      "note": "Accept All must click the consent-or-pay wall's Consent and continue button (sp_choice_type_11) directly, no privacy-manager detour. Fixed August 9, 2026: isUSNat's regex previously false-matched unrelated GDPR marketing copy elsewhere on the page, misclassifying this GDPR-only banner as USNat and routing Accept through USNat selectors that don't include sp_choice_type_11, so nothing was ever clicked. A second, separate bug meant even a successful click lost its own activity report: this site's SP iframe self-destructs within ~1s of a successful Accept click, discarding this frame's JS context mid-poll before a report() issued after the click could fire. Both are fixed in sp-frame-handler.js (bounded isUSNat regex; host-gated report-before-click ordering for this site, mirroring the existing privacy-manager Save race fix).",
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_11"
+      ]
+    },
+    {
+      "name": "Der Spiegel (Custom)",
+      "url": "https://www.spiegel.de/",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9,en;q=0.8",
+      "cmp": "Sourcepoint",
+      "tier": "sp-frame",
+      "preference": "custom",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": ["sourcepoint:gdpr:privacy-manager"],
+      "handleWaitMs": 18000,
+      "note": "Sourcepoint's GDPR privacy-manager handling in sp-frame-handler.js does not read categoryPreferences: rejectFromPrivacyManager()/rejectAllPrivacyManagerCategories() always reject every category regardless of the user's granular selections. This entry currently exercises the identical code path as the default (reject_all) Der Spiegel entry above; it exists as standing regression coverage for the custom preference, not because Spiegel supports distinct custom behavior today. If genuine per-category support is added for Sourcepoint, this entry should gain its own expected-category-state assertions.",
+      "bannerSelectors": [
+        "[id^='sp_message_container']",
+        "[id^='sp_message_iframe']"
+      ],
+      "consentSelectors": [
+        ".sp_choice_type_11",
+        ".sp_choice_type_9",
+        ".sp_choice_type_12"
+      ]
+    },
+    {
       "name": "ZEIT",
       "url": "https://www.zeit.de/",
       "region": "EU",
