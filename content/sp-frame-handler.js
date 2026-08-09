@@ -541,6 +541,34 @@
     return false;
   }
 
+  // waitForAny() above confirms at least one match exists, not that every
+  // expected match has rendered -- Sourcepoint privacy managers can paint
+  // purpose rows one at a time rather than all at once, especially now that
+  // waitForAny() (via hasVisibleSelector()'s querySelectorAll fix) resolves
+  // almost immediately on the first visible row instead of only after
+  // burning several seconds of poll budget. Acting on an incomplete row set
+  // silently skips whichever purposes hadn't painted yet -- confirmed live on
+  // spiegel.de's Custom flow, where 3 of 7 purpose rows were still missing at
+  // the moment the row list was read. Waits for the matched-element count to
+  // stop changing across consecutive polls before treating the list as final.
+  async function waitForStableCount(selector, timeoutMs = 3000) {
+    const deadline = Date.now() + timeoutMs;
+    let lastCount = -1;
+    let stableStreak = 0;
+    while (Date.now() < deadline) {
+      const count = document.querySelectorAll(selector).length;
+      if (count > 0 && count === lastCount) {
+        stableStreak++;
+        if (stableStreak >= 2) return count;
+      } else {
+        stableStreak = 0;
+      }
+      lastCount = count;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return document.querySelectorAll(selector).length;
+  }
+
   function isPrivacyManagerFrame() {
     return /privacy-manager/.test(window.location.href) ||
       document.querySelector('.sp_choice_type_SAVE_AND_EXIT, button[title*="Save and Close" i], button[aria-label*="Save and Close" i], [role="switch"][aria-checked], button.pm-toggle, .pm-switch[aria-checked]') !== null;
@@ -1053,6 +1081,23 @@
     });
   }
 
+  // Purpose rows on spiegel.de's privacy manager fade in with a staggered
+  // per-row animation rather than all becoming interactive at once (confirmed
+  // live: some rows' Reject buttons were still non-visible for over a
+  // second after the row itself, and its sibling rows, already had visible
+  // buttons). A single upfront wait for the purpose list to exist isn't
+  // enough -- each row's own target button needs its own short visibility
+  // wait immediately before it's clicked.
+  async function waitForElementVisible(el, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    if (isVisible(el)) return true;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (isVisible(el)) return true;
+    }
+    return false;
+  }
+
   async function rejectFromPrivacyManager() {
     // The privacy manager's purpose list (bulk reject-all button, or the
     // per-category pur-buttons-container rows) can still be loading/rendering
@@ -1112,6 +1157,7 @@
   // the page's language (Sourcepoint renders "Accept"/"Reject", "Zustimmen"/
   // "Ablehnen", etc. with identical markup/ordering, only the label text differs).
   async function rejectAllPrivacyManagerCategories() {
+    await waitForStableCount('.pur-buttons-container');
     const containers = document.querySelectorAll('.pur-buttons-container');
     if (!containers.length) return false;
 
@@ -1119,11 +1165,18 @@
     for (const container of containers) {
       const buttons = container.querySelectorAll('button');
       const rejectButton = buttons[buttons.length - 1];
-      if (rejectButton && isVisible(rejectButton)) {
-        dispatchSyntheticClick(rejectButton);
-        rejectedAny = true;
-        await new Promise((resolve) => setTimeout(resolve, 80));
-      }
+      if (!rejectButton) continue;
+      // Rows can fade in with a staggered per-row animation (confirmed live
+      // on spiegel.de: some rows' buttons were still non-visible for over a
+      // second after sibling rows' buttons already were) -- a single
+      // isVisible() check here without a short wait/retry silently skips
+      // whichever categories hadn't finished animating in yet, meaning
+      // "reject everything" could previously leave some categories at
+      // whatever their default state was instead of actually rejecting them.
+      if (!(await waitForElementVisible(rejectButton, 2000))) continue;
+      dispatchSyntheticClick(rejectButton);
+      rejectedAny = true;
+      await new Promise((resolve) => setTimeout(resolve, 80));
     }
     return rejectedAny;
   }
