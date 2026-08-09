@@ -46,7 +46,7 @@ let i18n = {
       siteOverrideRemove: 'Remove',
       activityAccepted: 'Accepted',
       activityRejected: 'Rejected',
-      activityCcpaHandled: 'CCPA handled',
+      activityCcpaHandled: 'Privacy choices',
       activityCustom: 'Custom',
       activityHandled: 'Handled',
       timeJustNow: 'just now',

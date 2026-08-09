@@ -53,6 +53,112 @@ describe('sp-frame-handler.js — guardian top-frame guard', () => {
     expect(source).toContain('.sp_choice_type_13');
   });
 
+  it('never auto-clicks a Sourcepoint button whose own text signals a paid/subscription action (critical safety fix, live-verified)', () => {
+    // Confirmed live on theguardian.com/europe: the site's own generic
+    // "reject" choice is a €5/month subscription upsell ("Reject all and
+    // subscribe", sp_choice_type_9, NOT the usual REJECT_ALL/13), and our
+    // existing generic [aria-label*="Reject All" i] / button[title*="Reject
+    // All" i] fallback selectors DID match it via substring — confirmed via
+    // a live query before this fix. This must never auto-trigger a purchase.
+    expect(source).toContain('const PAID_ACTION_TEXT_RE = /\\bsubscri(?:be|ption|ing)\\b|\\bpay\\b|\\bpaid\\b|€\\s?\\d|\\$\\s?\\d|£\\s?\\d|\\bper\\s+month\\b|\\/\\s*month\\b|\\bpremium\\b/i;');
+    expect(source).toContain('function looksLikePaidAction(el) {');
+    expect(source).toContain('if (el && isVisible(el) && !looksLikePaidAction(el)) return el;');
+    // Also guards the privacy-manager per-category reject loop, not just the
+    // top-level wall buttons.
+    expect(source).toContain('if (looksLikePaidAction(rejectButton)) continue;');
+  });
+
+  it('honestly reports www.theguardian.com as unsupported when the only reject option is the paid wall, instead of silently doing nothing (live-verified)', () => {
+    // www.theguardian.com has no free-reject click flow wired up (unlike
+    // support.theguardian.com), so reject/custom preferences previously did
+    // nothing at all on this host with no explanation. When the visible
+    // "reject" control is the paid subscription upsell (confirmed live on
+    // theguardian.com/europe), report it the same honest way
+    // ACCEPT_OR_WARN_SITES does for other consent-or-pay walls.
+    expect(source).toContain("if (site === 'www.theguardian.com' && guardianRejectIsPaidWallOnly()) {");
+    expect(source).toContain('await reportGuardianPaidWallUnsupported(site);');
+    expect(source).toContain('function findRawCandidate(selectors) {');
+    expect(source).toContain('function guardianRejectIsPaidWallOnly() {');
+    expect(source).toContain('const candidate = findRawCandidate(GDPR_REJECT);');
+    expect(source).toContain('return !!candidate && looksLikePaidAction(candidate);');
+    expect(source).toContain('async function reportGuardianPaidWallUnsupported(site) {');
+    expect(source).toContain("type: 'REPORT_UNSUPPORTED_SITE',");
+    expect(source).toContain('allowAcceptOverride: true,');
+    // Never reports twice per frame load.
+    expect(source).toContain('if (guardianPaidWallReported) return;');
+    expect(source).toContain('guardianPaidWallReported = true;');
+  });
+
+  it('routes the accept_all + ccpaDoNotSell hybrid through the real USNat toggle instead of just closing the panel (live-verified fix)', () => {
+    // Root cause: the plain close/accept button never touches the USNat "Do
+    // not sell or share" toggle, so a user with accept_all + ccpaDoNotSell
+    // true would end up fully opted in despite wanting to stay opted out of
+    // sale. Reported live: "Accept All didn't dismiss the banner... should
+    // have clicked on the do not sell option... Accept all without do not
+    // sell worked well."
+    expect(source).toContain('async function handleGuardianAcceptFrame(site, preference, wantsUsNatOptOut = false) {');
+    expect(source).toContain('if (wantsUsNatOptOut && isGuardianSupportPrivacyManagerOpen()) {');
+    expect(source).toContain("await applyGuardianSupportPrivacyChoice(true, site, preference, 'accept_optout')");
+    expect(source).toContain('await handleGuardianAcceptFrame(site, settings.globalPreference, effectiveUsNatOptOut(settings));');
+    // The plain (no ccpaDoNotSell) accept path is unchanged and still scoped
+    // to support.theguardian.com, since it was never observed to fail on
+    // www.theguardian.com — only the new hybrid path is host-agnostic.
+    expect(source).toContain("if (site === 'support.theguardian.com' && isGuardianSupportPrivacyManagerOpen()) {");
+    expect(source).toContain("await applyGuardianSupportPrivacyChoice(false, site, preference, 'accept')");
+  });
+
+  it('watches the top frame for a bare sp_message_container/iframe shell that appears and vanishes without isSPFrame() ever passing (zeit.de counter fix, live-verified)', () => {
+    expect(source).toContain("if (window === window.top) {");
+    expect(source).toContain('void watchForSilentTopFrameSuppression(site);');
+    expect(source).toContain('async function watchForSilentTopFrameSuppression(site) {');
+    expect(source).toContain("const SP_SHELL_ONLY_SELECTORS = ['[id^=\"sp_message_container\"]', '[id^=\"sp_message_iframe\"]'];");
+    // Backs off to the normal click/report flow the instant a real banner appears.
+    expect(source).toContain('if (isSPFrame()) return;');
+    expect(source).toContain("await report(site, 'sourcepoint:silent_shell', settings.globalPreference);");
+    // Same safety gates the normal report() path relies on: cooldown, manual-open
+    // suppression, top-site disable, onboarding, and no-recent-trusted-click.
+    expect(source).toContain('if (userClickedRecently()) return;');
+    expect(source).toContain('if (await isDisabledForTopSite()) return;');
+    expect(source).toContain('if (await isManualConsentOpenSuppressed(site)) return;');
+    expect(source).toContain('if (isFrameCoolingDown(site, settings.globalPreference)) return;');
+    // Cross-frame dedup: the legitimate click-based report can come from a
+    // different frame/document (the SP iframe) than this top-frame watcher,
+    // so background's per-document dedup key can't catch a duplicate here —
+    // live-confirmed on spiegel.de's accept flow (totalActionsCount was
+    // inflated by one without this). Must key off window.location.hostname,
+    // not the `site` param — referrerHost() returns 'unknown' for a direct
+    // top-level navigation (no document.referrer/ancestorOrigins), which
+    // background normalizes before storing, so comparing the raw 'unknown'
+    // against the normalized stored value always missed the duplicate.
+    expect(source).toContain('if (await hasRecentActivityFor(window.location.hostname, settings.globalPreference)) return;');
+    expect(source).toContain('async function hasRecentActivityFor(hostname, preference, withinMs = 10000) {');
+    expect(source).toContain('if (!recent || recent.site !== hostname || recent.preference !== preference) return false;');
+    // Debounces the "gone" detection against a real banner's own transient
+    // render flicker (live-confirmed regression on spiegel.de's accept flow:
+    // an undebounced version of this watcher won a dedup race against the
+    // real, more specific sourcepoint:gdpr:frame report).
+    expect(source).toContain('if (isSPFrame() || hasVisibleSelector(SP_SHELL_ONLY_SELECTORS)) {');
+    expect(source).toContain('confirmed = false;');
+    expect(source).toContain('if (!confirmed) continue;');
+  });
+
+  it('reports a silent-suppression outcome when a visible SP surface disappears without ever being clicked (zeit.de counter fix)', () => {
+    expect(source).toContain('let sawVisibleSurface = hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS);');
+    expect(source).toContain('if (!sawVisibleSurface && hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS)) {');
+    expect(source).toContain('sawVisibleSurface = true;');
+    expect(source).toContain('if (sawVisibleSurface && !visibleNow) {');
+    expect(source).toContain('await report(site, `sourcepoint:${framework}:silent`, settings.globalPreference);');
+    // Polls independently of the MutationObserver so it reports as soon as the
+    // surface disappears, not only after the full 10s button-hydration window
+    // (validate.js's default handleWaitMs is 6s, shorter than that window).
+    expect(source).toContain('const deadline = Date.now() + 9000;');
+    expect(source).toContain('function userClickedRecently(withinMs = 15000) {');
+    // waitForDismissal() must use the same shared selector list, and must check
+    // every DOM match per selector (not just the first), matching the fix already
+    // applied to hasVisibleSelector() elsewhere in this file for the same reason.
+    expect(source).toContain('if (!hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS)) return true;');
+  });
+
   it('USNAT_OPT_OUT includes .gu-btn-dns (guardian-specific class)', () => {
     expect(source).toContain('.gu-btn-dns');
   });
@@ -646,6 +752,42 @@ describe('main.js — guardian main-world-only guards', () => {
 describe('dom-handler.js — platform/CMP coverage', () => {
   const source = readSource('content/dom-handler.js');
 
+  it('includes CookieHub handlers for accept, reject, and custom with real per-category toggles (live-verified on monday.com and semrush.com)', () => {
+    expect(source).toContain("cmp.id === 'cookiehub'");
+    expect(source).toContain('executeCookieHubFlow');
+    expect(source).toContain('setCookieHubCategoryState');
+    expect(source).toContain('.ch2-allow-all-btn');
+    expect(source).toContain('.ch2-deny-all-btn');
+    expect(source).toContain('.ch2-open-settings-btn');
+    expect(source).toContain('.ch2-save-settings-btn');
+  });
+
+  it('waits for CookieHub settings rows to actually populate before matching categories (semrush.com fix)', () => {
+    // Confirmed live: the settings panel container can render before its
+    // .ch2-settings-option rows finish populating (several seconds later).
+    expect(source).toContain("await waitForAnyVisible(['.ch2-settings-option'], 8000);");
+  });
+
+  it('falls back through multiple heading selectors for CookieHub categories, not the whole option text (semrush.com fix)', () => {
+    // Not every CookieHub theme marks its heading with role="heading" (confirmed
+    // missing live on semrush.com, present on monday.com) — must fall back
+    // through common heading tags and finally first-line-of-text, never the
+    // full container text (that already caused one false-positive match
+    // against the Necessary option's own description on monday.com).
+    expect(source).toContain('details.querySelector(\'[role="heading"], strong, b, h1, h2, h3, h4, h5, h6\')');
+    expect(source).toContain("details.textContent?.split('\\n').map((line) => line.trim()).find((line) => line.length > 0)");
+  });
+
+  it('falls back to Deny All after repeated CookieHub custom-match failures instead of leaving the modal stuck open (semrush.com fix)', () => {
+    // Confirmed live on semrush.com: without this, no category ever matched,
+    // Save was never clicked, and the settings modal stayed open indefinitely
+    // while dom-handler.js silently retried forever.
+    expect(source).toContain('const COOKIEHUB_CUSTOM_MAX_ATTEMPTS = 3;');
+    expect(source).toContain('settingsRoot.dataset.emcCookiehubAttempts');
+    expect(source).toContain('if (attempts >= COOKIEHUB_CUSTOM_MAX_ATTEMPTS) {');
+    expect(source).toContain("return 'dom:cookiehub:reject_all';");
+  });
+
   it('includes Pandectes handlers for accept, reject, custom, and CCPA-style custom flows', () => {
     expect(source).toContain('PANDECTES_ACTIONABLE_SURFACE_SELECTORS');
     expect(source).toContain("cmp.id === 'pandectes'");
@@ -691,6 +833,27 @@ describe('dom-handler.js — platform/CMP coverage', () => {
     expect(source).toContain("functionality_storage: prefs.functional ? 'granted' : 'denied'");
     expect(source).toContain("ad_storage: wantsAdvertisingCategoryConsent(prefs) ? 'granted' : 'denied'");
     expect(source).toContain("document.dispatchEvent(new Event('borlabs-cookie-consent-saved'));");
+  });
+
+  it('recognizes the legacy self-hosted "Cookie Law Info" WebToffee markup as a CookieYes actionable surface (confirmed live on iabeurope.eu)', () => {
+    // #cookie-law-info-bar was already a cmps.json detector and already had legacy
+    // click candidates below, but was missing from the actionable-surface gate that
+    // executeCookieYesFlow checks first — so legacy-markup sites were detected, then
+    // silently bailed out before ever trying those candidates.
+    expect(source).toContain('COOKIEYES_ACTIONABLE_SURFACE_SELECTORS');
+    const actionableMatch = source.match(/const COOKIEYES_ACTIONABLE_SURFACE_SELECTORS = \[([\s\S]*?)\];/);
+    expect(actionableMatch).not.toBeNull();
+    expect(actionableMatch[1]).toContain("'#cookie-law-info-bar'");
+    expect(actionableMatch[1]).toContain("'.wt-cli-cookie-bar-container'");
+
+    expect(source).toContain('.wt-cli-accept-all-btn');
+    expect(source).toContain('.cli_action_button[data-cli_action="accept"]');
+    expect(source).toContain('.cookie_action_close_header_reject');
+    expect(source).toContain('.cli_settings_button');
+    expect(source).toContain('#wt-cli-save-preferences-btn');
+    expect(source).toContain('.wt-cli-save-preferences-btn');
+    expect(source).toContain('.cli-user-preference-checkbox');
+    expect(source).toContain('async function setCheckboxStateByIdOrSelector(id, selector, checked) {');
   });
 
   it('uses Civic purpose values for IAB custom toggles and accepts the dedicated close button class', () => {
@@ -798,6 +961,27 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain("sp-message-open");
     expect(source).toContain("[id^='sp_message_container']");
     expect(source).toContain('cmp_api:Sourcepoint:guardian_reject');
+  });
+
+  it('proactively syncs Guardian USNat opt-out via the real API even when no banner is visible (live-verified fix)', () => {
+    // Root cause: tryGuardianSourcepointHandler() (driven by startGuardianRetryLoop)
+    // only calls postRejectAll when hasVisibleSourcepointSelector() is true. Guardian's
+    // CCPA layer-1 experience is typically a footer link only, with no banner shown to
+    // most US visitors, so ccpaDoNotSell was silently never applied. Live-verified fix:
+    // theguardian.com/us, ccpaDoNotSell=true, footer "Do Not Sell or Share" link opened
+    // after our fix ran — the real Sourcepoint privacy-manager toggle read
+    // aria-checked="true" (opted out), matching the extension preference.
+    expect(source).toContain('function syncGuardianUsNatConsent() {');
+    expect(source).toContain('if (_handled || _guardianProactiveSynced || !_prefs) return;');
+    expect(source).toContain('if (!GUARDIAN_REJECT_API_HOSTS.has(window.location.hostname)) return;');
+    expect(source).toContain('if (typeof window._sp_?.usnat?.postRejectAll !== \'function\') return;');
+    expect(source).toContain('if (hasVisibleSourcepointSelector()) return;');
+    expect(source).toContain("if (_prefs.ccpaDoNotSell === false) return;");
+    expect(source).toContain('invokeGuardianRejectPreference();');
+    // Wired into the existing Guardian-only retry loop, not a new global timer.
+    const loopMatch = source.match(/function startGuardianRetryLoop\(\) \{[\s\S]*?\n  \}/);
+    expect(loopMatch).not.toBeNull();
+    expect(loopMatch[0]).toContain('syncGuardianUsNatConsent();');
   });
 
   it('keeps BBC onetrust handling scoped to explicit OneTrust save controls', () => {
@@ -1481,7 +1665,10 @@ describe('frame handlers — temporary skip guards', () => {
     expect(mainSource).toContain('event.isTrusted');
     expect(mainSource).toContain('isManualConsentOpenTarget(target)');
     expect(mainSource).toContain('await isManualConsentOpenSuppressed()');
-    expect(mainSource).toContain('if (await isManualConsentOpenSuppressed()) return { ok: true, manualOpenSuppressed: true };');
+    // reportAction() carries a Usercentrics-only exemption (it must not discard a
+    // completed Usercentrics outcome reported after the user made a choice), so
+    // the suppression check here is conditional rather than an unconditional guard.
+    expect(mainSource).toContain("if (!isUsercentricsActionMethod(method) && await isManualConsentOpenSuppressed()) {\n    return { ok: true, manualOpenSuppressed: true };\n  }");
     expect(mainSource).toContain('async function flushPendingPreHandleAction(signature) {\n  if (await isManualConsentOpenSuppressed()) return false;');
     expect(mainSource.indexOf('if (!force && await isManualConsentOpenSuppressed())')).toBeLessThan(mainSource.indexOf('scheduleShopifyWatch(prefs);'));
     expect(spSource).toContain('if (await isManualConsentOpenSuppressed(site)) return;');
@@ -1768,6 +1955,8 @@ describe('sp-frame-handler.js — guardian top-frame: no click in VM', () => {
         runtime: { sendMessage: vi.fn(async () => ({})) },
       },
       sessionStorage: { getItem: vi.fn(() => null), setItem: vi.fn() },
+      setTimeout,
+      clearTimeout,
       console: { warn: vi.fn(), error: vi.fn(), log: vi.fn() },
     };
     sandbox.window.top = {};
@@ -1809,9 +1998,17 @@ describe('tcf-interceptor.js — guardian hostname: __tcfapi NOT defined', () =>
         location: { hostname: 'www.bbc.com' },
         __tcfapi: undefined,
         __tcfapiBuffer: undefined,
+        frames: {},
+        addEventListener: vi.fn(),
       },
-      document: { addEventListener: vi.fn() },
+      document: {
+        addEventListener: vi.fn(),
+        createElement: vi.fn(() => ({ style: {} })),
+        body: { appendChild: vi.fn() },
+        documentElement: { appendChild: vi.fn() },
+      },
       console: { log: vi.fn(), warn: vi.fn() },
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     };
 
     const context = vm.createContext(sandbox);
@@ -1829,11 +2026,17 @@ describe('tcf-interceptor.js — guardian hostname: __tcfapi NOT defined', () =>
         location: { hostname: 'www.bbc.com' },
         __tcfapi: undefined,
         __tcfapiBuffer: undefined,
+        frames: {},
+        addEventListener: vi.fn(),
       },
       document: {
         addEventListener: vi.fn((name, handler) => listeners.set(name, handler)),
+        createElement: vi.fn(() => ({ style: {} })),
+        body: { appendChild: vi.fn() },
+        documentElement: { appendChild: vi.fn() },
       },
       console: { log: vi.fn(), warn: vi.fn() },
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     };
 
     const context = vm.createContext(sandbox);
@@ -1852,5 +2055,92 @@ describe('tcf-interceptor.js — guardian hostname: __tcfapi NOT defined', () =>
     expect(() => sandbox.window.__tcfapi('getTCData', 2)).not.toThrow();
     expect(() => sandbox.window.__tcfapi('removeEventListener', 2)).not.toThrow();
     expect(() => sandbox.window.__tcfapi('unsupportedCommand', 2)).not.toThrow();
+  });
+
+  it('produces a non-empty tcString once prefs arrive (was hardcoded to "" before the zeit.de refresh-loop fix)', () => {
+    const source = readSource('content/tcf-interceptor.js');
+
+    const listeners = new Map();
+    const sandbox = {
+      window: {
+        location: { hostname: 'www.bbc.com' },
+        __tcfapi: undefined,
+        __tcfapiBuffer: undefined,
+        frames: {},
+        addEventListener: vi.fn(),
+      },
+      document: {
+        addEventListener: vi.fn((name, handler) => listeners.set(name, handler)),
+        createElement: vi.fn(() => ({ style: {} })),
+        body: { appendChild: vi.fn() },
+        documentElement: { appendChild: vi.fn() },
+      },
+      console: { log: vi.fn(), warn: vi.fn() },
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    };
+
+    const context = vm.createContext(sandbox);
+    vm.runInContext(source, context);
+
+    listeners.get('__emc_prefs__')?.({
+      detail: { globalPreference: 'reject_all', functional: false, analytics: false, advertising: false },
+    });
+
+    const data = sandbox.window.__tcfapi('getTCData', 2);
+    expect(typeof data.tcString).toBe('string');
+    expect(data.tcString.length).toBeGreaterThan(0);
+    // Core segment + mandatory (TCF v2.3) Disclosed Vendors segment, '.'-joined.
+    expect(data.tcString).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+  });
+
+  it('creates a hidden __tcfapiLocator iframe and relays postMessage __tcfapiCall requests (IAB cross-frame CMP discovery)', () => {
+    const source = readSource('content/tcf-interceptor.js');
+
+    const listeners = new Map();
+    const created = [];
+    const appended = [];
+    const sandbox = {
+      window: {
+        location: { hostname: 'www.bbc.com' },
+        __tcfapi: undefined,
+        __tcfapiBuffer: undefined,
+        frames: {},
+        addEventListener: vi.fn((name, handler) => listeners.set(name, handler)),
+      },
+      document: {
+        addEventListener: vi.fn(),
+        createElement: vi.fn(() => {
+          const el = { style: {} };
+          created.push(el);
+          return el;
+        }),
+        body: { appendChild: vi.fn((el) => appended.push(el)) },
+        documentElement: { appendChild: vi.fn((el) => appended.push(el)) },
+      },
+      console: { log: vi.fn(), warn: vi.fn() },
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    };
+
+    const context = vm.createContext(sandbox);
+    vm.runInContext(source, context);
+
+    // A hidden locator iframe was created and attached so cross-origin frames can find it.
+    expect(created).toHaveLength(1);
+    expect(created[0].name).toBe('__tcfapiLocator');
+    expect(appended).toContain(created[0]);
+
+    // Relays a postMessage __tcfapiCall the way a cross-origin ad-vendor iframe would send one.
+    const relay = listeners.get('message');
+    expect(typeof relay).toBe('function');
+
+    let responsePayload = null;
+    const fakeSource = { postMessage: (data) => { responsePayload = data; } };
+    relay({
+      data: { __tcfapiCall: { command: 'ping', version: 2, parameter: undefined, callId: 42 } },
+      source: fakeSource,
+    });
+
+    expect(responsePayload?.__tcfapiReturn?.callId).toBe(42);
+    expect(responsePayload?.__tcfapiReturn?.success).toBe(true);
   });
 });

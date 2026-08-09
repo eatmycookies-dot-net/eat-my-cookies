@@ -703,6 +703,7 @@
   let _trying = false;
   let _debounceTimer = null;
   let _proactiveSynced = false;
+  let _guardianProactiveSynced = false;
   let _lastTrustedClick = 0;
   let _usercentricsHostObserver = null;
   let _usercentricsShadowRoots = new WeakSet();
@@ -785,6 +786,36 @@
     } else if (typeof window.OneTrust?.Accept === 'function') {
       window.OneTrust.Accept();
     }
+  }
+
+  // Proactively syncs Guardian's USNat/CCPA opt-out via the real _sp_.usnat API
+  // even when no banner is visible. Guardian's CCPA "layer 1" experience is
+  // typically a footer link only ("US resident - Do Not Sell or Share"), with
+  // no intrusive modal shown to most visitors — tryGuardianSourcepointHandler()
+  // (driven by startGuardianRetryLoop below) only calls postRejectAll when
+  // hasVisibleSourcepointSelector() is true, so on a normal page load where no
+  // banner ever renders, ccpaDoNotSell was silently never applied at all: the
+  // footer panel's "Do Not Sell or Share" toggle stayed at Sourcepoint's
+  // unmodified default (off) regardless of the extension's setting. Same class
+  // of gap as syncOneTrustConsent() above, for OneTrust's return-visit modal
+  // suppression — mirrors that fix's shape but for Guardian's API.
+  //
+  // Deliberately does not report/count this like a normal action, matching
+  // syncOneTrustConsent(): this can run once per Guardian page/article the
+  // user browses (Guardian is a heavy SPA), and treating every silent re-sync
+  // as a new counted action would clutter recent activity and risk tripping
+  // the loop-breaker on ordinary browsing. The real, user-visible fix is the
+  // API call itself — Guardian's own footer panel reads its live state.
+  function syncGuardianUsNatConsent() {
+    if (_handled || _guardianProactiveSynced || !_prefs) return;
+    if (!GUARDIAN_REJECT_API_HOSTS.has(window.location.hostname)) return;
+    if (userClickedRecently()) return;
+    if (!hasCompleteCustomPrefs(_prefs)) return;
+    if (typeof window._sp_?.usnat?.postRejectAll !== 'function') return;
+    if (hasVisibleSourcepointSelector()) return; // a real banner is up — let the normal flow own it
+    _guardianProactiveSynced = true;
+    if (_prefs.ccpaDoNotSell === false) return; // opted-in: nothing to force via this API
+    invokeGuardianRejectPreference();
   }
 
   document.addEventListener('__emc_prefs__', (e) => {
@@ -948,6 +979,7 @@
         return;
       }
       tryHandlers();
+      syncGuardianUsNatConsent();
     }, 400);
   }
 

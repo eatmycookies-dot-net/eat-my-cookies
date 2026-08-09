@@ -1,16 +1,28 @@
-// IAB TCF v2.2 consent string encoder.
+// IAB TCF v2.3 consent string encoder.
 // Spec: https://github.com/InteractiveAdvertisingBureau/GDPR-Transparency-and-Consent-Framework
+// v2.3 transition notes: https://iabeurope.eu/all-you-need-to-know-about-the-transition-to-tcf-v2-3/
 //
-// TCF strings are base64url-encoded bitfields. For v2.2:
+// TCF strings are '.'-joined base64url segments, each independently bit-packed
+// and byte-padded. For v2.2/v2.3 the Core String layout is unchanged:
 //   - Version (6 bits): 2
 //   - Created / LastUpdated (36 bits each): deciseconds since epoch
 //   - CmpId, CmpVersion, ConsentScreen, ConsentLanguage, VendorListVersion (various)
 //   - PurposeConsents (24 bits): one per IAB purpose, 0 = denied
 //   - VendorConsents: bit range covering all vendor IDs
 //
+// v2.3's only encoding change is making the previously-optional Disclosed
+// Vendors segment mandatory (enforced by CMPs/vendors from March 1, 2026) so
+// vendors can unambiguously tell which publishers exposed them to the user.
+// This implementation doesn't model individual vendors (MaxVendorId stays 0
+// in the Core String, same as before), so the segment we append is a valid,
+// honestly-empty "no vendors disclosed" declaration rather than fabricated
+// vendor IDs — enough to keep the string spec-valid post-enforcement without
+// claiming vendor-level disclosure data this extension doesn't track.
+//
 // This implementation produces a minimal but valid TC string.
 
-const IAB_PURPOSES = 10; // purposes 1–10 defined in TCF v2.2
+const IAB_PURPOSES = 10; // purposes 1–10 defined in TCF v2.2/v2.3
+const SEGMENT_TYPE_DISCLOSED_VENDORS = 1;
 
 export function buildTCString(prefs) {
   const bits = [];
@@ -45,8 +57,21 @@ export function buildTCString(prefs) {
   push(0, 16);   // MaxVendorId
   push(0, 1);    // IsRangeEncoding (bitfield)
 
-  const bytes = bitsToBytes(bits);
-  return base64urlEncode(bytes);
+  const coreSegment = base64urlEncode(bitsToBytes(bits));
+  return `${coreSegment}.${buildDisclosedVendorsSegment()}`;
+}
+
+// Mandatory as of TCF v2.3. SegmentType(3) + MaxVendorId(16) + IsRangeEncoding(1),
+// with MaxVendorId=0 so the bitfield that would follow is zero-length.
+function buildDisclosedVendorsSegment() {
+  const bits = [];
+  const push = (value, length) => {
+    for (let i = length - 1; i >= 0; i--) bits.push((value >> i) & 1);
+  };
+  push(SEGMENT_TYPE_DISCLOSED_VENDORS, 3);
+  push(0, 16); // MaxVendorId
+  push(0, 1);  // IsRangeEncoding (bitfield, zero-length since MaxVendorId is 0)
+  return base64urlEncode(bitsToBytes(bits));
 }
 
 function purposeBits(prefs) {

@@ -121,7 +121,7 @@ What matters:
 | `nytimes.com` | US/global | GDPR + USNat; CCPA path currently drifted to Fides — see live drift note below. Do not trust the "Sourcepoint" label on this row until re-verified. |
 | `wired.com` | US/global | Sourcepoint; automation-covered |
 | `spiegel.de` | EU | Still genuinely Sourcepoint. Consent-or-pay wall with per-category privacy-manager reject — fixed August 8, 2026, see live drift note below |
-| `theguardian.com` | Global | USNat via `_sp_.usnat.postRejectAll`; dedicated handler |
+| `theguardian.com` | Global | USNat via `_sp_.usnat.postRejectAll`; dedicated handler. Some editions/sections (e.g. `/europe`) serve an EU consent-or-pay wall with no free reject option — see live drift note below (2026-08-09) |
 | `ft.com` | EU/UK | Cross-origin iframe; dedicated page-level opener + frame handler |
 
 **Live drift note (added July 19, 2026):**
@@ -150,6 +150,14 @@ Do not treat `theverge.com` as a current Sourcepoint regression target without r
   While fixing the delay above, two more real, narrower bugs surfaced and were fixed the same day, both kept in `rejectAllPrivacyManagerCategories()`:
   7. Purpose rows fade in with a staggered per-row animation rather than all becoming interactive at once — confirmed live via a MutationObserver: some rows' Reject buttons were still non-visible for over a second after sibling rows' buttons already were. The single `isVisible()` check per row (no wait/retry) could silently skip whichever categories hadn't finished animating in yet, meaning "reject everything" could previously leave some categories at whatever their unclicked default state was instead of actually rejecting them — verified this was a real (if narrow) gap by re-running with the fix in place and confirming, via the actual outgoing consent save payload (not just the UI), that the correct purposes report `consent:false`. Fixed with a per-element `waitForElementVisible()` retry (2s budget) before each click, and a `waitForStableCount()` wait for the purpose-row count itself to settle before iterating (the earlier delay fix made `waitForAny()` return almost immediately, which could otherwise catch the row list mid-render, before every row had even been added to the DOM).
   8. **Attempted and reverted: category-aware Custom support.** Built a host-gated `applySpiegelCustomPrivacyManagerCategories()` that mapped this site's 7 purpose rows (matched by their rendered German/English text, since Sourcepoint exposes no stable purpose ID reachable from this frame) to `functional`/`analytics`/`advertising`, confirmed the UI visually updated correctly per row (`aria-pressed` matched intent). But inspecting the actual outgoing save network payload (`wrapper/v2/choice/gdpr/1`, `pmSaveAndExitVariables.categories`) showed every custom purpose saved as `"consent":true` regardless of which ones had their Reject button clicked — the visible click state does not reliably reflect what Sourcepoint's own internal (likely React-managed) state machine actually persists for these custom purposes when driven via synthetic DOM events. Shipping that would have been worse than the status quo: it would look like granular consent was honored while silently over-sharing. Reverted back to Custom = full reject (matching Reject's existing behavior, which *was* independently verified correct via the same payload-inspection method: it correctly reports `consent:false` for the purposes it controls and omits the rest rather than misreporting them). Real category-aware Custom support for this site would need a fundamentally different approach — most plausibly calling Sourcepoint's own consent-management JS API directly (if one is exposed on `window` in the right frame) rather than simulating clicks — not a bigger version of the same DOM-click strategy.
+
+**Live drift note (added 2026-08-09): Guardian US CCPA proactive sync, accept_all + ccpaDoNotSell hybrid, EU consent-or-pay wall, and a critical generic-selector safety fix.**
+
+- **US CCPA "Do Not Sell or Share" not applying.** Root cause: the only automatic mechanism (`_sp_.usnat.postRejectAll`) only fired when an interactive banner happened to be visible, but Guardian's CCPA experience for most US visitors is a footer link only ("US resident - Do Not Sell or Share") with no banner shown. Added `syncGuardianUsNatConsent()` in `cmp-api-handler.js` (mirrors the existing OneTrust proactive-sync pattern), wired into `startGuardianRetryLoop()`'s interval so it runs even with no banner present. Deliberately does not report/count, matching the OneTrust precedent, to avoid cluttering the activity log on every SPA page transition. Live-verified: with `ccpaDoNotSell` on, the real footer panel now shows the Sourcepoint toggle opted out (`aria-checked="true"`), previously opted in regardless of the setting.
+- **`accept_all` + `ccpaDoNotSell=true` hybrid left the banner open.** User report: "Accept All didn't dismiss the banner in the US... should have clicked on the do not sell options... Accept all without do not sell worked well." Root cause: `handleGuardianAcceptFrame`'s plain close/accept button path never touches the USNat toggle at all, so it silently can't resolve the panel when the user also wants to stay opted out of sale — only the toggle-aware save path (`applyGuardianSupportPrivacyChoice`) can. Added a leading branch in `handleGuardianAcceptFrame(site, preference, wantsUsNatOptOut)`: when `wantsUsNatOptOut` and the privacy manager is open, route through the toggle-aware save (`accept_optout` mode) first. Confirmed live that the underlying `.pm-toggle`/switch-container markup is the same on both Guardian hosts, unlike the plain-accept path, which stays `support.theguardian.com`-only since it was never observed to fail on `www.theguardian.com`.
+- **EU consent-or-pay wall, reproduced live on `theguardian.com/europe`.** With a Europe VPN session, this page (unlike the plain GDPR banner elsewhere) offers only "Accept all" or "Reject all and subscribe" (€5/month, `sp_choice_type_9`) — no free reject path.
+  - **Critical finding:** this wall's own reject-labeled button has `title`/`aria-label` = "Reject all and subscribe", which the *existing generic* Sourcepoint fallback selectors `[aria-label*="Reject All" i]` and `button[title*="Reject All" i]` in `sp-frame-handler.js` (used across every Sourcepoint site's reject flow, not Guardian-specific) matched via plain substring — confirmed live via a direct `document.querySelector` check in the real iframe (`matched: true`). Before this fix, a reject/custom preference could have caused the extension to auto-click into a paid subscription flow. Fixed with a `PAID_ACTION_TEXT_RE` regex and `looksLikePaidAction(el)` guard, applied inside the shared `findClickTarget()` chokepoint (used by essentially every accept/reject click across every Sourcepoint site) and inside `rejectAllPrivacyManagerCategories()`'s per-row loop. This is a hard behavioral rule, not a Guardian-specific carve-out: no Sourcepoint site's generic reject path may ever click a button whose own text signals payment, regardless of which selector matched it. Live re-verified after the fix on `theguardian.com/europe` with `reject_all`: wall stays up, subscribe button untouched, zero page navigations, and — because nothing was clicked — no false "rejected" stats entry was written either.
+  - `www.theguardian.com` (non-`support` host) has no free-reject click flow wired up at all — only `support.theguardian.com` has a real reject handler (`handleGuardianSupportRejectFrame`); the generic host previously just returned early doing nothing for `reject_all`/`custom`, silently, on every page load. Since the pay-wall's "reject" control is now reliably detectable as paid-only via `looksLikePaidAction`, added `guardianRejectIsPaidWallOnly()` + `reportGuardianPaidWallUnsupported()`: when the only visible reject-labeled control is the paid upsell, report it through the same `REPORT_UNSUPPORTED_SITE` path `ACCEPT_OR_WARN_SITES` uses for other consent-or-pay walls (`repubblica.it`, `abc.es`, etc.), with `allowAcceptOverride: true` so the user can still choose to accept from the popup. Live-verified: `chrome.storage.local.unsupportedSites` now records an honest reason for `www.theguardian.com` after visiting the wall with `reject_all`, instead of the previous silent no-op with no explanation. This does not add a generic free-reject click flow for `www.theguardian.com` — that remains explicitly out of scope pending evidence a real free reject control exists on any Guardian page under this host, to avoid reintroducing the reload issues the MAIN-world-only comments on `handleGuardianAcceptFrame` already document.
 
 ### Didomi
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json` + `main.js → handleEuronews`
@@ -282,6 +290,33 @@ Consent persistence is not yet human-validated on either layer.
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
 
 Public live target still needed for stable regression coverage. Generic analytics/marketing toggle handling is implemented.
+
+### CookieHub
+**Handler files:** `dom-handler.js` (`executeCookieHubFlow`) + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `monday.com` | US/CCPA | Live-verified 2026-08-09 in a real headed Playwright run with the extension loaded: Reject All, Accept All, and Custom (per-category) all complete and are correctly recorded (`dom:cookiehub:reject_all` / `accept_all` / `custom`). Found via Wappalyzer's public CookieHub customer list, not `cookiehub.com` itself (see below). |
+
+**Live verification (2026-08-09):** The initial pass (see `docs/cmp-roadmap.md` history) added CookieHub as a declarative-only `rules/cmps.json` entry from general knowledge of the product's default theme, without a confirmed live site. `cookiehub.com`'s own marketing site was tried first (the user's example URL, `cookiehub.com/iab-tcf-v23`) but its own CookieHub integration was found genuinely broken at the time (`window.cookiehub.openDialog()` threw `Cannot read properties of undefined (reading 'appendChild')`), so it isn't a usable regression target. Wappalyzer's public "websites using CookieHub" list surfaced real customer sites instead (`monday.com`, `semrush.com`, `yotpo.com`, `plugins.jetbrains.com`, `uploadcare.com`, and others), and `monday.com` was used for live verification.
+
+That verification found the original declarative-only assumptions wrong in two ways: `.ch2-container` is a **class**, not an id (the original entry used `#ch2-container`), and — more importantly — the **first-layer banner in US/CCPA mode has no direct Deny All button at all**, only "Accept all cookies" and a "Cookie settings" opener; Deny All (`.ch2-deny-all-btn`) only exists inside the settings modal (`.ch2-settings`), alongside per-category toggles (`.ch2-settings-option`, checkbox `input.ch2-switch-value`) and a `.ch2-save-settings-btn`. So a plain declarative reject action was silently unreachable for any CCPA-region visitor. Rebuilt as a full `dom-handler.js` flow: Accept All still clicks the first-layer `.ch2-allow-all-btn` directly; Reject All tries a direct `.ch2-deny-all-btn` click first (in case EU/GDPR mode shows one on the first layer — unconfirmed, see below) and otherwise opens settings and clicks its Deny All shortcut; Custom opens settings and sets each category individually.
+
+Category toggles are matched by each option's **visible heading text** (`[role="heading"]` inside `.ch2-settings-option-details`), not CookieHub's internal `name="c-N"` attribute (publisher-configured, not a stable semantic id) — confirmed live as `c-1`=Necessary, `c-2`=Functional, `c-3`=Performance & analytics, `c-4`=Targeting on monday.com, but that numbering is not guaranteed to hold on other installs. First implementation matched against each option's *full* description text, which false-matched the Necessary option (whose own description mentions "ensuring good performance on our site") against the analytics pattern and silently tried to toggle a disabled switch — fixed by matching only the heading.
+
+**Not yet confirmed:** EU/GDPR-mode first-layer banner markup (whether it exposes a direct Reject All, unlike the confirmed US/CCPA behavior) — flagged in `private/human-validation-backlog.md` for VPN-based validation.
+
+### CookieYes
+**Handler files:** `dom-handler.js` (`executeCookieYesFlow`) + `rules/cmps.json`
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `emeablog.msasafety.com` | EU | Targeted live e2e passed July 19, 2026 (`dom:cookieyes:custom`), modern `.cky-*` widget markup. |
+| `iabeurope.eu` | EU | Legacy self-hosted "Cookie Law Info" WebToffee plugin markup, added as a fixture 2026-08-09 — see the "legacy CookieYes markup" writeup below. Not yet live/headed re-validated. Geo-gated: the plugin only renders the banner for EU-detected IPs (`wt-cli-non-eu-country` body class observed from a non-EU session), so this needs an EU IP/VPN profile to validate. |
+
+**Legacy CookieYes/"Cookie Law Info" markup gap (fixed 2026-08-09):** The current WordPress.org "CookieYes" plugin still ships two markup generations: the modern hosted `.cky-*` widget, and the older self-hosted "Cookie Law Info" plugin markup (`#cookie-law-info-bar`, `.wt-cli-cookie-bar-container`, `.cli_*` classes, `#cliSettingsPopup` modal) that some installs — including `iabeurope.eu`'s own cookie banner, which prompted this investigation — still run (confirmed live by fetching the site's actual bundled plugin JS, `wp-content/plugins/webtoffee-gdpr-cookie-consent/public/js/cookie-law-info-public.js?ver=2.5.3`). `#cookie-law-info-bar` was already a `rules/cmps.json` detector for `cookieyes`, and `executeCookieYesFlow`'s accept/reject click candidates already included the legacy ids (`#cookie_action_close_header`, `#cookie_action_close_header_reject`) — but `COOKIEYES_ACTIONABLE_SURFACE_SELECTORS`, the very first gate the function checks, only listed modern `.cky-*` selectors. So legacy-markup sites got detected (entered the `cookieyes` branch in `tryCMPs()`), then immediately bailed out via `hasVisibleSelector(COOKIEYES_ACTIONABLE_SURFACE_SELECTORS)` returning false — the working legacy click candidates were unreachable dead code. `emeablog.msasafety.com`'s own fixture (`tests/sites.json`) already listed `#cookie-law-info-bar` in `bannerSelectors`, suggesting this was a known-latent gap even before `iabeurope.eu` surfaced it.
+
+Fixed by adding `#cookie-law-info-bar` / `.wt-cli-cookie-bar-container` / `#cliSettingsPopup` / `.cli-modal-dialog` to the actionable-surface and preference-surface selector lists, adding the current plugin's actual accept/reject/settings/save selectors (`.wt-cli-accept-all-btn`, `.cli_action_button[data-cli_action="accept"]`, `.cookie_action_close_header_reject`, `.cli_settings_button`, `#wt-cli-save-preferences-btn`) as additional click candidates, and adding a `setCheckboxStateByIdOrSelector()` helper so the custom-preference category toggles (`.cli-user-preference-checkbox[data-id="checkbox-<category>"]`, mapped from the plugin's default `functional`/`performance`/`advertisement` categories — `marketing` and `non-necessary`/`others` are also tried since some installs relabel them) work alongside the modern widget's `id="ckySwitch<category>"` toggles. None of this touches the modern `.cky-*` path, so `emeablog.msasafety.com` should not regress. **Not yet live-confirmed** — no browser session with the extension loaded was available this pass; the fix is grounded in reading the actual plugin JS served by `iabeurope.eu`, not a live click-through.
 
 ### Cookie Control by Civic
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
@@ -509,11 +544,13 @@ Sites marked 🔵 are lower risk but worth a spot-check if time allows.
 | `rules/cmps.json` (Sourcepoint entry) | nytimes.com | wired.com, spiegel.de |
 | `rules/cmps.json` (Didomi entry) | euronews.com | — |
 | `rules/cmps.json` (ConsentManager entry) | dw.com, bernstein-sanitarios.pt | — |
+| `dom-handler.js` (`executeCookieHubFlow`) / `rules/cmps.json` (CookieHub entry) | monday.com | semrush.com, yotpo.com, plugins.jetbrains.com |
+| `dom-handler.js` (`executeCookieYesFlow`) | emeablog.msasafety.com (modern `.cky-*` markup) | iabeurope.eu (legacy markup, needs EU IP/VPN) |
 | `sp-frame-handler.js` | nytimes.com, theguardian.com, ft.com | wired.com, spiegel.de |
 | `main.js` (coordinator logic) | reuters.com, cnbc.com, schwab.com, ceespronkstore.com, nytimes.com, lemonde.fr, theguardian.com | dw.com, bernstein-sanitarios.pt, euronews.com |
 | `main.js` (site-specific handler) | Only the one site that handler covers | — |
 | `heuristic.js` | Any site where other tiers fail | — |
-| `tcf-interceptor.js` | nytimes.com (GDPR), spiegel.de | reuters.com |
+| `tcf-interceptor.js` | nytimes.com (GDPR), spiegel.de, zeit.de | reuters.com |
 | `bbc-*.js` | bbc.com only | — |
 | `latimes-*.js` | latimes.com only | — |
 
@@ -741,3 +778,79 @@ preserve-DOM path now installs a bounded post-save sync for expected OneTrust gr
 reopen-click sync burst, so the footer reopen reflects the latest saved toggle state without a
 page refresh. The same flow also restores the consent-run scroll baseline so the page does not
 remain stranded at the footer after OneTrust handling.
+
+## zeit.de refresh-loop investigation (2026-08-09)
+
+**Reported symptom:** `zeit.de` goes into a refresh loop with the extension active. No live
+browser session with the extension loaded was available during this pass (Claude in Chrome was
+not connected), so this is a static-analysis-driven fix, not a live-confirmed root cause —
+**flag for live/headed re-validation on `zeit.de` before treating this as closed.**
+
+**What was ruled out:**
+- Double-handling between `dom-handler.js` and `sp-frame-handler.js`: `rules/cmps.json`'s
+  `sourcepoint` entry has no `actions` block and `tryCMPs()` explicitly skips `cmp.id ===
+  'sourcepoint'`, so only `sp-frame-handler.js` ever clicks on Sourcepoint sites — no
+  double-click race.
+- The generic Sourcepoint initial-banner reject path (`sp-frame-handler.js`'s
+  `tryClick(selectors)` → `waitForDismissal()` → `report()`, used for zeit.de's direct
+  `.sp_choice_type_REJECT_ALL` button): the July 19, 2026 validator rerun
+  (`private/human-validation-backlog.md`) recorded a clean single `Consent recorded (container
+  persists but buttons gone)` result for zeit.de, which is inconsistent with a click that itself
+  triggers a full-page reload (that would either show a fresh banner or destroy the frame context
+  before `report()` runs). This doesn't rule out a *newer* regression on this path, but it means
+  the reload is not obviously explained by the click-then-reload race already documented for
+  spiegel.de's Accept flow and Sourcepoint privacy-manager Save.
+- `startFrameCooldown()` uses `sessionStorage`, which survives same-tab reloads, so a report that
+  actually lands should suppress re-triggering across a reload for 20s (60s after a detected
+  loop). If reports are landing, the loop should self-terminate quickly via
+  `background/service-worker.js`'s loop detector (3 identical reports in 12s or 5 in 45s,
+  keyed on site+preference+method+page URL) — a *user-visible* refresh loop implies the reports
+  either aren't landing, or the page URL changes on every reload so the loop key never repeats.
+
+**Root cause found (verified statically, not yet live-confirmed on zeit.de itself):**
+`content/tcf-interceptor.js` defines `window.__tcfapi` and answers `getTCData`/`addEventListener`
+with `eventStatus: 'tcloaded'`, `cmpStatus: 'loaded'`, `gdprApplies: true` — but the `tcString`
+field was hardcoded to `''` regardless of preferences. `utils/tc-string-builder.js` already
+contained a correct, spec-shaped encoder (`buildTCString`), but it's ESM-only and nothing wires
+it into the actual MAIN-world content script (no bundler; `scripts/build.mjs` just copies files
+verbatim) — it was only ever exercised by its own unit test. So every site got a stub claiming
+"consent obtained" with no actual consent string. A publisher whose ad/paywall stack validates
+the TC string itself (not just `eventStatus`) can treat an empty string as a broken/incomplete
+consent state and retry — plausible for a subscription/ad-funded German publisher like zeit.de
+with a stricter ad-tech integrity check than most sites in `tests/sites.json`.
+
+Separately, and independently confirmed by reading `content/tcf-interceptor.js`'s manifest entry:
+it runs **without** `all_frames: true`, so only the top frame gets `window.__tcfapi`. Per the IAB
+TCF spec, cross-origin frames (ad-vendor tags, prebid wrappers loaded by the publisher's own ad
+stack) can't call a same-name global in a different origin directly — they locate the CMP via a
+hidden `__tcfapiLocator` iframe and relay calls over `postMessage`. That locator frame and relay
+were entirely absent, so any cross-origin script on the page got **no** CMP response at all
+(not even the empty-string stub), which is the more likely trigger for a strict publisher's
+"no consent signal found" retry/reload behavior than the empty tcString alone.
+
+**Fix applied:** `content/tcf-interceptor.js` now (1) creates a hidden `__tcfapiLocator` iframe
+and relays `postMessage` `__tcfapiCall` requests to `window.__tcfapi`, matching what a real CMP
+does for cross-origin callers, and (2) builds a real, spec-shaped, base64url TC string from the
+same bit-packing algorithm as `utils/tc-string-builder.js` (duplicated inline — MAIN-world classic
+scripts can't `import` — rather than left as dead code only the unit test exercises). Neither
+change alters click/selector logic on any site, so no click-based flow (which never depended on
+`__tcfapi`) should regress. Covered by new tests in `tests/content/guards.test.js` (locator frame
+creation + postMessage relay, non-empty `tcString`) and unchanged existing coverage in
+`tests/unit/tc-string.test.js`. **Must still be live/headed re-validated on `zeit.de` itself**
+(and spot-checked on `nytimes.com` / `spiegel.de` per the retest matrix above) before this is
+described as resolved rather than "fix applied, pending confirmation" in
+`docs/site-support-matrix.md` or `private/human-validation-backlog.md`.
+
+## TCF v2.3 Disclosed Vendors segment (2026-08-09)
+
+Per https://iabeurope.eu/all-you-need-to-know-about-the-transition-to-tcf-v2-3/, TCF v2.3's only
+TC-string encoding change is making the previously-optional Disclosed Vendors segment mandatory,
+enforced from March 1, 2026 (TC strings created before that date remain valid indefinitely; no
+change to the TCF Policy Version field or to any CMP API command/field per that source).
+`utils/tc-string-builder.js` and `content/tcf-interceptor.js` both now append a `.`-joined
+Disclosed Vendors segment (`SegmentType=1`, `MaxVendorId=0`, `IsRangeEncoding=0`) after the Core
+String. Since this extension doesn't model individual vendors — `MaxVendorId` is already 0 in the
+Core String's own vendor-consent range — the appended segment is an honestly-empty "no vendors
+disclosed" declaration, not fabricated vendor-level data. This keeps the emitted TC string
+spec-valid post-enforcement without overclaiming vendor disclosure tracking this extension
+doesn't do.

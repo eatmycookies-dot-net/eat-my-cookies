@@ -2258,6 +2258,54 @@
       ]
     },
     {
+      "name": "IAB Europe",
+      "url": "https://iabeurope.eu/",
+      "region": "EU",
+      "locale": "en-GB",
+      "acceptLanguage": "en-GB,en;q=0.9",
+      "cmp": "CookieYes",
+      "note": "Legacy self-hosted 'Cookie Law Info' WebToffee plugin markup, not the modern '.cky-*' widget (plugin path wp-content/plugins/webtoffee-gdpr-cookie-consent/, v2.5.3 as of 2026-08-09) — this is the fixture for dom-handler.js's executeCookieYesFlow legacy-markup path. Geo-sensitive: the plugin gates the banner on GeoIP (adds a 'wt-cli-non-eu-country' body class and skips rendering the bar for non-EU IPs), so this must be validated from an EU IP/VPN profile, not the default runner.",
+      "tier": "dom",
+      "preference": "reject_all",
+      "bannerWaitMs": 35000,
+      "handleWaitMs": 16000,
+      "bannerSelectors": [
+        "#cookie-law-info-bar",
+        ".wt-cli-cookie-bar-container"
+      ],
+      "consentSelectors": [
+        ".cookie_action_close_header_reject",
+        "#cookie_action_close_header_reject"
+      ]
+    },
+    {
+      "name": "monday.com",
+      "url": "https://monday.com/",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "CookieHub",
+      "note": "Live-verified 2026-08-09 (real headed Playwright run) for reject_all, accept_all, and custom — see docs/cmp-impact-map.md. US/CCPA region: the first-layer banner has no direct Reject All, only Accept All + a Cookie settings opener, so custom/reject_all go through the settings modal.",
+      "tier": "dom",
+      "preference": "custom",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": true,
+        "ccpaDoNotSell": false,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        ".ch2-container",
+        "#ch2-dialog"
+      ],
+      "consentSelectors": [
+        ".ch2-allow-all-btn",
+        ".ch2-open-settings-btn",
+        ".ch2-deny-all-btn"
+      ]
+    },
+    {
       "name": "Content Shifu",
       "url": "https://contentshifu.com/en/",
       "region": "EU",

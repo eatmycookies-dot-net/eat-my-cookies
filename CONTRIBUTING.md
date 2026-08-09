@@ -328,6 +328,15 @@ As a rule, a small verified API path is better than a large set of guessed selec
 - `releases/` contains release artifacts and notes
 - temporary local reproduction folders such as `.tmp-*` should stay untracked
 
+## Storage Schema Changes
+
+If you rename, remove, nest, or otherwise reshape a `chrome.storage.sync` or `chrome.storage.local`
+key, add a migration — don't just update the default in `utils/storage.js` and assume old profiles
+will sort themselves out. See [docs/storage-migrations.md](docs/storage-migrations.md) for the
+mechanism (`runStorageMigrations()`, version-gated, runs once per profile) and the hard rule: a
+migration may touch a key holding a real user selection, but must carry that value forward
+correctly, never drop or reset it to a default in the process.
+
 ## Pull Request Expectations
 
 Before merging, try to keep these true:

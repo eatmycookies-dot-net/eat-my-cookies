@@ -44,6 +44,9 @@ function createStorageArea() {
     async clear() {
       for (const k of Object.keys(data)) delete data[k];
     },
+    async remove(keys) {
+      for (const k of Array.isArray(keys) ? keys : [keys]) delete data[k];
+    },
     onChanged: { addListener: vi.fn() },
   };
 }

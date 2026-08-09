@@ -337,8 +337,8 @@
     "description": "Activity preference label"
   },
   "activityCcpaHandled": {
-    "message": "CCPA handled",
-    "description": "Activity preference label"
+    "message": "Privacy choices",
+    "description": "Activity preference label. Was 'CCPA handled', which named a specific US law regardless of the visitor's actual location — this method is used for any site's Do Not Sell/Privacy Choices opt-out entry point, not only ones under CCPA."
   },
   "activityCustom": {
     "message": "Custom",

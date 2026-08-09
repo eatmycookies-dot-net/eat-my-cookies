@@ -19,6 +19,7 @@ const TEST_ONLY_HOSTS_NOT_IN_SUPPORT_MATRIX = new Set([
   'eu.renais.co.uk',
   'help.cookiewow.com',
   'help.uis.cam.ac.uk',
+  'iabeurope.eu',
   'ketch.com',
   'laola1.at',
   'liveramp.com',

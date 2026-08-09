@@ -527,13 +527,15 @@
     {
       "id": "cookieyes",
       "name": "CookieYes",
+      "note": "Actual click/toggle handling lives in dom-handler.js's executeCookieYesFlow, not these actions — tryCMPs() always takes a dedicated branch for cmp.id 'cookieyes' and continues past the generic action executor. Covers both the modern hosted '.cky-*' widget and the legacy self-hosted 'Cookie Law Info' WordPress plugin markup ('#cookie-law-info-bar', '.cli_*'/'.wt-cli-*') that the current WordPress.org CookieYes plugin still ships (confirmed live on iabeurope.eu).",
       "detectors": [
         { "type": "css_selector", "value": "#cookie-law-info-bar" },
         { "type": "css_selector", "value": ".cky-banner-element" },
         { "type": "css_selector", "value": "#cky-consent-handler" },
         { "type": "css_selector", "value": ".cky-consent-container" },
         { "type": "css_selector", "value": ".cky-btn-customize" },
-        { "type": "css_selector", "value": "button[data-cky-tag='settings-button']" }
+        { "type": "css_selector", "value": "button[data-cky-tag='settings-button']" },
+        { "type": "css_selector", "value": ".wt-cli-cookie-bar-container" }
       ],
       "actions": {
         "reject_all": [
@@ -911,6 +913,18 @@
       "name": "GoDaddy Privacy Manager",
       "detectors": [
         { "type": "css_selector", "value": "#gtm_privacy" }
+      ]
+    },
+    {
+      "id": "cookiehub",
+      "name": "CookieHub",
+      "note": "Real click/toggle handling lives in dom-handler.js's executeCookieHubFlow, not these actions — tryCMPs() takes a dedicated branch for cmp.id 'cookiehub'. Live-verified 2026-08-09 on a real customer site (monday.com, US/CCPA region): '.ch2-container' is a CLASS not an id, and the first-layer banner in US/CCPA mode has no direct Deny All — only 'Accept all cookies' and 'Cookie settings', so reject/custom must open settings first. See docs/cmp-impact-map.md for the full writeup and the still-unverified EU/GDPR-mode gap (first-layer button set not confirmed live).",
+      "detectors": [
+        { "type": "css_selector", "value": ".ch2-container" },
+        { "type": "css_selector", "value": "#ch2-dialog" },
+        { "type": "css_selector", "value": ".ch2-dialog" },
+        { "type": "css_selector", "value": ".ch2-allow-all-btn" },
+        { "type": "css_selector", "value": ".ch2-deny-all-btn" }
       ]
     }
   ]
