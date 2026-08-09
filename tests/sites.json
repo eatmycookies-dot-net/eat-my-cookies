@@ -1,5 +1,5 @@
 {
-  "version": "1.3.2",
+  "version": "1.3.3",
   "sites": [
     {
       "name": "The Guardian (EU/GDPR)",
@@ -113,7 +113,10 @@
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
       "expectActivityRecorded": true,
-      "expectedActivityMethodPrefixes": ["sourcepoint:", "dom:sourcepoint"],
+      "expectedActivityMethodPrefixes": [
+        "sourcepoint:",
+        "dom:sourcepoint"
+      ],
       "bannerSelectors": [
         "[id^='sp_message_container']"
       ],
@@ -402,7 +405,10 @@
       "cmp": "Sourcepoint",
       "tier": "sp-frame",
       "expectActivityRecorded": true,
-      "expectedActivityMethodPrefixes": ["sourcepoint:", "dom:sourcepoint"],
+      "expectedActivityMethodPrefixes": [
+        "sourcepoint:",
+        "dom:sourcepoint"
+      ],
       "handleWaitMs": 18000,
       "note": "As of August 8, 2026 the first-layer banner is a consent-or-pay wall (Consent and continue / Subscribe now / Preferences, sp_choice_type_11/9/12) with no direct Reject All (no sp_choice_type_REJECT_ALL, no data-sp-action=REJECT_ALL). Reject requires opening Preferences, which loads a separate privacy-manager frame using per-category Accept/Reject button pairs instead of a bulk reject-all control (sp-frame-handler.js's rejectFromPrivacyManager() now handles this via rejectAllPrivacyManagerCategories()). The full open-frame-load-reject-save sequence needs more time than the default handleWaitMs.",
       "bannerSelectors": [
@@ -425,7 +431,9 @@
       "tier": "sp-frame",
       "preference": "accept_all",
       "expectActivityRecorded": true,
-      "expectedActivityMethodPrefixes": ["sourcepoint:gdpr:frame"],
+      "expectedActivityMethodPrefixes": [
+        "sourcepoint:gdpr:frame"
+      ],
       "requireBannerDismissal": true,
       "note": "Accept All must click the consent-or-pay wall's Consent and continue button (sp_choice_type_11) directly, no privacy-manager detour. Fixed August 9, 2026: isUSNat's regex previously false-matched unrelated GDPR marketing copy elsewhere on the page, misclassifying this GDPR-only banner as USNat and routing Accept through USNat selectors that don't include sp_choice_type_11, so nothing was ever clicked. A second, separate bug meant even a successful click lost its own activity report: this site's SP iframe self-destructs within ~1s of a successful Accept click, discarding this frame's JS context mid-poll before a report() issued after the click could fire. Both are fixed in sp-frame-handler.js (bounded isUSNat regex; host-gated report-before-click ordering for this site, mirroring the existing privacy-manager Save race fix).",
       "bannerSelectors": [
@@ -446,7 +454,9 @@
       "tier": "sp-frame",
       "preference": "custom",
       "expectActivityRecorded": true,
-      "expectedActivityMethodPrefixes": ["sourcepoint:gdpr:privacy-manager"],
+      "expectedActivityMethodPrefixes": [
+        "sourcepoint:gdpr:privacy-manager"
+      ],
       "handleWaitMs": 18000,
       "note": "Sourcepoint's GDPR privacy-manager handling in sp-frame-handler.js does not read categoryPreferences: rejectFromPrivacyManager()/rejectAllPrivacyManagerCategories() always reject every category regardless of the user's granular selections. This entry currently exercises the identical code path as the default (reject_all) Der Spiegel entry above; it exists as standing regression coverage for the custom preference, not because Spiegel supports distinct custom behavior today. If genuine per-category support is added for Sourcepoint, this entry should gain its own expected-category-state assertions.",
       "bannerSelectors": [
@@ -1731,6 +1741,66 @@
         "statistics": false,
         "marketing": false
       }
+    },
+    {
+      "name": "FedEx",
+      "url": "https://www.fedex.com/",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "Usercentrics",
+      "tier": "cmp-api",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:", "dom:usercentrics:"],
+      "note": "Live-validated August 9, 2026 (headed real-Chrome run; this used not to work). window.UC_UI is genuinely present. Reject All can fire through either the real UC_UI service API (cmp_api:UC_UI:reject_all) or the DOM shadow-root fallback (dom:usercentrics:reject_all) depending on page-load timing -- both are legitimate, verified paths. No banner element (#usercentrics-cmp-ui) left visible afterward either way.",
+      "bannerSelectors": [
+        "#usercentrics-cmp-ui",
+        "#usercentrics-root"
+      ],
+      "consentSelectors": []
+    },
+    {
+      "name": "FedEx (Accept)",
+      "url": "https://www.fedex.com/",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "Usercentrics",
+      "tier": "cmp-api",
+      "preference": "accept_all",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:accept_all", "dom:usercentrics:accept_all"],
+      "note": "Live-validated August 9, 2026. Accept All can fire through either the real UC_UI service API (cmp_api:UC_UI:accept_all) or the DOM shadow-root fallback (dom:usercentrics:accept_all) depending on page-load timing -- both are legitimate, verified paths, not a fallback-vs-real-handler distinction. No banner element left visible afterward either way.",
+      "bannerSelectors": [
+        "#usercentrics-cmp-ui",
+        "#usercentrics-root"
+      ],
+      "consentSelectors": []
+    },
+    {
+      "name": "FedEx (Custom)",
+      "url": "https://www.fedex.com/",
+      "region": "US",
+      "locale": "en-US",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "cmp": "Usercentrics",
+      "tier": "cmp-api",
+      "preference": "custom",
+      "expectActivityRecorded": true,
+      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:custom", "dom:usercentrics:custom"],
+      "note": "Live-validated August 9, 2026. Custom can fire through either the real UC_UI service API (cmp_api:UC_UI:custom) or the DOM shadow-root fallback (dom:usercentrics:custom) depending on page-load timing -- both are legitimate, verified paths. No banner element left visible afterward either way.",
+      "categoryPreferences": {
+        "functional": true,
+        "analytics": false,
+        "advertising": false,
+        "ccpaDoNotSell": true,
+        "uncategorized": "reject"
+      },
+      "bannerSelectors": [
+        "#usercentrics-cmp-ui",
+        "#usercentrics-root"
+      ],
+      "consentSelectors": []
     },
     {
       "name": "LVMH",

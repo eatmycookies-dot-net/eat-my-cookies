@@ -40,6 +40,10 @@ That file is the best snapshot for questions like:
 
 Recent live-validated examples include:
 
+- `spiegel.de` → Sourcepoint consent-or-pay wall + privacy manager
+- `fedex.com` → Usercentrics shadow-DOM UI (Accept, Reject, Custom)
+- `lemonde.fr/en/` → Le Monde configurable CMP (Accept, Reject, Custom)
+- `dw.com` → ConsentManager privacy-settings detour
 - `cluse.com` → Pandectes
 - `barebiology.com` → Consentmo
 - `qualityminds.com` → Complianz
@@ -48,8 +52,6 @@ Recent live-validated examples include:
 - `americanas.com.br` → Privacy Tools lightweight banner
 - `banco.bradesco` → custom LGPD banner
 - `gov.br` → shared government cookie bar
-- `sp.gov.br` → Sao Paulo state LGPD modal
-- `correios.com.br` → custom cookie notice
 - `rbcroyalbank.com` → OneTrust
 - `nhl.com` → OneTrust
 - `theweathernetwork.com` → Didomi preferences modal
