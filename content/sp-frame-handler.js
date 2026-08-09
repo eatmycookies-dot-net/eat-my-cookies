@@ -512,10 +512,22 @@
     return true;
   }
 
+  // Checks every element matching each selector, not just the first DOM match.
+  // querySelector()'s first match isn't necessarily representative: Sourcepoint
+  // privacy managers render one .pur-buttons-container per purpose row, and the
+  // first one in DOM order can be a zero-size locked/essential row (confirmed
+  // on spiegel.de: getBoundingClientRect() 0x0) even while every other row is
+  // fully rendered and visible. Stopping at that first, unrepresentative match
+  // made waitForAny() below report "not visible yet" for the entire purpose
+  // list and poll its full timeout budget before proceeding, even though the
+  // list had already rendered -- a multi-second delay attributed to nothing
+  // (confirmed via a live MutationObserver: zero DOM activity for ~5.8s of a
+  // ~6s reject/custom flow, immediately followed by every reject click landing
+  // back-to-back once the timeout finally expired).
   function hasVisibleSelector(selectors) {
     return selectors.some((sel) => {
-      const el = sel.startsWith('text:') ? findByText(sel.slice(5)) : document.querySelector(sel);
-      return el && isVisible(el);
+      if (sel.startsWith('text:')) return Boolean(findByText(sel.slice(5)));
+      return Array.from(document.querySelectorAll(sel)).some((el) => isVisible(el));
     });
   }
 
