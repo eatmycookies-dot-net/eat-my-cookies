@@ -265,6 +265,12 @@ async function checkCmpFamilyDrift(page, site) {
 // ── Results ───────────────────────────────────────────────────────────────────
 const results = { pass: [], fail: [], skip: [] };
 
+// Set once in the main IIFE right after userDataDir is computed. readStatsSnapshot's
+// fallback needs this to resolve the extension ID (see resolveExtensionId) when the
+// service worker isn't visible via serviceWorkers() — which can happen from the very
+// start (system Chrome) or partway through a run (MV3 tearing down an inactive SW).
+let currentRunProfileDir = '';
+
 function pad(str, len) { return String(str).padEnd(len); }
 
 function printHeader() {
@@ -340,7 +346,6 @@ async function testSite(page, site) {
   if (await isChallengePage(page)) {
     return { status: 'SKIP', detail: 'Blocked by anti-bot challenge during banner detection' };
   }
-
   // CMP family drift check — independent of whether our own bannerSelectors matched,
   // since a stale/wrong assumption about which CMP a site uses is exactly what this
   // catches. See buildDriftDetectionCmps() for why this doesn't duplicate rules/cmps.json.
@@ -1420,6 +1425,68 @@ async function applySiteLocale(page, site) {
   }
 }
 
+// Resolves the unpacked extension's chrome-extension:// ID so a page can be
+// navigated there to reach chrome.storage when the extension's service worker
+// isn't visible via Playwright's serviceWorkers() API. This happens whenever
+// system Chrome is used (see getSystemChromeExecutable() call sites) and can
+// also happen for the *original* SW instance going dormant (MV3 tears down
+// inactive service workers) partway through a long-running site test — a
+// respawned SW isn't guaranteed to still be the same tracked target, so any
+// code relying on a single serviceWorkers() snapshot from earlier in the run
+// can silently stop working. Shared by writePreferences() and
+// readStatsSnapshot() so this resolution logic exists in exactly one place.
+function resolveExtensionIdOnce(browser, profileDir, vpnExtId) {
+  let extId =
+    browser.serviceWorkers().find(w => w.url().startsWith('chrome-extension://'))?.url().match(/^chrome-extension:\/\/([^/]+)/)?.[1]
+    ?? browser.pages().find(p => p.url().startsWith('chrome-extension://'))?.url().match(/^chrome-extension:\/\/([^/]+)/)?.[1];
+
+  if (extId) return extId;
+
+  // Read the extension ID from the browser profile's Secure Preferences.
+  // Chrome assigns a deterministic ID to each unpacked extension based on its
+  // path. The ID is stored in {profile}/Default/Secure Preferences under
+  // extensions.settings.
+  const profileDirs = [profileDir, VPN_PROFILE_DIR].filter(Boolean);
+  for (const dir of profileDirs) {
+    const secPrefsPath = path.join(dir, 'Default', 'Secure Preferences');
+    try {
+      const secPrefs = JSON.parse(fs.readFileSync(secPrefsPath, 'utf8'));
+      const extSettings = secPrefs?.extensions?.settings ?? {};
+      const knownVpnIds = new Set([
+        vpnExtId,
+        VPN_EXT_DIR ? path.basename(VPN_EXT_DIR) : null,
+      ].filter(Boolean));
+      const knownBrowserExtIds = new Set(['ghbmnnjooekpmoecnnnilnnbdlolhkhi', 'nmmhkkegccagdldgiimedpiccmgmieda', 'mhjfbmdgcfjbbpaeojofohoefgiehjai']);
+      for (const [id, extData] of Object.entries(extSettings)) {
+        if (knownVpnIds.has(id) || knownBrowserExtIds.has(id)) continue;
+        const extPath = extData?.path ?? '';
+        // Our extension is loaded from EXT_DIR (possibly via symlink); either path matches
+        if (extPath === EXT_DIR || extPath === EXT_LAUNCH_DIR ||
+            extPath.includes('emc-extension') || extPath.includes('Eat My Cookies') ||
+            extPath.includes('eat-my-cookies')) {
+          return id;
+        }
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+// Chrome writes Secure Preferences asynchronously after launch — reading it
+// immediately after launchPersistentContext resolves can race a genuinely
+// fresh profile directory (no stale file left over from a previous run to
+// paper over the timing). Poll briefly rather than accepting a single miss.
+async function resolveExtensionId(browser, profileDir = '', vpnExtId = null, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  let extId = resolveExtensionIdOnce(browser, profileDir, vpnExtId);
+  while (!extId && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    extId = resolveExtensionIdOnce(browser, profileDir, vpnExtId);
+  }
+  return extId;
+}
+
 async function writePreferences(browser, preference, site = null, profileDir = '') {
   const payload = {
     globalPreference: preference,
@@ -1480,41 +1547,7 @@ async function writePreferences(browser, preference, site = null, profileDir = '
   // serviceWorkers() API. We resolve the extension ID from the browser profile instead.
   const swPage = await browser.newPage();
   try {
-    // 1. Try to get ID from any already-visible chrome-extension:// SW or page.
-    let extId =
-      browser.serviceWorkers().find(w => w.url().startsWith('chrome-extension://'))?.url().match(/^chrome-extension:\/\/([^/]+)/)?.[1]
-      ?? browser.pages().find(p => p.url().startsWith('chrome-extension://'))?.url().match(/^chrome-extension:\/\/([^/]+)/)?.[1];
-
-    // 2. If not found, read the extension ID from the browser profile's Secure Preferences.
-    //    Chrome assigns a deterministic ID to each unpacked extension based on its path.
-    //    The ID is stored in {profile}/Default/Secure Preferences under extensions.settings.
-    if (!extId) {
-      const profileDirs = [profileDir, VPN_PROFILE_DIR].filter(Boolean);
-      for (const profileDir of profileDirs) {
-        const secPrefsPath = path.join(profileDir, 'Default', 'Secure Preferences');
-        try {
-          const secPrefs = JSON.parse(fs.readFileSync(secPrefsPath, 'utf8'));
-          const extSettings = secPrefs?.extensions?.settings ?? {};
-          const knownVpnIds = new Set([
-            vpnExtId,
-            VPN_EXT_DIR ? path.basename(VPN_EXT_DIR) : null,
-          ].filter(Boolean));
-          const knownBrowserExtIds = new Set(['ghbmnnjooekpmoecnnnilnnbdlolhkhi', 'nmmhkkegccagdldgiimedpiccmgmieda', 'mhjfbmdgcfjbbpaeojofohoefgiehjai']);
-          for (const [id, extData] of Object.entries(extSettings)) {
-            if (knownVpnIds.has(id) || knownBrowserExtIds.has(id)) continue;
-            const extPath = extData?.path ?? '';
-            // Our extension is loaded from EXT_DIR (possibly via symlink); either path matches
-            if (extPath === EXT_DIR || extPath === EXT_LAUNCH_DIR ||
-                extPath.includes('emc-extension') || extPath.includes('Eat My Cookies') ||
-                extPath.includes('eat-my-cookies')) {
-              extId = id;
-              break;
-            }
-          }
-        } catch (_) {}
-        if (extId) break;
-      }
-    }
+    const extId = await resolveExtensionId(browser, profileDir, vpnExtId);
 
     if (extId) {
       const extensionUrls = [
@@ -1565,14 +1598,27 @@ async function readStatsSnapshot(browser) {
     } catch (_) {}
   }
 
+  // Fallback: navigate to a real extension page so chrome.storage is available in
+  // page context. This mirrors writePreferences()'s fallback — a real
+  // chrome-extension://<id>/... URL, not the previous 'chrome-extension://invalid/'
+  // placeholder, which never becomes a real extension context, so reading
+  // chrome.storage there always threw and silently fell through to returning the
+  // hardcoded zero defaults regardless of what was actually in storage.
+  const extId = await resolveExtensionId(browser, currentRunProfileDir, vpnExtId);
+  if (!extId) return payload.stats;
+
   const page = await browser.newPage();
   try {
-    await page.goto('chrome-extension://invalid/', { waitUntil: 'domcontentloaded', timeout: 1000 }).catch(() => {});
-    const pages = browser.pages();
-    const extPage = pages.find((candidate) => candidate.url().startsWith('chrome-extension://')) ?? page;
-    const result = await extPage.evaluate((defaults) => new Promise((resolve) => chrome.storage.local.get(defaults, resolve)), payload);
-    return result?.stats ?? payload.stats;
-  } catch (_) {
+    for (const url of [
+      `chrome-extension://${extId}/popup/popup.html`,
+      `chrome-extension://${extId}/onboarding/onboarding.html`,
+    ]) {
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
+        const result = await page.evaluate((defaults) => new Promise((resolve) => chrome.storage.local.get(defaults, resolve)), payload);
+        if (result?.stats) return result.stats;
+      } catch (_) {}
+    }
     return payload.stats;
   } finally {
     if (!page.isClosed()) await page.close();
@@ -1632,9 +1678,17 @@ async function warmupExtensionRoundTrip(browser) {
 
   const launchExtDir = prepareExtensionLaunchDir(EXT_DIR);
   const extPaths = useVpn ? [launchExtDir, VPN_EXT_DIR] : [launchExtDir];
+  // Always launch with a real, known profile directory rather than an empty
+  // string. An empty string still works (Playwright creates an ephemeral
+  // profile internally), but then nothing in this script knows its real path —
+  // which breaks resolveExtensionId()'s Secure Preferences fallback, the only
+  // thing that works when the extension's service worker isn't visible via
+  // serviceWorkers() (system Chrome from the very start, or an MV3 service
+  // worker going dormant partway through a long site test).
   const userDataDir = useVpn
     ? createFreshVpnRunProfile(VPN_PROFILE_DIR)
-    : '';
+    : fs.mkdtempSync(path.join(os.tmpdir(), 'emc-run-profile-'));
+  currentRunProfileDir = userDataDir;
 
   const headless = !headed && !useVpn;
   const launchOptions = {
@@ -1680,10 +1734,21 @@ async function warmupExtensionRoundTrip(browser) {
       } catch (_) {}
     }
   } else {
+    // Prefer Playwright's own Chromium channel over real system Chrome. Real
+    // Chrome (both raw executablePath and channel:'chrome') never exposes the
+    // extension's service worker via serviceWorkers(), forcing writePreferences()
+    // and readStatsSnapshot() onto their fallback path — navigating directly to
+    // the extension's popup/onboarding page. Real Chrome actively blocks that
+    // navigation (net::ERR_BLOCKED_BY_CLIENT — MV3 restricts direct external
+    // navigation to those pages), so the fallback can never succeed either:
+    // preferences never get written, onboardingComplete never becomes true, and
+    // every site silently does nothing for the rest of the run. Chromium's
+    // channel build doesn't have this gap, so put it first and only fall back to
+    // real Chrome if Chromium isn't installed.
     const headedCandidates = [
+      { channel: 'chromium' },
       getSystemChromeExecutable() ? { executablePath: getSystemChromeExecutable() } : null,
       { channel: 'chrome' },
-      { channel: 'chromium' },
     ].filter(Boolean);
     for (const candidate of headedCandidates) {
       try {
@@ -1745,7 +1810,7 @@ async function warmupExtensionRoundTrip(browser) {
   }
 
   await browser.close();
-  if (useVpn) {
+  if (userDataDir) {
     try {
       fs.rmSync(userDataDir, { recursive: true, force: true });
     } catch (_) {}

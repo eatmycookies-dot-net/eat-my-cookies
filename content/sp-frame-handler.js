@@ -163,8 +163,28 @@
     if (TEMPORARILY_UNSUPPORTED_TOP_SITES.has(site) || TEMPORARILY_UNSUPPORTED_TOP_SITES.has(window.location.hostname)) return;
 
     const isFTShell = isPotentialFTShell(site);
-    if (!isSPFrame() && !isFTShell) return;
-    if (!hasConsentSignals() && !isFTShell && !isSourcepointHost(window.location.hostname)) return;
+    // isSPFrame()/hasConsentSignals() rely on DOM content (sp_choice_type classes,
+    // data-sp-action, cookie/consent keywords) that Sourcepoint's own JS renders
+    // asynchronously. On document_idle — when this content script first runs — that
+    // content may not exist yet, especially on custom first-party CNAME domains
+    // (e.g. sp-spiegel-de.spiegel.de) that also don't match isSourcepointHost()'s
+    // hostname fast path. Without a retry, a page where SP simply hasn't painted
+    // yet looks identical to a page with no SP banner at all, and this frame gives
+    // up permanently with no later chance to catch the banner once it renders.
+    const gateDeadline = Date.now() + 6000;
+    let framePresent = isSPFrame();
+    while (!framePresent && !isFTShell && Date.now() < gateDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      framePresent = isSPFrame();
+    }
+    if (!framePresent && !isFTShell) return;
+
+    let signalsPresent = hasConsentSignals();
+    while (!signalsPresent && !isFTShell && !isSourcepointHost(window.location.hostname) && Date.now() < gateDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      signalsPresent = hasConsentSignals();
+    }
+    if (!signalsPresent && !isFTShell && !isSourcepointHost(window.location.hostname)) return;
     if (await isDisabledForTopSite()) return;
     if (await isManualConsentOpenSuppressed(site)) return;
 
@@ -228,9 +248,18 @@
         if (await applySourcepointUsNatPrivacyChoice(wantsUsNatOptOut, site, settings.globalPreference)) {
           return;
         }
-      } else if (!accept && await rejectFromPrivacyManager()) {
-        await report(site, `sourcepoint:${framework}:privacy-manager`, settings.globalPreference);
-        return;
+      } else if (!accept) {
+        const rejected = await rejectFromPrivacyManager();
+        if (rejected) {
+          // Report before clicking Save — saving can trigger a full page reload
+          // (confirmed on spiegel.de), which can destroy this frame's execution
+          // context mid-click and silently drop the report if it were sent after.
+          // A confirmed rejection of every category plus a genuinely visible Save
+          // control is itself sufficient evidence of a completed save.
+          await report(site, `sourcepoint:${framework}:privacy-manager`, settings.globalPreference);
+          clickPrivacyManagerSaveAndExit();
+          return;
+        }
       }
       return;
     }
@@ -444,6 +473,16 @@
       const el = sel.startsWith('text:') ? findByText(sel.slice(5)) : document.querySelector(sel);
       return el && isVisible(el);
     });
+  }
+
+  async function waitForAny(selectors, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    if (hasVisibleSelector(selectors)) return true;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      if (hasVisibleSelector(selectors)) return true;
+    }
+    return false;
   }
 
   function isPrivacyManagerFrame() {
@@ -959,22 +998,78 @@
   }
 
   async function rejectFromPrivacyManager() {
-    const rejectClicked = tryClick([
+    // The privacy manager's purpose list (bulk reject-all button, or the
+    // per-category pur-buttons-container rows) can still be loading/rendering
+    // when this frame's content script first runs — wait for one of them
+    // before deciding there's nothing to click.
+    await waitForAny([
       '.sp_choice_type_REJECT_ALL',
       'button[data-sp-action="REJECT_ALL"]',
-      'text:reject all',
-      'text:decline all',
-      'text:refuse all',
-      'text:reject',
+      '.pur-buttons-container',
+    ], 6000);
+
+    // Most Sourcepoint privacy managers expose a single bulk reject-all control.
+    let rejectClicked = tryClick([
+      '.sp_choice_type_REJECT_ALL',
+      'button[data-sp-action="REJECT_ALL"]',
     ]);
     if (rejectClicked) {
       await new Promise((resolve) => setTimeout(resolve, 120));
+    } else {
+      // Some builds (e.g. spiegel.de as of August 2026) present each purpose as its
+      // own Accept/Reject pair instead of a bulk control — reject every row.
+      rejectClicked = await rejectAllPrivacyManagerCategories();
+      if (!rejectClicked) {
+        // Last-resort single-match text fallback for any other layout not covered above.
+        rejectClicked = tryClick(['text:reject all', 'text:decline all', 'text:refuse all', 'text:reject']);
+        if (rejectClicked) {
+          await new Promise((resolve) => setTimeout(resolve, 120));
+        }
+      }
     }
 
+    // Never save if nothing was actually rejected — that would silently persist
+    // whatever the page's default (typically accept-leaning) state is and still
+    // report a successful reject_all.
+    if (!rejectClicked) return false;
+
     const saveButton = document.querySelector('.sp_choice_type_SAVE_AND_EXIT');
-    if (!saveButton || !isVisible(saveButton)) return false;
-    dispatchSyntheticClick(saveButton);
-    return waitForDismissal(5000);
+    return Boolean(saveButton && isVisible(saveButton));
+  }
+
+  // Clicks Save and Exit without waiting to confirm dismissal afterward — saving
+  // can trigger a full page reload (confirmed on spiegel.de), which can destroy
+  // this frame's execution context mid-wait. The caller reports success before
+  // calling this, once rejection + a genuinely visible Save control are both
+  // confirmed, since that confirmation can't rely on anything after the click.
+  function clickPrivacyManagerSaveAndExit() {
+    const saveButton = document.querySelector('.sp_choice_type_SAVE_AND_EXIT');
+    if (saveButton && isVisible(saveButton)) {
+      dispatchSyntheticClick(saveButton);
+    }
+  }
+
+  // Rejects every purpose row in Sourcepoint privacy managers that use per-category
+  // Accept/Reject button pairs (class="pur-buttons-container") instead of a single
+  // bulk reject-all control. The Reject button is consistently the last button in
+  // each pair — confirmed structural, not text-based, so this works regardless of
+  // the page's language (Sourcepoint renders "Accept"/"Reject", "Zustimmen"/
+  // "Ablehnen", etc. with identical markup/ordering, only the label text differs).
+  async function rejectAllPrivacyManagerCategories() {
+    const containers = document.querySelectorAll('.pur-buttons-container');
+    if (!containers.length) return false;
+
+    let rejectedAny = false;
+    for (const container of containers) {
+      const buttons = container.querySelectorAll('button');
+      const rejectButton = buttons[buttons.length - 1];
+      if (rejectButton && isVisible(rejectButton)) {
+        dispatchSyntheticClick(rejectButton);
+        rejectedAny = true;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+    }
+    return rejectedAny;
   }
 
   async function waitForDismissal(timeoutMs = 4000) {

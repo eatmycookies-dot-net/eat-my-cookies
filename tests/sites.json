@@ -403,7 +403,8 @@
       "tier": "sp-frame",
       "expectActivityRecorded": true,
       "expectedActivityMethodPrefixes": ["sourcepoint:", "dom:sourcepoint"],
-      "note": "As of August 8, 2026 the first-layer banner is a consent-or-pay wall (Consent and continue / Subscribe now / Preferences, sp_choice_type_11/9/12) with no direct Reject All (no sp_choice_type_REJECT_ALL, no data-sp-action=REJECT_ALL). Reject requires opening Preferences into a separate privacy-manager frame that uses per-category Accept/Reject button pairs instead of a bulk reject-all control. This site is a known reject-flow gap — see docs/cmp-impact-map.md.",
+      "handleWaitMs": 18000,
+      "note": "As of August 8, 2026 the first-layer banner is a consent-or-pay wall (Consent and continue / Subscribe now / Preferences, sp_choice_type_11/9/12) with no direct Reject All (no sp_choice_type_REJECT_ALL, no data-sp-action=REJECT_ALL). Reject requires opening Preferences, which loads a separate privacy-manager frame using per-category Accept/Reject button pairs instead of a bulk reject-all control (sp-frame-handler.js's rejectFromPrivacyManager() now handles this via rejectAllPrivacyManagerCategories()). The full open-frame-load-reject-save sequence needs more time than the default handleWaitMs.",
       "bannerSelectors": [
         "[id^='sp_message_container']",
         "[id^='sp_message_iframe']"
