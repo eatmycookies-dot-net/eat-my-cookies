@@ -926,6 +926,16 @@
         { "type": "css_selector", "value": ".ch2-allow-all-btn" },
         { "type": "css_selector", "value": ".ch2-deny-all-btn" }
       ]
+    },
+    {
+      "id": "fides",
+      "name": "Fides",
+      "note": "Real logic lives in cmp-api-handler.js's CMP_HANDLERS.Fides (Tier 2, MAIN world) — window.Fides.updateConsent() is a verified real API, confirmed live 2026-08-09 on nytimes.com and wired.com (both had drifted from Sourcepoint to Fides). No declarative actions here: Fides frequently renders no visible banner at all for a given visitor/geo while still exposing actionable consent via the API, so a click-based fallback would miss most real cases. See docs/cmp-impact-map.md for the full writeup.",
+      "detectors": [
+        { "type": "js_global", "value": "window.Fides" },
+        { "type": "css_selector", "value": "[id^=\"fides-\"], [class*=\"fides-banner\"]" }
+      ],
+      "actions": {}
     }
   ]
 }

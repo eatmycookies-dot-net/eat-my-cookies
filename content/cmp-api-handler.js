@@ -386,10 +386,22 @@
       if (!w.Didomi) return false;
       if (prefs.globalPreference === 'accept_all') {
         w.Didomi?.setUserAgreeToAll?.();
-      } else {
-        w.Didomi?.setUserDisagreeToAll?.();
+        startDidomiWallCleanupWatch();
+        return true;
       }
-      return true;
+      if (prefs.globalPreference !== 'custom') {
+        w.Didomi?.setUserDisagreeToAll?.();
+        startDidomiWallCleanupWatch();
+        return true;
+      }
+      // Custom mode: was previously collapsed into setUserDisagreeToAll() above with
+      // no per-purpose logic at all — confirmed live on elpais.com 2026-08-10 (user
+      // report: Functional/Analytics on in the popup, but every purpose showed
+      // "Disagree" on reopen). getPurposes()'s "iab" namespace entries are Didomi's
+      // standardized TCF purpose slugs, identical across every Didomi TCF deployer
+      // (confirmed via live API introspection), so this classification is generic,
+      // not elpais.com-specific.
+      return applyDidomiCustomConsent(w, prefs);
     },
     truste: (w, prefs) => {
       if (!w.truste?.eu?.bindMap) return false;
@@ -637,7 +649,493 @@
       setTimeout(() => { try { location.reload(); } catch (_) {} }, 0);
       return true;
     },
+    // Fides (ethyca/fides, open source). Live-confirmed 2026-08-09 on nytimes.com and
+    // wired.com — both had drifted from Sourcepoint to Fides, which this codebase had no
+    // handler for at all, so the CCPA/opt-out path silently fell back to heuristic.js's
+    // generic text-match fallback (no category awareness, doesn't run for custom).
+    //
+    // window.Fides.updateConsent({ consent: { <notice_key>: boolean, ... } }) is the real,
+    // documented API — confirmed live it synchronously updates window.Fides.consent and the
+    // fides_consent cookie. Deliberately API-only, no DOM clicking: Fides' own banner buttons
+    // call this same method internally, so a verified API call is more reliable than guessing
+    // locale/theme-specific button selectors (and Fides frequently renders no visible banner
+    // at all for a given visitor/geo — confirmed live: wired.com showed zero visible banner
+    // elements for a default US session even though window.Fides was fully initialized).
+    //
+    // notice_key naming is NOT a stable vendor-wide convention — it's configured per deployer.
+    // Confirmed live: nytimes.com uses a single combined "targeted_advertising_gpp_us_national"
+    // notice (consent_mechanism: opt_out), while wired.com's default US session serves six
+    // notices that are ALL consent_mechanism: "notice_only" (no real choice to make — pure
+    // disclosures). Category mapping below is keyword-based against notice_key + name text,
+    // not hardcoded per site, and skips notice_only entries entirely since there's nothing to
+    // set for them.
+    Fides: async (w, prefs) => {
+      const fides = w.Fides;
+      if (!fides?.initialized) return false;
+
+      // TCF-enabled experiences (GDPR/EU) render a real, always-visible banner
+      // (#fides-banner-container) plus a separate hidden-by-default modal
+      // (#fides-modal) — confirmed live 2026-08-09 via a real DE VPN session on
+      // both nytimes.com and wired.com after a user report that the banner stayed
+      // up despite this handler reporting success. Root cause: updateConsent()
+      // below correctly sets Fides.consent/tcf_purpose_consents/the fides_string
+      // cookie (confirmed via network + cookie inspection), but that's a
+      // completely separate concern from the banner's own visibility — only
+      // Fides' own banner button click handlers resolve that. Must click the
+      // real buttons for TCF experiences; the notice-level API alone silently
+      // leaves the banner on screen.
+      if (hasFidesTcfBanner()) {
+        return await handleFidesTcfBanner(prefs);
+      }
+
+      // No banner/modal currently on screen. For a TCF-enabled site this can
+      // mean Fides is trusting an existing decision cookie and will not show
+      // the banner again on this or any future visit — confirmed live: after
+      // Reject All was applied, switching the extension's own preference to
+      // Accept All and revisiting produced zero visible banner and zero
+      // re-applied consent. Identical in shape to the known OneTrust
+      // "modal suppressed on return visit" gap syncOneTrustConsent() already
+      // solves — same fix shape here via Fides.showModal().
+      if (isFidesTcfSite()) {
+        return await syncFidesTcfConsent(prefs);
+      }
+
+      const notices = fides.experience?.privacy_notices;
+      if (!Array.isArray(notices) || notices.length === 0) return false;
+
+      const actionable = notices.filter((n) => {
+        if (!n?.notice_key || n.consent_mechanism === 'notice_only') return false;
+        return classifyFidesNotice(n) !== null;
+      });
+      if (actionable.length === 0) return false;
+
+      const current = fides.consent || {};
+      const desired = {};
+      for (const notice of actionable) {
+        desired[notice.notice_key] = desiredFidesNoticeValue(classifyFidesNotice(notice), prefs);
+      }
+      const changed = actionable.some((n) => Boolean(current[n.notice_key]) !== desired[n.notice_key]);
+      if (!changed) return false;
+
+      try {
+        fides.updateConsent({ consent: desired });
+      } catch (_) {
+        return false;
+      }
+
+      const verified = await waitForFidesConsentState(desired, 2000);
+      if (!verified) return false;
+
+      _handled = true;
+      document.dispatchEvent(new CustomEvent('__emc_handled__', {
+        detail: { method: prefs.globalPreference === 'custom' ? 'cmp_api:Fides:custom' : 'cmp_api:Fides' },
+      }));
+      return false;
+    },
   };
+
+  // ── Didomi custom-consent purpose classification ────────────────────────────
+  // These IDs are Didomi's own standardized slugs for the IAB TCF v2.2 purposes
+  // (namespace: 'iab' in getPurposes()'s output) — confirmed live via VPN on
+  // elpais.com 2026-08-10 (Object.keys(Didomi.getPurposes())). They are stable
+  // across every Didomi TCF deployment, not specific to any one site, since
+  // Didomi's SDK bundle assigns them, not the deployer. Follows the same
+  // 'personalization' (no "ad" qualifier) => functional convention already used
+  // elsewhere in this codebase (see main.js/dom-handler.js's 'personalization'
+  // label mappings) rather than lumping content personalization in with ads.
+  const DIDOMI_ADVERTISING_PURPOSE_IDS = new Set([
+    'select_basic_ads', 'create_ads_profile', 'select_personalized_ads',
+    'measure_ad_performance', 'geolocation_data', 'device_characteristics',
+    // 'cookies_marketing'/'cookies_social' are Didomi's own standard vendor-category
+    // IDs (a separate, non-TCF grouping scheme it also exposes alongside the IAB
+    // purposes) — confirmed live alongside 'cookies_analytics' on elpais.com
+    // 2026-08-10. No dedicated 'social' bucket exists in our four-category model;
+    // social widgets/trackers default to the advertising gate rather than falling
+    // through to the uncategorized fallback, since that's the more privacy-correct
+    // default when advertising is off.
+    'cookies_marketing', 'cookies_social',
+  ]);
+  const DIDOMI_ANALYTICS_PURPOSE_IDS = new Set([
+    'measure_content_performance', 'market_research', 'improve_products', 'cookies_analytics',
+  ]);
+  const DIDOMI_FUNCTIONAL_PURPOSE_IDS = new Set([
+    'cookies', 'create_content_profile', 'select_personalized_content', 'use_limited_data_to_select_content',
+  ]);
+  // Fallback text patterns for purpose IDs that are neither the standard IAB
+  // slugs nor the standard Didomi vendor-category IDs above (i.e. genuinely
+  // deployer-custom, e.g. El País/PRISA's 'data_sharing'/'data_sharing_web') —
+  // same spirit as FIDES_ADVERTISING_RE.
+  const DIDOMI_CUSTOM_ADVERTISING_RE = /adverti|marketing|\bsocial\b|\bads?\b|\bad_|_ad\b|\bsale\b|\bsell(?:ing)?\b|data_sharing|shar(?:e|ing)[\s\S]{0,20}data/i;
+  const DIDOMI_CUSTOM_ANALYTICS_RE = /analytic|performance|measur|statistic/i;
+  const DIDOMI_CUSTOM_FUNCTIONAL_RE = /functional|preference|personalization/i;
+
+  function classifyDidomiPurpose(purposeId) {
+    if (DIDOMI_ADVERTISING_PURPOSE_IDS.has(purposeId)) return 'advertising';
+    if (DIDOMI_ANALYTICS_PURPOSE_IDS.has(purposeId)) return 'analytics';
+    if (DIDOMI_FUNCTIONAL_PURPOSE_IDS.has(purposeId)) return 'functional';
+    if (DIDOMI_CUSTOM_ADVERTISING_RE.test(purposeId)) return 'advertising';
+    if (DIDOMI_CUSTOM_ANALYTICS_RE.test(purposeId)) return 'analytics';
+    if (DIDOMI_CUSTOM_FUNCTIONAL_RE.test(purposeId)) return 'functional';
+    return 'uncategorized';
+  }
+
+  function desiredDidomiPurposeValue(bucket, prefs) {
+    switch (bucket) {
+      case 'advertising': return Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;
+      case 'analytics': return Boolean(prefs.analytics);
+      case 'functional': return Boolean(prefs.functional) || prefs.uncategorized === 'accept';
+      default: return prefs.uncategorized === 'accept';
+    }
+  }
+
+  // Applies real per-purpose granular consent for Didomi's custom mode via the
+  // documented setUserConsentStatusForAll(enabledPurposeIds, disabledPurposeIds,
+  // enabledVendorIds, disabledVendorIds) API — confirmed live via
+  // fn.toString() introspection 2026-08-10 that this (not the deprecated
+  // 3-arg setUserConsentStatus) is Didomi's current non-deprecated entry
+  // point (it calls ConsentService.setUserConsentStatus directly). Purpose 1
+  // ('cookies', strictly-necessary-adjacent storage) always lands in the
+  // functional bucket, matching the "purpose 1: always grant" convention used
+  // elsewhere in this codebase (tcf-interceptor.js's purposeBits()). Vendor
+  // arrays are intentionally left empty — this codebase doesn't model
+  // individual ad-tech vendors (same accepted limitation as the TCF core
+  // string built in tcf-interceptor.js), so only purpose-level granularity is
+  // attempted here, consistent with the Fides TCF custom-mode boundary the
+  // user already reviewed and accepted for this same class of gap.
+  function applyDidomiCustomConsent(w, prefs) {
+    const didomi = w.Didomi;
+    if (typeof didomi?.setUserConsentStatusForAll !== 'function' || typeof didomi?.getPurposes !== 'function') {
+      return false;
+    }
+    let rawPurposes;
+    try {
+      rawPurposes = didomi.getPurposes();
+    } catch (_) {
+      return false;
+    }
+    const purposeIds = rawPurposes && typeof rawPurposes === 'object' ? Object.keys(rawPurposes) : [];
+    if (purposeIds.length === 0) return false;
+
+    const enabled = [];
+    const disabled = [];
+    for (const id of purposeIds) {
+      const bucket = classifyDidomiPurpose(id);
+      (desiredDidomiPurposeValue(bucket, prefs) ? enabled : disabled).push(id);
+    }
+
+    try {
+      didomi.setUserConsentStatusForAll(enabled, disabled, [], []);
+    } catch (_) {
+      return false;
+    }
+
+    // Unlike setUserAgreeToAll()/setUserDisagreeToAll(), this API-level call does
+    // NOT dismiss Didomi's own notice/preferences UI on its own — confirmed live
+    // 2026-08-10: #didomi-notice stayed visible 8+ seconds after a correct
+    // setUserConsentStatusForAll() call with no explicit hide. Same class of gap
+    // already fixed for Fides this session (consent applied underneath, banner
+    // never actually leaves the screen). Mirrors the existing
+    // `w.Cookiebot.hide?.()` pattern in this file.
+    try { didomi.notice?.hide?.(); } catch (_) {}
+    try { didomi.preferences?.hide?.(); } catch (_) {}
+    startDidomiWallCleanupWatch();
+
+    return true;
+  }
+
+  // ── Didomi/PRISA leftover backdrop cleanup ──────────────────────────────────
+  // `#acceptationCMPWall.cmp-overlay` is PRISA's own CMP-integration wrapper
+  // around the raw Didomi SDK (loaded from cmp.prisa.com, separate from Didomi's
+  // own #didomi-popup/#didomi-notice) — confirmed live on elpais.com 2026-08-11
+  // via a real user screenshot showing it stuck full-viewport
+  // (pointer-events: auto, z-index: 5000, aria-hidden="false") well after
+  // Didomi's own popup was already gone. It's normally transient (self-clears
+  // ~1s after Didomi resolves in most runs, confirmed via repeated live
+  // reproduction), but not reliably so — hence the watch loop below rather than
+  // a single fire-and-forget hide. It's an empty div (no modal content of its
+  // own), unlike the site's real subscription paywall, so clearing it once
+  // Didomi's consent flow has resolved doesn't touch anything the user actually
+  // needs to see or interact with.
+  const DIDOMI_WALL_SELECTOR = '#acceptationCMPWall.cmp-overlay';
+  const DIDOMI_WALL_CLEANUP_WATCH_MS = 8000;
+  let _didomiWallCleanupObserver = null;
+  let _didomiWallCleanupTimer = null;
+
+  function closeDidomiLeftoverWall() {
+    const wall = document.querySelector(DIDOMI_WALL_SELECTOR);
+    if (!wall) return;
+    wall.remove();
+    // PRISA's own wall script also locks page scroll while this backdrop is
+    // shown, via a 'cmp-scroll-lock' class on <body> (confirmed live 2026-08-11:
+    // after the wall div itself was removed, the page remained unscrollable,
+    // and the user confirmed the exact class name from live DOM inspection) —
+    // normally undone by their own close handler, but since we remove the
+    // backdrop directly instead of going through that handler, the scroll lock
+    // is left behind. 'scroll-lock' is also cleared as a generic fallback in
+    // case another PRISA property names it differently; the inline-style branch
+    // covers a direct-style lock instead of a class-based one.
+    for (const el of [document.documentElement, document.body]) {
+      if (!el) continue;
+      el.classList?.remove('scroll-lock', 'cmp-scroll-lock');
+      if (el.style?.overflow === 'hidden') el.style.overflow = '';
+    }
+  }
+
+  function startDidomiWallCleanupWatch() {
+    closeDidomiLeftoverWall();
+    try { _didomiWallCleanupObserver?.disconnect(); } catch (_) {}
+    try { clearTimeout(_didomiWallCleanupTimer); } catch (_) {}
+    const root = document.body ?? document.documentElement;
+    if (root) {
+      _didomiWallCleanupObserver = new MutationObserver(() => closeDidomiLeftoverWall());
+      try {
+        _didomiWallCleanupObserver.observe(root, { childList: true, subtree: true });
+      } catch (_) {}
+    }
+    try {
+      _didomiWallCleanupTimer = setTimeout(() => {
+        try { _didomiWallCleanupObserver?.disconnect(); } catch (_) {}
+        _didomiWallCleanupObserver = null;
+        _didomiWallCleanupTimer = null;
+      }, DIDOMI_WALL_CLEANUP_WATCH_MS);
+    } catch (_) {}
+  }
+
+  const FIDES_ESSENTIAL_RE = /essential|necessary|strictly required/i;
+  const FIDES_ADVERTISING_RE = /adverti|target.{0,15}ad|\bsale\b|\bsell(?:ing)?\b|shar(?:e|ing)[\s\S]{0,20}(personal|data)|\bgpp\b.*\bus\b|\bccpa\b/i;
+  const FIDES_ANALYTICS_RE = /analytic|performance|measur/i;
+  const FIDES_FUNCTIONAL_RE = /functional/i;
+
+  // Returns null for notices that should never be touched (essential/necessary — no real
+  // choice regardless of what consent_mechanism the site declared), otherwise one of our
+  // four category buckets. 'uncategorized' is the fallback for anything unrecognized, same
+  // as every other CMP integration in this codebase.
+  function classifyFidesNotice(notice) {
+    const text = `${notice.notice_key || ''} ${notice.name || ''}`;
+    if (FIDES_ESSENTIAL_RE.test(text)) return null;
+    if (FIDES_ADVERTISING_RE.test(text)) return 'advertising';
+    if (FIDES_ANALYTICS_RE.test(text)) return 'analytics';
+    if (FIDES_FUNCTIONAL_RE.test(text)) return 'functional';
+    return 'uncategorized';
+  }
+
+  function desiredFidesNoticeValue(bucket, prefs) {
+    switch (bucket) {
+      case 'advertising': return Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;
+      case 'analytics': return Boolean(prefs.analytics);
+      case 'functional': return Boolean(prefs.functional) || prefs.uncategorized === 'accept';
+      default: return prefs.uncategorized === 'accept';
+    }
+  }
+
+  async function waitForFidesConsentState(desired, timeoutMs = 2000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const current = window.Fides?.consent || {};
+      if (Object.entries(desired).every(([key, value]) => Boolean(current[key]) === value)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
+  }
+
+  // ── Fides TCF (GDPR/EU) banner + modal ──────────────────────────────────────
+  // Both container ids are Fides' own framework markup (same JS bundle across
+  // deployers), not site-branded — confirmed identical on nytimes.com and
+  // wired.com. #fides-overlay/#fides-overlay-wrapper are non-visual wrappers
+  // with a permanent 0x0 rect even while their fixed-positioned children
+  // render normally — never check those directly for visibility.
+  const FIDES_BANNER_REJECT_ALL_SEL = '#fides-banner-container .fides-reject-all-button';
+  const FIDES_BANNER_ACCEPT_ALL_SEL = '#fides-banner-container .fides-accept-all-button';
+  const FIDES_BANNER_MANAGE_PREFERENCES_SEL = '#fides-banner-container .fides-manage-preferences-button';
+  const FIDES_MODAL_REJECT_ALL_SEL = '#fides-modal .fides-reject-all-button';
+  const FIDES_MODAL_ACCEPT_ALL_SEL = '#fides-modal .fides-accept-all-button';
+
+  function hasFidesTcfBanner() {
+    return !!document.querySelector('#fides-banner-container, #fides-modal');
+  }
+
+  // Fides slides its banner off-screen (a CSS transform, not display:none or
+  // removal) as its close animation — confirmed live: getBoundingClientRect()
+  // still reports a full-size box (e.g. 1280x360) positioned below the
+  // viewport (top: 900 in a 720px-tall viewport). The shared isVisible()
+  // helper elsewhere in this file only checks box size/display/visibility,
+  // not viewport position, so it would misreport this as still visible — this
+  // check is intentionally local to Fides rather than changing that shared
+  // helper (used by every other CMP handler in this file).
+  function isFidesElementOnScreen(el) {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    return rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+  }
+
+  function tryClickFidesButton(selector) {
+    const el = document.querySelector(selector);
+    if (!el || !isFidesElementOnScreen(el)) return false;
+    dispatchSyntheticClick(el);
+    return true;
+  }
+
+  async function waitForFidesModalOpen(timeoutMs = 2000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const modal = document.querySelector('#fides-modal');
+      if (isFidesElementOnScreen(modal)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
+  }
+
+  async function waitForFidesTcfDismissal(timeoutMs = 3000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const bannerGone = !isFidesElementOnScreen(document.querySelector('#fides-banner-container'));
+      const modalGone = !isFidesElementOnScreen(document.querySelector('#fides-modal'));
+      if (bannerGone && modalGone) return true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
+  }
+
+  // The banner/modal visually disappearing (waitForFidesTcfDismissal above)
+  // happens BEFORE Fides finishes internally computing and persisting the
+  // full TCF consent decision — confirmed live via a real race: reopening
+  // "Your Privacy Choices" immediately after Accept All dismissed showed only
+  // 2 of 29 toggles correctly checked; waiting 300ms+ first showed all 29
+  // correct. `FidesUpdated` is the real completion signal — confirmed live it
+  // fires ~500-600ms after the click, consistently, well after visual
+  // dismissal. Must listen for it *before* clicking (not after), since it can
+  // fire faster than the time it takes to set up a listener afterward.
+  function waitForFidesUpdatedEvent(timeoutMs = 3000) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const handler = () => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('FidesUpdated', handler);
+        resolve(true);
+      };
+      window.addEventListener('FidesUpdated', handler);
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('FidesUpdated', handler);
+        resolve(false);
+      }, timeoutMs);
+    });
+  }
+
+  // Confirmed live that Fides deployments vary in what the always-visible
+  // banner offers directly: nytimes.com shows Reject All / Accept All /
+  // Manage Preferences all on the simple banner; wired.com's simple banner
+  // offers only Accept All + "Your Privacy Choices" — the real Reject All
+  // control only exists inside the modal opened from there. Both are handled
+  // by the same escalation logic rather than a per-site branch.
+  //
+  // Custom and the accept_all + ccpaDoNotSell hybrid would need granular
+  // per-purpose toggling inside the modal, which this codebase does not yet
+  // implement for Fides' TCF UI — same honest constraint already documented
+  // for Sourcepoint's GDPR privacy manager on spiegel.de ("Custom currently
+  // behaves the same as Reject All ... honest full-reject remains the safer
+  // default rather than a granular selection that can't be verified as
+  // actually saved"). Treated as a full reject here for the same reason.
+  function fidesTcfMethodFor(wantsFullAccept, prefs) {
+    if (wantsFullAccept) return 'cmp_api:Fides:tcf_accept_all';
+    if (prefs.globalPreference === 'custom') return 'cmp_api:Fides:tcf_custom_as_reject';
+    return 'cmp_api:Fides:tcf_reject_all';
+  }
+
+  // Tries the direct button on the always-visible banner first, and only
+  // opens the modal via "Manage Preferences" if the banner has no direct
+  // option — confirmed live this varies by deployer (nytimes.com shows
+  // Reject All directly; wired.com does not). Returns true if a button was
+  // actually clicked, independent of whether the overlay went on to dismiss.
+  async function clickFidesBannerOrModalButton(wantsFullAccept) {
+    const bannerSelector = wantsFullAccept ? FIDES_BANNER_ACCEPT_ALL_SEL : FIDES_BANNER_REJECT_ALL_SEL;
+    const modalSelector = wantsFullAccept ? FIDES_MODAL_ACCEPT_ALL_SEL : FIDES_MODAL_REJECT_ALL_SEL;
+
+    if (tryClickFidesButton(bannerSelector)) return true;
+    if (!tryClickFidesButton(FIDES_BANNER_MANAGE_PREFERENCES_SEL)) return false;
+    if (!(await waitForFidesModalOpen(2000))) return false;
+    return tryClickFidesButton(modalSelector);
+  }
+
+  // Clicks directly inside an already-open modal — used by the proactive
+  // resync below, which opens the modal itself via Fides.showModal() rather
+  // than starting from a visible banner.
+  function clickFidesModalButton(wantsFullAccept) {
+    return tryClickFidesButton(wantsFullAccept ? FIDES_MODAL_ACCEPT_ALL_SEL : FIDES_MODAL_REJECT_ALL_SEL);
+  }
+
+  // Custom and the accept_all + ccpaDoNotSell hybrid would need granular
+  // per-purpose toggling inside the modal, which this codebase does not yet
+  // implement for Fides' TCF UI — same honest constraint already documented
+  // for Sourcepoint's GDPR privacy manager on spiegel.de ("Custom currently
+  // behaves the same as Reject All ... honest full-reject remains the safer
+  // default rather than a granular selection that can't be verified as
+  // actually saved"). Treated as a full reject here for the same reason.
+  async function handleFidesTcfBanner(prefs) {
+    const wantsFullAccept = prefs.globalPreference === 'accept_all' && prefs.ccpaDoNotSell !== true;
+    // Start listening before clicking — FidesUpdated can fire faster than
+    // the time it would take to attach a listener after the click resolves.
+    const updatedPromise = waitForFidesUpdatedEvent(3000);
+    if (!(await clickFidesBannerOrModalButton(wantsFullAccept))) return false;
+    await updatedPromise;
+    if (!(await waitForFidesTcfDismissal(3000))) return false;
+
+    _handled = true;
+    document.dispatchEvent(new CustomEvent('__emc_handled__', {
+      detail: { method: fidesTcfMethodFor(wantsFullAccept, prefs) },
+    }));
+    return false;
+  }
+
+  function isFidesTcfSite() {
+    return window.Fides?.options?.tcfEnabled === true;
+  }
+
+  // Proactive resync for TCF sites that show no banner/modal on this page —
+  // confirmed live this is not "nothing to do", it's Fides trusting an
+  // existing decision cookie and never re-prompting, even after the user
+  // changes their preference in our popup. Gated on Fides.fides_string
+  // already being set (a real prior decision exists) so this never fires on
+  // a genuine first-time visitor and races the organic banner Fides is about
+  // to render on its own. Gated on a per-hostname, per-preference-signature
+  // sessionStorage marker so a matching preference only forces the modal
+  // open once per browsing session, not on every single page view —
+  // Fides.showModal() is visibly disruptive (a real modal flash), unlike
+  // OneTrust/Guardian's silent API-only proactive syncs, so this must not
+  // repeat once the current preference is confirmed applied. Deliberately
+  // does not report/count via reportAction, matching the same precedent —
+  // an ordinary return visit re-syncing an already-changed preference is not
+  // a fresh user action worth cluttering the activity log with.
+  async function syncFidesTcfConsent(prefs) {
+    if (typeof window.Fides?.showModal !== 'function') return false;
+    if (!window.Fides?.fides_string) return false;
+
+    const signature = `${prefs.globalPreference}:${prefs.ccpaDoNotSell === true}`;
+    const storageKey = `emc:fides:tcf:synced:${window.location.hostname}`;
+    let stored = null;
+    try { stored = sessionStorage.getItem(storageKey); } catch (_) {}
+    if (stored === signature) return false;
+
+    const wantsFullAccept = prefs.globalPreference === 'accept_all' && prefs.ccpaDoNotSell !== true;
+    try {
+      window.Fides.showModal();
+    } catch (_) {
+      return false;
+    }
+    if (!(await waitForFidesModalOpen(2000))) return false;
+    const updatedPromise = waitForFidesUpdatedEvent(3000);
+    if (!clickFidesModalButton(wantsFullAccept)) return false;
+    await updatedPromise;
+    if (!(await waitForFidesTcfDismissal(3000))) return false;
+
+    try { sessionStorage.setItem(storageKey, signature); } catch (_) {}
+    return false;
+  }
 
   const CMP_SELECTORS = {
     OneTrust: [...ONETRUST_VISIBLE_SELECTORS],
@@ -656,6 +1154,11 @@
       '#cookiescript_save',
     ],
     Osano: OSANO_VISIBLE_SELECTORS,
+    // Best-effort — confirmed live via nytimes.com only (fides-reject-all-button,
+    // .fides-banner-button classes). No visible banner was observed for any actionable
+    // notice in this session's live testing, so this list is not yet fully verified against
+    // a real rendered banner; the handler itself is API-only and does not depend on it.
+    Fides: ['[id^="fides-"]', '[class*="fides-banner"]', '[class*="fides-overlay"]', '[class*="fides-modal"]'],
     privacyBanner: [
       '#shopify-pc__banner',
       '.shopify-pc__banner__dialog',
@@ -1552,6 +2055,10 @@
 
   function shouldAttemptHandler(name) {
     if (name === 'UC_UI' && (hasVisibleUsercentricsActiveSurface() || Boolean(window.UC_UI))) return true;
+    // Fides frequently renders no visible banner at all for a given visitor/geo while still
+    // exposing real, actionable consent state via the API (confirmed live) — gate on
+    // initialization, not visibility, same as the Truendo/Nike special cases below.
+    if (name === 'Fides' && window.Fides?.initialized) return true;
     if (hasVisibleSelector(CMP_SELECTORS[name] ?? [])) return true;
     if (name === 'Nike') {
       return NIKE_CCPA_HOSTS.has(window.location.hostname) &&

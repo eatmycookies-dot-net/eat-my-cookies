@@ -1,5 +1,5 @@
 {
-  "version": "1.3.3",
+  "version": "1.3.4",
   "sites": [
     {
       "name": "The Guardian (EU/GDPR)",
@@ -110,19 +110,20 @@
       "name": "New York Times",
       "url": "https://www.nytimes.com/",
       "region": "US",
-      "cmp": "Sourcepoint",
-      "tier": "sp-frame",
+      "cmp": "Fides",
+      "tier": "cmp-api",
+      "preference": "reject_all",
       "expectActivityRecorded": true,
       "expectedActivityMethodPrefixes": [
-        "sourcepoint:",
-        "dom:sourcepoint"
+        "cmp_api:Fides"
       ],
       "bannerSelectors": [
-        "[id^='sp_message_container']"
+        "[id^='fides-']",
+        "[class*='fides-banner']"
       ],
       "consentSelectors": [
-        ".sp_choice_type_REJECT_ALL",
-        ".sp_choice_type_11"
+        ".fides-reject-all-button",
+        ".fides-banner-button"
       ]
     },
     {
@@ -701,13 +702,16 @@
       "name": "Wired",
       "url": "https://www.wired.com/",
       "region": "US",
-      "cmp": "Sourcepoint",
-      "tier": "sp-frame",
+      "cmp": "Fides",
+      "tier": "cmp-api",
+      "preference": "reject_all",
       "bannerSelectors": [
-        "[id^='sp_message_container']"
+        "[id^='fides-']",
+        "[class*='fides-banner']"
       ],
       "consentSelectors": [
-        ".sp_choice_type_REJECT_ALL"
+        ".fides-reject-all-button",
+        ".fides-banner-button"
       ]
     },
     {
@@ -1123,14 +1127,17 @@
       "region": "EU",
       "locale": "es-ES",
       "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
-      "cmp": "TrustArc",
-      "tier": "dom",
+      "cmp": "Didomi",
+      "tier": "site-specific",
       "bannerSelectors": [
-        "#truste-consent-track",
-        ".truste_overlay"
+        "#didomi-host",
+        "#didomi-popup",
+        ".didomi-notice-popup"
       ],
       "consentSelectors": [
-        "#truste-consent-required"
+        ".didomi-continue-without-agreeing",
+        "#didomi-notice-agree-button",
+        "#didomi-notice-learn-more-button"
       ]
     },
     {
@@ -1271,13 +1278,15 @@
       "name": "Ars Technica",
       "url": "https://arstechnica.com/",
       "region": "US",
-      "cmp": "Sourcepoint",
-      "tier": "sp-frame",
+      "cmp": "Fides",
+      "tier": "cmp-api",
       "bannerSelectors": [
-        "[id^='sp_message_container']"
+        "[id^='fides-']",
+        "[class*='fides-banner']"
       ],
       "consentSelectors": [
-        ".sp_choice_type_REJECT_ALL"
+        ".fides-reject-all-button",
+        ".fides-banner-button"
       ]
     },
     {
@@ -1751,7 +1760,10 @@
       "cmp": "Usercentrics",
       "tier": "cmp-api",
       "expectActivityRecorded": true,
-      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:", "dom:usercentrics:"],
+      "expectedActivityMethodPrefixes": [
+        "cmp_api:UC_UI:",
+        "dom:usercentrics:"
+      ],
       "note": "Live-validated August 9, 2026 (headed real-Chrome run; this used not to work). window.UC_UI is genuinely present. Reject All can fire through either the real UC_UI service API (cmp_api:UC_UI:reject_all) or the DOM shadow-root fallback (dom:usercentrics:reject_all) depending on page-load timing -- both are legitimate, verified paths. No banner element (#usercentrics-cmp-ui) left visible afterward either way.",
       "bannerSelectors": [
         "#usercentrics-cmp-ui",
@@ -1769,7 +1781,10 @@
       "tier": "cmp-api",
       "preference": "accept_all",
       "expectActivityRecorded": true,
-      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:accept_all", "dom:usercentrics:accept_all"],
+      "expectedActivityMethodPrefixes": [
+        "cmp_api:UC_UI:accept_all",
+        "dom:usercentrics:accept_all"
+      ],
       "note": "Live-validated August 9, 2026. Accept All can fire through either the real UC_UI service API (cmp_api:UC_UI:accept_all) or the DOM shadow-root fallback (dom:usercentrics:accept_all) depending on page-load timing -- both are legitimate, verified paths, not a fallback-vs-real-handler distinction. No banner element left visible afterward either way.",
       "bannerSelectors": [
         "#usercentrics-cmp-ui",
@@ -1787,7 +1802,10 @@
       "tier": "cmp-api",
       "preference": "custom",
       "expectActivityRecorded": true,
-      "expectedActivityMethodPrefixes": ["cmp_api:UC_UI:custom", "dom:usercentrics:custom"],
+      "expectedActivityMethodPrefixes": [
+        "cmp_api:UC_UI:custom",
+        "dom:usercentrics:custom"
+      ],
       "note": "Live-validated August 9, 2026. Custom can fire through either the real UC_UI service API (cmp_api:UC_UI:custom) or the DOM shadow-root fallback (dom:usercentrics:custom) depending on page-load timing -- both are legitimate, verified paths. No banner element left visible afterward either way.",
       "categoryPreferences": {
         "functional": true,

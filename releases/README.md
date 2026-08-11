@@ -6,6 +6,60 @@ Project message for release context:
 
 Cookie banners are annoying. Eat My Cookies is a free Chrome extension that handles them based on user preferences, so people don't have to fix them site by site. No backend, no tracking, no ads.
 
+## v1.3.4
+
+### New CMP support: Fides (nytimes.com, wired.com)
+
+- Both sites had silently migrated from Sourcepoint to Fides (an open-source CMP, ethyca/fides), which this extension had no handler for at all — the CCPA/opt-out path was falling back to a generic text-match heuristic with no category awareness that never even ran when the preference was `custom`. Added real support: `window.Fides.updateConsent()` is a documented, verified API — confirmed live it synchronously updates consent state — so the fix calls it directly rather than clicking DOM buttons, since Fides frequently shows no visible banner at all for a given visitor/geo while still exposing real, actionable consent through the API. Built as generic Fides detection, not a per-site branch, so any other site running Fides is covered too.
+- Category mapping is keyword-based against each site's own notice names rather than hardcoded, since Fides' category naming isn't a stable convention across deployers — confirmed live that nytimes.com and wired.com use entirely different notice names for equivalent concepts.
+- Live-verified end-to-end via the real extension across five scenarios (reject, accept, accept + CCPA do-not-sell together, and two custom variants) — every one produced the correct `Fides.consent` value. Full regression sweep afterward confirmed no impact on any other supported site.
+- One open caveat, documented in `private/human-validation-backlog.md`: a same-session consent update didn't survive a page reload in testing, which traces back to the site's own server-side geolocation logic rather than anything the extension does — and this extension already re-applies preferences on every visit for every CMP, so it's not expected to be a practical problem, but genuine California-session persistence hasn't been separately confirmed.
+
+### Fides follow-up: real EU/GDPR support (the above only covered the US path)
+
+- A real EU VPN session (prompted by a user screenshot) showed the fix above left the banner fully on screen for European visitors on both sites — the notice-level API it used correctly updates the underlying consent state, but that's a separate concern from what actually makes a TCF-enabled Fides banner disappear, which only Fides' own button click handlers resolve. Fixed by clicking the real banner (and, when the visible banner has no direct option — confirmed on `wired.com`, only `nytimes.com` shows one directly — the modal opened from "Manage Preferences") buttons for GDPR/TCF experiences, while leaving the already-correct US path untouched.
+- Along the way, found and fixed a subtler bug: the first verification pass reported the banner as dismissed when a screenshot proved it wasn't — Fides hides its banner by sliding it off-screen with a CSS transform, not by hiding or removing it, so a plain box-size check doesn't catch it. Fixed with a check that also confirms the element is actually within the visible viewport.
+- Custom mode (and accept-all-with-CCPA-opt-out) in the EU/GDPR path currently falls back to a full reject rather than saving individual category choices — matching the same limitation already accepted for a similar case on `spiegel.de` — and is labeled honestly in the activity log rather than claiming a granular save that didn't happen.
+- Live-verified via the real extension across the complete matrix this required: every preference combination × both sites × a real EU VPN session, 10 runs total, all correctly dismissing the banner with the right consent applied. Re-ran the original US-path scenarios afterward too, to confirm this didn't disturb what was already working.
+- This is also why `skills/emc-cmp-importer/SKILL.md` (the internal playbook for adding CMP support) now requires that full matrix — every preference combination, with and without VPN — before any new CMP is considered supported, rather than after a gap gets reported.
+
+### Fides follow-up #2: footer "Privacy Choices" could show the wrong state
+
+Two more real, separate bugs, both reported live by a user testing the fix above, both fixed the same day:
+
+- **Changing your preference didn't take effect until you cleared everything.** Once Fides records any decision, it trusts that cookie and stops showing the banner — including after you change your mind in the extension's own popup. The GDPR/TCF fix above only ever acted when a banner was actually on screen, so a changed preference silently never got re-applied on a return visit. Fixed using `Fides.showModal()` to force the preference panel back open when a prior decision exists and the current preference doesn't match what was last synced, then reusing the same apply logic — capped to once per browsing session per site so it doesn't repeatedly interrupt ordinary browsing.
+- **A real timing gap between "banner looks gone" and "consent is actually saved."** Reported with a screenshot: Accept All correctly dismissed the banner, but opening "Your Privacy Choices" right after showed everything off. Reproduced exactly: the banner disappearing and Fides finishing its internal save are not the same moment — there's a real gap of a few hundred milliseconds between them. Fixed by waiting for Fides' own real "I'm done" signal before considering an action complete, instead of trusting the banner's disappearance alone. Re-tested by deliberately reopening the settings the instant the banner vanished, repeatedly — consistently correct now.
+- Also traced a separate source of confusion during this investigation: testing against a *built* copy of the extension (`dist/`) rather than the live source only picks up fixes after an explicit rebuild — worth knowing if a fix doesn't seem to be taking effect.
+- Re-verified the complete matrix once more with both fixes in place — every preference combination, both sites, with and without VPN, including checking the footer reopen path immediately rather than after a generous wait — all pass.
+- **Known, accepted limitation:** Custom mode (and the accept-all + CCPA-opt-out combination) on the GDPR/TCF path applies a full reject rather than your specific per-category choices, since real per-toggle mapping across a CMP's full purposes list is a separate, larger feature. Confirmed with the user directly rather than assumed — they chose to keep the honest full-reject behavior for now rather than take on that scope.
+
+### Manually reopening privacy settings during testing could block automation for up to 2 minutes
+
+- The extension already had a safety feature (added in the previous release) that stands down automatically whenever a user clicks a footer privacy/cookie-settings link, so it doesn't fight someone who's actively reviewing their choices. Reported as effectively unusable for testing: every click into "Your Privacy Choices" to check a result re-armed a full 2-minute lockout, so reloading and retrying shortly after always looked like nothing was happening.
+- Verified this wasn't the suppression timer itself being broken — a deliberately stale marker was correctly ignored when checked. The real gap: a page reload destroys whatever settings panel was open, but the guard had no way to know that and kept waiting out the full window regardless.
+- Fixed by tagging each recorded "user opened settings" marker with an identifier unique to that specific page load. A reload produces a new identifier, so the extension can now tell "the panel this marker refers to is definitely gone" apart from "this is still the same page, they might still be reading it" — and only the first case clears early. Verified live: a marker that would otherwise still be within the 2-minute window, but tagged from a page load that no longer exists, is now correctly ignored immediately.
+- Also fixed a smaller, related bit of confusion: the stored marker used to only get cleaned up the next time something happened to check it, so it could visibly linger in browser storage well after it had stopped doing anything, making it look more "stuck" than it actually was.
+- This fix currently covers the most common case (banners that render directly on the page, such as Fides); a small number of CMPs that render inside an embedded frame still use the old, longer-only-lifted-by-waiting behavior — a known, scoped follow-up rather than something this release claims to have fully solved everywhere.
+
+### Ars Technica — reclassified from a stale CMP label to Fides
+
+- `arstechnica.com` was still labeled Sourcepoint internally, left over from before the site migrated CMPs. A user confirmed live that it now runs Fides — the same generic support already shipped above, so no new code was needed, just correcting the label so future validation runs test the right thing.
+
+### Didomi Custom mode was silently collapsing into a full reject
+
+- Reported live on `elpais.com`: Functional and Analytics were on in the extension's popup, but every purpose showed "Disagree" when reopening the site's privacy settings. Root cause: the Custom-mode branch had no per-purpose logic at all — it silently fell through to the same call used for a full reject. This was a pre-existing gap in the shared handler, not specific to this one site — any site where this same code path runs was affected.
+- Fixed using Didomi's own documented API for setting individual purposes, verified directly against the real SDK rather than assumed from documentation alone. Purpose classification uses Didomi's own standardized names (the same ones every site running Didomi exposes), not anything read off this one site's page, so the fix is generic across any Didomi-powered site, not a one-off patch.
+- Caught a real mistake during live verification before it shipped: two of those standardized names ("marketing" and "social" cookie categories) weren't matching the classifier's advertising rule, so they were falling back to a default that happened to look correct in the first test only because of what that test's other settings were. Confirmed the gap by testing with different settings, then fixed it properly, then reconfirmed both ways.
+- The API call that fixes the categories doesn't, on its own, make the banner disappear — same class of gap as the Fides fix above. Fixed by explicitly closing the banner/settings panel afterward.
+- Live-verified via the real extension on `elpais.com`, including reopening the site's own preference panel afterward to confirm it reflects the real saved choices, not just that the underlying data looks right.
+
+### Didomi leftover backdrop and scroll lock
+
+Two more real bugs, both caught live by the user immediately after the fix above shipped:
+
+- **A grey "shadow" stayed over the page after the banner was dismissed.** The site's own CMP integration shows a brief backdrop element while it resolves consent, normally removed automatically a moment later — but it isn't always reliably removed on its own, and sometimes stayed stuck on screen well after the actual cookie banner was gone. Fixed by actively watching for and removing it for a few seconds after every Didomi action (accept, reject, and custom), not just custom.
+- **Page scrolling stayed locked even after the fix above removed the shadow.** The site also locks scrolling while that backdrop is shown, normally released by its own closing logic — which gets skipped when the extension removes the backdrop directly instead. Fixed by also releasing the scroll lock in the same cleanup step. The user confirmed the exact mechanism live, which made this a same-day, one-shot fix rather than a guess.
+
 ## v1.3.3
 
 ### ZEIT (zeit.de) / Sourcepoint refresh-loop and activity-counting fix
