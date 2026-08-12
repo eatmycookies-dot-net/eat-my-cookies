@@ -247,11 +247,26 @@ describe('formatActivityPreference()', () => {
     expect(formatActivityPreference({ method: 'sourcepoint:gdpr:reject_all', preference: 'reject_all' })).toBe('Rejected');
   });
 
-  it('returns "CCPA handled" for US privacy / CCPA-style methods', () => {
-    expect(formatActivityPreference({ method: 'sourcepoint:usnat:opt_out', preference: 'reject_all' })).toBe('CCPA handled');
-    expect(formatActivityPreference({ method: 'site_specific:latimes:ccpa_accept', preference: 'reject_all' })).toBe('CCPA handled');
-    expect(formatActivityPreference({ method: 'site_specific:latimes:ccpa_opt_out', preference: 'reject_all' })).toBe('CCPA handled');
-    expect(formatActivityPreference({ method: 'site_specific:bbc:ccpa_cleared', preference: 'custom' })).toBe('CCPA handled');
+  // Accept/reject/custom (from either the method string or the user's actual
+  // preference) win over the CCPA/USNat classification — a CCPA-flavored
+  // method still has a concrete accept/reject/custom outcome, and the
+  // activity log should reflect the choice the user actually made, not that
+  // a CCPA-specific code path happened to apply it (reported live: a user
+  // saw "CCPA handled" on canadiantire.ca while browsing from an EU VPN with
+  // a definite reject_all preference set, and correctly expected "Rejected").
+  it('prefers the concrete accept/reject/custom outcome over "CCPA handled" whenever either method or preference gives one', () => {
+    expect(formatActivityPreference({ method: 'sourcepoint:usnat:opt_out', preference: 'reject_all' })).toBe('Rejected');
+    expect(formatActivityPreference({ method: 'site_specific:latimes:ccpa_accept', preference: 'reject_all' })).toBe('Accepted');
+    expect(formatActivityPreference({ method: 'site_specific:latimes:ccpa_opt_out', preference: 'reject_all' })).toBe('Rejected');
+    expect(formatActivityPreference({ method: 'site_specific:bbc:ccpa_cleared', preference: 'custom' })).toBe('Custom');
+  });
+
+  // "CCPA handled" is now only a last-resort fallback: a CCPA/USNat-flavored
+  // method with no accept/custom/reject signal in either the method string
+  // or the preference field. In practice preference is always one of the
+  // three real values, so this mainly guards older/malformed entries.
+  it('falls back to "CCPA handled" only when neither method nor preference gives an accept/reject/custom signal', () => {
+    expect(formatActivityPreference({ method: 'sourcepoint:usnat:notice', preference: 'unknown' })).toBe('CCPA handled');
   });
 
   it('returns "Rejected" when preference is reject_all even if method is generic', () => {

@@ -83,13 +83,14 @@ export function formatActivityPreference(activity) {
   const method = String(activity.method ?? '').toLowerCase();
   const preference = String(activity.preference ?? '').toLowerCase();
 
-  if (
-    method.includes('ccpa') ||
-    method.includes('usnat')
-  ) {
-    return 'CCPA handled';
-  }
-
+  // Accept/custom/reject signals (from either the method string or the user's
+  // actual preference) win over the CCPA/USNat classification below. A method
+  // routing through CCPA-specific machinery (e.g. cmp_api:OneTrust:ccpa) still
+  // has a concrete accept/reject/custom outcome, and the user picked one of
+  // exactly those three options — showing "Privacy choices" instead of
+  // "Rejected" for a plain reject_all just because the site required a
+  // CCPA-flavored code path to apply it was confusing: it looked like a
+  // different, ambiguous kind of action instead of the choice actually made.
   if (
     method.includes('accept') ||
     preference === 'accept_all'
@@ -113,6 +114,16 @@ export function formatActivityPreference(activity) {
     preference === 'reject_all'
   ) {
     return 'Rejected';
+  }
+
+  // Fallback only: a CCPA/USNat-flavored method with no accept/custom/reject
+  // signal at all (method or preference). In practice preference is always
+  // one of the three above, so this mainly covers older or malformed entries.
+  if (
+    method.includes('ccpa') ||
+    method.includes('usnat')
+  ) {
+    return 'CCPA handled';
   }
 
   return 'Handled';

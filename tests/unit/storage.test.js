@@ -25,6 +25,7 @@ import {
   clearUnsupportedSite,
   exportSettings,
   importSettings,
+  runStorageMigrations,
 } from '../../utils/storage.js';
 
 // ── getSettings ───────────────────────────────────────────────────────────────
@@ -211,6 +212,102 @@ describe('clearUnsupportedSite()', () => {
     await setUnsupportedSite('tricky.com', { reason: 'no reject path' });
     await clearUnsupportedSite('tricky.com');
     expect((await getUnsupportedSites())['tricky.com']).toBeUndefined();
+  });
+});
+
+// ── runStorageMigrations() ────────────────────────────────────────────────────
+
+describe('runStorageMigrations()', () => {
+  it('removes legacy top-level category keys left over from before categoryPreferences existed', async () => {
+    await chrome.storage.sync.set({
+      functional: true,
+      analytics: false,
+      advertising: true,
+      ccpaDoNotSell: false,
+    });
+    await runStorageMigrations();
+    const raw = await chrome.storage.sync.get(['functional', 'analytics', 'advertising', 'ccpaDoNotSell']);
+    expect(raw).not.toHaveProperty('functional');
+    expect(raw).not.toHaveProperty('analytics');
+    expect(raw).not.toHaveProperty('advertising');
+    expect(raw).not.toHaveProperty('ccpaDoNotSell');
+  });
+
+  it('never touches the real categoryPreferences the user actually set', async () => {
+    await updateSettings({
+      categoryPreferences: { functional: false, analytics: true, advertising: true, ccpaDoNotSell: false, uncategorized: 'accept' },
+    });
+    await chrome.storage.sync.set({ functional: true, analytics: false });
+    await runStorageMigrations();
+    const s = await getSettings();
+    expect(s.categoryPreferences).toEqual({ functional: false, analytics: true, advertising: true, ccpaDoNotSell: false, uncategorized: 'accept' });
+  });
+
+  it('backfills categoryPreferences from the legacy flat keys when the profile predates it, instead of silently falling back to defaults', async () => {
+    // A profile old enough to have never written categoryPreferences at all —
+    // the flat keys are the *only* record of what the user actually chose.
+    // Deleting them without carrying the value forward would lose the
+    // selection, not just tidy up dead storage.
+    await chrome.storage.sync.set({
+      functional: false,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+    });
+    await runStorageMigrations();
+    const s = await getSettings();
+    expect(s.categoryPreferences).toEqual({
+      functional: false,
+      analytics: true,
+      advertising: true,
+      ccpaDoNotSell: false,
+      uncategorized: 'reject', // not part of the legacy flat keys — falls back to default
+    });
+    const raw = await chrome.storage.sync.get(['functional', 'analytics', 'advertising', 'ccpaDoNotSell']);
+    expect(raw).not.toHaveProperty('functional');
+    expect(raw).not.toHaveProperty('advertising');
+  });
+
+  it('backfills only the legacy keys actually present, leaving the rest at default', async () => {
+    await chrome.storage.sync.set({ ccpaDoNotSell: false });
+    await runStorageMigrations();
+    const s = await getSettings();
+    expect(s.categoryPreferences).toEqual({
+      functional: true, // default — never had a legacy key to backfill from
+      analytics: false, // default
+      advertising: false, // default
+      ccpaDoNotSell: false, // backfilled from the legacy key
+      uncategorized: 'reject',
+    });
+  });
+
+  it('does not touch globalPreference or other real settings', async () => {
+    await updateSettings({ globalPreference: 'custom', onboardingComplete: true });
+    await chrome.storage.sync.set({ ccpaDoNotSell: true });
+    await runStorageMigrations();
+    const s = await getSettings();
+    expect(s.globalPreference).toBe('custom');
+    expect(s.onboardingComplete).toBe(true);
+  });
+
+  it('is a no-op on a fresh profile with no legacy keys', async () => {
+    await expect(runStorageMigrations()).resolves.not.toThrow();
+    const s = await getSettings();
+    expect(s.categoryPreferences).toMatchObject({ functional: true, analytics: false, advertising: false, ccpaDoNotSell: true });
+  });
+
+  it('only runs once — a second call does not redo work or error on an already-clean profile', async () => {
+    await chrome.storage.sync.set({ functional: true });
+    await runStorageMigrations();
+    await expect(runStorageMigrations()).resolves.not.toThrow();
+    const raw = await chrome.storage.sync.get(['functional']);
+    expect(raw).not.toHaveProperty('functional');
+  });
+
+  it('records a schema version so migrations do not re-scan storage forever', async () => {
+    await runStorageMigrations();
+    const { storageSchemaVersion } = await chrome.storage.sync.get({ storageSchemaVersion: 0 });
+    expect(storageSchemaVersion).toBeGreaterThan(0);
   });
 });
 

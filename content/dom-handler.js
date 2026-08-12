@@ -408,6 +408,17 @@ const COOKIEWOW_PREFERENCE_SELECTORS = [
   '.cwc-switch',
   '.cwc-save-setting-wrapper button',
 ];
+// Covers two markup generations of the same WebToffee/CookieYes lineage:
+// the modern hosted `.cky-*` widget, and the older self-hosted "Cookie Law
+// Info" WordPress plugin markup (`#cookie-law-info-bar`, `.cli_*`/`.wt-cli-*`)
+// that the current WordPress.org "CookieYes" plugin still ships for
+// backwards compatibility (confirmed live on iabeurope.eu, plugin path
+// `wp-content/plugins/webtoffee-gdpr-cookie-consent/`, v2.5.3). Both were
+// previously matched by the shared `#cookie-law-info-bar` cmps.json detector,
+// but this actionable-surface list only recognized the modern markup, so the
+// legacy sites were detected then silently bailed out at the very first
+// `hasVisibleSelector()` check below without ever trying the legacy click
+// selectors that were already present further down.
 const COOKIEYES_ACTIONABLE_SURFACE_SELECTORS = [
   '#cookie-law-info-bar',
   '.cky-consent-container',
@@ -415,6 +426,9 @@ const COOKIEYES_ACTIONABLE_SURFACE_SELECTORS = [
   '.cky-btn-customize',
   'button[data-cky-tag="settings-button"]',
   '.cky-preference-center',
+  '.wt-cli-cookie-bar-container',
+  '#cliSettingsPopup',
+  '.cli-modal-dialog',
 ];
 const COOKIEYES_PREFERENCE_SELECTORS = [
   '.cky-preference-center',
@@ -422,7 +436,35 @@ const COOKIEYES_PREFERENCE_SELECTORS = [
   '.cky-switch input[type="checkbox"]',
   'button[data-cky-tag="detail-save-button"]',
   '.cky-btn-preferences',
+  '#cliSettingsPopup',
+  '.cli-modal-dialog',
+  '.cli-user-preference-checkbox',
 ];
+// Live-verified 2026-08-09 on monday.com (real customer site, US/CCPA region —
+// see docs/cmp-impact-map.md for the full writeup). '.ch2-container' is a
+// CLASS, not an id. The first-layer banner in US/CCPA mode has no direct
+// Deny All button, only 'Accept all cookies' and 'Cookie settings' — Deny All
+// only exists inside the settings modal. EU/GDPR-mode first-layer markup is
+// NOT confirmed live; this flow tries a direct deny-all click first (in case
+// EU shows one), falling back to opening settings either way.
+const COOKIEHUB_ACTIONABLE_SURFACE_SELECTORS = [
+  '.ch2-container',
+  '#ch2-dialog',
+  '.ch2-dialog',
+  '.ch2-allow-all-btn',
+  '.ch2-deny-all-btn',
+  '.ch2-open-settings-btn',
+];
+const COOKIEHUB_PREFERENCE_SELECTORS = [
+  '.ch2-settings',
+  '.ch2-settings-options',
+  '.ch2-settings-option',
+  '.ch2-save-settings-btn',
+];
+const COOKIEHUB_FUNCTIONAL_PATTERNS = [/\bfunctional\b/i, /\bpreferences?\b/i];
+const COOKIEHUB_ANALYTICS_PATTERNS = [/\bperformance\b/i, /\banalytics\b/i, /\bstatistics?\b/i];
+const COOKIEHUB_ADVERTISING_PATTERNS = [/\btargeting\b/i, /\bmarketing\b/i, /\badvertis(?:ing|ement)?\b/i];
+const COOKIEHUB_CUSTOM_MAX_ATTEMPTS = 3;
 const COOKIEWOW_ANALYTICS_PATTERNS = [
   /\banalytics\b/i,
   /คุกกี้ในส่วนวิเคราะห์/i,
@@ -866,6 +908,13 @@ async function tryCMPs(cmps, prefs) {
       const cookieYesResult = await executeCookieYesFlow(cmp, prefs);
       if (cookieYesResult) {
         return { method: cookieYesResult, cmpName: cmp.name };
+      }
+      continue;
+    }
+    if (cmp.id === 'cookiehub') {
+      const cookieHubResult = await executeCookieHubFlow(cmp, prefs);
+      if (cookieHubResult) {
+        return { method: cookieHubResult, cmpName: cmp.name };
       }
       continue;
     }
@@ -1930,16 +1979,16 @@ async function executeCookieYesFlow(cmp, prefs) {
   }
 
   if (prefs.globalPreference === 'accept_all' &&
-      (clickFirstVisibleNative(['.cky-btn-accept', '#cookie_action_close_header']) ||
-       clickFirstVisible(['.cky-btn-accept', '#cookie_action_close_header']))) {
+      (clickFirstVisibleNative(['.cky-btn-accept', '#cookie_action_close_header', '.wt-cli-accept-all-btn', '.cli_action_button[data-cli_action="accept"]']) ||
+       clickFirstVisible(['.cky-btn-accept', '#cookie_action_close_header', '.wt-cli-accept-all-btn', '.cli_action_button[data-cli_action="accept"]']))) {
     if (await waitForDismissal(cmp, selectorActions(cookieYesDismissSelectors()), 5000)) {
       return 'dom:cookieyes:accept_all';
     }
   }
 
   if (prefs.globalPreference === 'reject_all' &&
-      (clickFirstVisibleNative(['.cky-btn-reject', '#cookie_action_close_header_reject']) ||
-       clickFirstVisible(['.cky-btn-reject', '#cookie_action_close_header_reject']))) {
+      (clickFirstVisibleNative(['.cky-btn-reject', '#cookie_action_close_header_reject', '.cookie_action_close_header_reject']) ||
+       clickFirstVisible(['.cky-btn-reject', '#cookie_action_close_header_reject', '.cookie_action_close_header_reject']))) {
     if (await waitForDismissal(cmp, selectorActions(cookieYesDismissSelectors()), 5000)) {
       return 'dom:cookieyes:reject_all';
     }
@@ -1952,11 +2001,13 @@ async function executeCookieYesFlow(cmp, prefs) {
       '.cky-btn-customize',
       'button[data-cky-tag="settings-button"]',
       '#cky-btn-customize',
+      '.cli_settings_button',
     ]) ||
     clickFirstVisible([
       '.cky-btn-customize',
       'button[data-cky-tag="settings-button"]',
       '#cky-btn-customize',
+      '.cli_settings_button',
     ]);
   if (!opened) return false;
   if (!(await waitForAnyVisible(COOKIEYES_PREFERENCE_SELECTORS, 4000))) return false;
@@ -1967,11 +2018,27 @@ async function executeCookieYesFlow(cmp, prefs) {
   const desiredAdvertising = wantsAdvertisingCategoryConsent(flowPrefs);
   const desiredOther = flowPrefs.uncategorized === 'accept';
 
-  const appliedFunctional = await setCheckboxStateById('ckySwitchfunctional', desiredFunctional);
-  const appliedAnalytics = await setCheckboxStateById('ckySwitchanalytics', desiredAnalytics);
-  const appliedPerformance = await setCheckboxStateById('ckySwitchperformance', desiredPerformance);
-  const appliedAdvertising = await setCheckboxStateById('ckySwitchadvertisement', desiredAdvertising);
-  const appliedOther = await setCheckboxStateById('ckySwitchother', desiredOther);
+  // Legacy "Cookie Law Info" markup keys category checkboxes by
+  // `.cli-user-preference-checkbox[data-id="checkbox-<category>"]` instead of
+  // the modern widget's `id="ckySwitch<category>"`. "necessary" is always on
+  // and has no toggle. "advertisement" is the plugin's own default category
+  // slug; "marketing" is included too since some installs relabel it.
+  const appliedFunctional = await setCheckboxStateByIdOrSelector(
+    'ckySwitchfunctional', '.cli-user-preference-checkbox[data-id="checkbox-functional"]', desiredFunctional);
+  const appliedAnalytics = await setCheckboxStateByIdOrSelector(
+    'ckySwitchanalytics', '.cli-user-preference-checkbox[data-id="checkbox-analytics"]', desiredAnalytics);
+  const appliedPerformance = await setCheckboxStateByIdOrSelector(
+    'ckySwitchperformance', '.cli-user-preference-checkbox[data-id="checkbox-performance"]', desiredPerformance);
+  const appliedAdvertising = await setCheckboxStateByIdOrSelector(
+    'ckySwitchadvertisement',
+    '.cli-user-preference-checkbox[data-id="checkbox-advertisement"], .cli-user-preference-checkbox[data-id="checkbox-marketing"]',
+    desiredAdvertising,
+  );
+  const appliedOther = await setCheckboxStateByIdOrSelector(
+    'ckySwitchother',
+    '.cli-user-preference-checkbox[data-id="checkbox-non-necessary"], .cli-user-preference-checkbox[data-id="checkbox-others"]',
+    desiredOther,
+  );
   const appliedResults = [appliedFunctional, appliedAnalytics, appliedPerformance, appliedAdvertising, appliedOther];
   const appliedCount = appliedResults.filter((value) => value !== null).length;
   if (appliedCount === 0 || appliedResults.includes(false)) return false;
@@ -1981,15 +2048,148 @@ async function executeCookieYesFlow(cmp, prefs) {
     'button[data-cky-tag="detail-save-button"]',
     '.cky-btn-preferences',
     '.cky-btn-accept',
+    '#wt-cli-save-preferences-btn',
+    '.wt-cli-save-preferences-btn',
   ]) || clickFirstVisible([
     'button[data-cky-tag="detail-save-button"]',
     '.cky-btn-preferences',
     '.cky-btn-accept',
+    '#wt-cli-save-preferences-btn',
+    '.wt-cli-save-preferences-btn',
   ]);
   if (!saved) return false;
   if (!(await waitForDismissal(cmp, selectorActions(cookieYesDismissSelectors()), 5000))) return false;
 
   return prefs.globalPreference === 'custom' ? 'dom:cookieyes:custom' : `dom:cookieyes:${prefs.globalPreference}`;
+}
+
+// Live-verified 2026-08-09 on monday.com (real customer site, US/CCPA region —
+// see docs/cmp-impact-map.md). The first-layer banner there has no direct
+// Deny All, only Accept All + a Cookie settings opener, so reject/custom go
+// through the settings modal (which does have its own Deny All shortcut, plus
+// per-category toggles for custom). EU/GDPR first-layer markup is unconfirmed;
+// this tries a direct deny-all click first in case EU exposes one there too.
+async function executeCookieHubFlow(cmp, prefs) {
+  if (!hasVisibleSelector(COOKIEHUB_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickFirstVisibleNative(['.ch2-allow-all-btn']) || clickFirstVisible(['.ch2-allow-all-btn']))) {
+    if (await waitForDismissal(cmp, selectorActions(cookieHubDismissSelectors()), 5000)) {
+      return 'dom:cookiehub:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all') {
+    if (clickFirstVisibleNative(['.ch2-deny-all-btn']) || clickFirstVisible(['.ch2-deny-all-btn'])) {
+      if (await waitForDismissal(cmp, selectorActions(cookieHubDismissSelectors()), 5000)) {
+        return 'dom:cookiehub:reject_all';
+      }
+    } else {
+      const settingsAlreadyOpen = hasVisibleSelector(COOKIEHUB_PREFERENCE_SELECTORS);
+      const opened = settingsAlreadyOpen ||
+        clickFirstVisibleNative(['.ch2-open-settings-btn']) ||
+        clickFirstVisible(['.ch2-open-settings-btn']);
+      if (opened && (await waitForAnyVisible(COOKIEHUB_PREFERENCE_SELECTORS, 4000)) &&
+          (clickFirstVisibleNative(['.ch2-deny-all-btn']) || clickFirstVisible(['.ch2-deny-all-btn']))) {
+        if (await waitForDismissal(cmp, selectorActions(cookieHubDismissSelectors()), 5000)) {
+          return 'dom:cookiehub:reject_all';
+        }
+      }
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const preferencesVisible = hasVisibleSelector(COOKIEHUB_PREFERENCE_SELECTORS);
+  const opened = preferencesVisible ||
+    clickFirstVisibleNative(['.ch2-open-settings-btn']) ||
+    clickFirstVisible(['.ch2-open-settings-btn']);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(COOKIEHUB_PREFERENCE_SELECTORS, 4000))) return false;
+  // The settings panel container can render before its category rows finish
+  // populating (confirmed live on semrush.com: the panel itself opens quickly,
+  // but .ch2-settings-option rows can take several more seconds to appear) —
+  // give them a chance before matching, rather than reading an empty list.
+  await waitForAnyVisible(['.ch2-settings-option'], 8000);
+
+  const appliedFunctional = await setCookieHubCategoryState(
+    COOKIEHUB_FUNCTIONAL_PATTERNS, Boolean(flowPrefs.functional) || flowPrefs.uncategorized === 'accept');
+  const appliedAnalytics = await setCookieHubCategoryState(COOKIEHUB_ANALYTICS_PATTERNS, Boolean(flowPrefs.analytics));
+  const appliedAdvertising = await setCookieHubCategoryState(
+    COOKIEHUB_ADVERTISING_PATTERNS, wantsAdvertisingCategoryConsent(flowPrefs));
+  const appliedResults = [appliedFunctional, appliedAnalytics, appliedAdvertising];
+  const appliedCount = appliedResults.filter((value) => value !== null).length;
+
+  if (appliedCount === 0 || appliedResults.includes(false)) {
+    // No category could be matched (or matching one failed) — most likely an
+    // unrecognized label scheme on this publisher's theme. Retrying forever
+    // just leaves the settings modal stuck open with nothing ever clicked
+    // (confirmed live on semrush.com). After a bounded number of attempts,
+    // fall back to Deny All inside the still-open settings panel instead —
+    // honest partial support (custom degrades to reject) beats a banner that
+    // never resolves. Per-container attempt count so a fresh banner (new
+    // page load, or the same modal reopened later) gets its own budget.
+    const settingsRoot = document.querySelector('.ch2-settings');
+    if (settingsRoot) {
+      const attempts = (Number(settingsRoot.dataset.emcCookiehubAttempts) || 0) + 1;
+      settingsRoot.dataset.emcCookiehubAttempts = String(attempts);
+      if (attempts >= COOKIEHUB_CUSTOM_MAX_ATTEMPTS) {
+        if (clickFirstVisibleNative(['.ch2-deny-all-btn']) || clickFirstVisible(['.ch2-deny-all-btn'])) {
+          if (await waitForDismissal(cmp, selectorActions(cookieHubDismissSelectors()), 5000)) {
+            return 'dom:cookiehub:reject_all';
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  await delay(250);
+  if (!(clickFirstVisibleNative(['.ch2-save-settings-btn']) || clickFirstVisible(['.ch2-save-settings-btn']))) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(cookieHubDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:cookiehub:custom' : `dom:cookiehub:${prefs.globalPreference}`;
+}
+
+// CookieHub keys category toggles by an internal name="c-N" attribute whose
+// mapping is configured per publisher, not a stable semantic id — matched by
+// each option's own visible label text instead (same approach as CookieWow).
+async function setCookieHubCategoryState(patterns, checked) {
+  // Match only the option's heading, not its full description text — the
+  // Necessary option's own description mentions "ensuring good performance
+  // on our site", which false-matched an analytics/performance pattern
+  // against the whole container and silently tried to toggle the disabled
+  // Necessary switch instead (confirmed live on monday.com). Not every
+  // CookieHub theme marks its heading with role="heading" though (confirmed
+  // live on semrush.com, where that attribute is absent) — fall back to a
+  // handful of common heading tags, and as a last resort the option's first
+  // non-empty line of text (headings are short and come first; descriptions
+  // are long paragraphs after them), which is far less likely to accidentally
+  // contain another category's keyword than matching the whole blob.
+  const option = Array.from(document.querySelectorAll('.ch2-settings-option')).find((candidate) => {
+    if (!isVisible(candidate)) return false;
+    const details = candidate.querySelector('.ch2-settings-option-details') ?? candidate;
+    const heading =
+      details.querySelector('[role="heading"], strong, b, h1, h2, h3, h4, h5, h6')?.textContent?.replace(/\s+/g, ' ').trim() ??
+      details.textContent?.split('\n').map((line) => line.trim()).find((line) => line.length > 0) ??
+      '';
+    return patterns.some((pattern) => pattern.test(heading));
+  });
+  if (!option) return null;
+
+  const toggle = option.querySelector('.ch2-switch-value');
+  if (!(toggle instanceof HTMLInputElement) || toggle.disabled) return false;
+  const interactionTarget = option.querySelector('.ch2-switch') ?? findCheckboxInteractionTarget(toggle);
+  if (!interactionTarget) return false;
+  if (Boolean(toggle.checked) === checked) return true;
+
+  if (dispatchSyntheticClick(interactionTarget) && (await waitForCheckboxState(toggle, checked, 700))) {
+    return true;
+  }
+
+  forceCheckboxState(toggle, checked);
+  return waitForCheckboxState(toggle, checked, 700);
 }
 
 async function executeCookieControlCivicFlow(cmp, prefs) {
@@ -4088,6 +4288,17 @@ async function setCheckboxStateById(id, checked) {
   return setCheckboxState(toggle, checked);
 }
 
+// Tries a modern widget's id-keyed toggle first, falling back to a CSS
+// selector (which may itself be comma-separated candidates) for markup
+// generations that key category toggles by attribute instead of id.
+async function setCheckboxStateByIdOrSelector(id, selector, checked) {
+  const byId = await setCheckboxStateById(id, checked);
+  if (byId !== null) return byId;
+  const toggle = document.querySelector(selector);
+  if (!(toggle instanceof HTMLInputElement)) return null;
+  return setCheckboxState(toggle, checked);
+}
+
 async function setCheckboxStateWithinContainerIds(ids, checked) {
   for (const id of ids) {
     const container = document.getElementById(id);
@@ -4701,6 +4912,16 @@ function cookieYesDismissSelectors() {
     '.cky-consent-container',
     '.cky-banner-element',
     '.cky-preference-center',
+    '.wt-cli-cookie-bar-container',
+    '#cliSettingsPopup',
+    '.cli-modal-dialog',
+  ];
+}
+
+function cookieHubDismissSelectors() {
+  return [
+    '.ch2-dialog.ch2-visible',
+    '.ch2-settings.ch2-visible',
   ];
 }
 

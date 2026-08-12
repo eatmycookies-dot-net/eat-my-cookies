@@ -153,9 +153,9 @@ if (!sites.length) {
 // second hand-written signature table, so this stays in sync with the
 // extension's real CMP definitions with zero duplication. Only CMPs handled
 // exclusively via dedicated frame content scripts (not a rules/cmps.json
-// declarative entry) need a supplemental signature here — plus Fides, which
-// isn't supported yet but is worth detecting since it's the CMP nytimes.com
-// switched to.
+// declarative entry) need a supplemental signature here. Fides used to live
+// here as "worth detecting but not supported yet" — it now has a real
+// rules/cmps.json entry (added 2026-08-09) and comes through CMPS instead.
 const SUPPLEMENTAL_CMP_SIGNATURES = [
   {
     id: 'appconsent',
@@ -171,14 +171,6 @@ const SUPPLEMENTAL_CMP_SIGNATURES = [
     detectors: [
       { type: 'js_global', value: 'window.semaphore' },
       { type: 'css_selector', value: '[data-testid="ketch"], .ketch-banner' },
-    ],
-  },
-  {
-    id: 'fides',
-    name: 'Fides',
-    detectors: [
-      { type: 'js_global', value: 'window.Fides' },
-      { type: 'css_selector', value: '[id^="fides-"], [class*="fides-banner"]' },
     ],
   },
 ];

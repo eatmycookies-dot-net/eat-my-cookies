@@ -53,6 +53,112 @@ describe('sp-frame-handler.js — guardian top-frame guard', () => {
     expect(source).toContain('.sp_choice_type_13');
   });
 
+  it('never auto-clicks a Sourcepoint button whose own text signals a paid/subscription action (critical safety fix, live-verified)', () => {
+    // Confirmed live on theguardian.com/europe: the site's own generic
+    // "reject" choice is a €5/month subscription upsell ("Reject all and
+    // subscribe", sp_choice_type_9, NOT the usual REJECT_ALL/13), and our
+    // existing generic [aria-label*="Reject All" i] / button[title*="Reject
+    // All" i] fallback selectors DID match it via substring — confirmed via
+    // a live query before this fix. This must never auto-trigger a purchase.
+    expect(source).toContain('const PAID_ACTION_TEXT_RE = /\\bsubscri(?:be|ption|ing)\\b|\\bpay\\b|\\bpaid\\b|€\\s?\\d|\\$\\s?\\d|£\\s?\\d|\\bper\\s+month\\b|\\/\\s*month\\b|\\bpremium\\b/i;');
+    expect(source).toContain('function looksLikePaidAction(el) {');
+    expect(source).toContain('if (el && isVisible(el) && !looksLikePaidAction(el)) return el;');
+    // Also guards the privacy-manager per-category reject loop, not just the
+    // top-level wall buttons.
+    expect(source).toContain('if (looksLikePaidAction(rejectButton)) continue;');
+  });
+
+  it('honestly reports www.theguardian.com as unsupported when the only reject option is the paid wall, instead of silently doing nothing (live-verified)', () => {
+    // www.theguardian.com has no free-reject click flow wired up (unlike
+    // support.theguardian.com), so reject/custom preferences previously did
+    // nothing at all on this host with no explanation. When the visible
+    // "reject" control is the paid subscription upsell (confirmed live on
+    // theguardian.com/europe), report it the same honest way
+    // ACCEPT_OR_WARN_SITES does for other consent-or-pay walls.
+    expect(source).toContain("if (site === 'www.theguardian.com' && guardianRejectIsPaidWallOnly()) {");
+    expect(source).toContain('await reportGuardianPaidWallUnsupported(site);');
+    expect(source).toContain('function findRawCandidate(selectors) {');
+    expect(source).toContain('function guardianRejectIsPaidWallOnly() {');
+    expect(source).toContain('const candidate = findRawCandidate(GDPR_REJECT);');
+    expect(source).toContain('return !!candidate && looksLikePaidAction(candidate);');
+    expect(source).toContain('async function reportGuardianPaidWallUnsupported(site) {');
+    expect(source).toContain("type: 'REPORT_UNSUPPORTED_SITE',");
+    expect(source).toContain('allowAcceptOverride: true,');
+    // Never reports twice per frame load.
+    expect(source).toContain('if (guardianPaidWallReported) return;');
+    expect(source).toContain('guardianPaidWallReported = true;');
+  });
+
+  it('routes the accept_all + ccpaDoNotSell hybrid through the real USNat toggle instead of just closing the panel (live-verified fix)', () => {
+    // Root cause: the plain close/accept button never touches the USNat "Do
+    // not sell or share" toggle, so a user with accept_all + ccpaDoNotSell
+    // true would end up fully opted in despite wanting to stay opted out of
+    // sale. Reported live: "Accept All didn't dismiss the banner... should
+    // have clicked on the do not sell option... Accept all without do not
+    // sell worked well."
+    expect(source).toContain('async function handleGuardianAcceptFrame(site, preference, wantsUsNatOptOut = false) {');
+    expect(source).toContain('if (wantsUsNatOptOut && isGuardianSupportPrivacyManagerOpen()) {');
+    expect(source).toContain("await applyGuardianSupportPrivacyChoice(true, site, preference, 'accept_optout')");
+    expect(source).toContain('await handleGuardianAcceptFrame(site, settings.globalPreference, effectiveUsNatOptOut(settings));');
+    // The plain (no ccpaDoNotSell) accept path is unchanged and still scoped
+    // to support.theguardian.com, since it was never observed to fail on
+    // www.theguardian.com — only the new hybrid path is host-agnostic.
+    expect(source).toContain("if (site === 'support.theguardian.com' && isGuardianSupportPrivacyManagerOpen()) {");
+    expect(source).toContain("await applyGuardianSupportPrivacyChoice(false, site, preference, 'accept')");
+  });
+
+  it('watches the top frame for a bare sp_message_container/iframe shell that appears and vanishes without isSPFrame() ever passing (zeit.de counter fix, live-verified)', () => {
+    expect(source).toContain("if (window === window.top) {");
+    expect(source).toContain('void watchForSilentTopFrameSuppression(site);');
+    expect(source).toContain('async function watchForSilentTopFrameSuppression(site) {');
+    expect(source).toContain("const SP_SHELL_ONLY_SELECTORS = ['[id^=\"sp_message_container\"]', '[id^=\"sp_message_iframe\"]'];");
+    // Backs off to the normal click/report flow the instant a real banner appears.
+    expect(source).toContain('if (isSPFrame()) return;');
+    expect(source).toContain("await report(site, 'sourcepoint:silent_shell', settings.globalPreference);");
+    // Same safety gates the normal report() path relies on: cooldown, manual-open
+    // suppression, top-site disable, onboarding, and no-recent-trusted-click.
+    expect(source).toContain('if (userClickedRecently()) return;');
+    expect(source).toContain('if (await isDisabledForTopSite()) return;');
+    expect(source).toContain('if (await isManualConsentOpenSuppressed(site)) return;');
+    expect(source).toContain('if (isFrameCoolingDown(site, settings.globalPreference)) return;');
+    // Cross-frame dedup: the legitimate click-based report can come from a
+    // different frame/document (the SP iframe) than this top-frame watcher,
+    // so background's per-document dedup key can't catch a duplicate here —
+    // live-confirmed on spiegel.de's accept flow (totalActionsCount was
+    // inflated by one without this). Must key off window.location.hostname,
+    // not the `site` param — referrerHost() returns 'unknown' for a direct
+    // top-level navigation (no document.referrer/ancestorOrigins), which
+    // background normalizes before storing, so comparing the raw 'unknown'
+    // against the normalized stored value always missed the duplicate.
+    expect(source).toContain('if (await hasRecentActivityFor(window.location.hostname, settings.globalPreference)) return;');
+    expect(source).toContain('async function hasRecentActivityFor(hostname, preference, withinMs = 10000) {');
+    expect(source).toContain('if (!recent || recent.site !== hostname || recent.preference !== preference) return false;');
+    // Debounces the "gone" detection against a real banner's own transient
+    // render flicker (live-confirmed regression on spiegel.de's accept flow:
+    // an undebounced version of this watcher won a dedup race against the
+    // real, more specific sourcepoint:gdpr:frame report).
+    expect(source).toContain('if (isSPFrame() || hasVisibleSelector(SP_SHELL_ONLY_SELECTORS)) {');
+    expect(source).toContain('confirmed = false;');
+    expect(source).toContain('if (!confirmed) continue;');
+  });
+
+  it('reports a silent-suppression outcome when a visible SP surface disappears without ever being clicked (zeit.de counter fix)', () => {
+    expect(source).toContain('let sawVisibleSurface = hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS);');
+    expect(source).toContain('if (!sawVisibleSurface && hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS)) {');
+    expect(source).toContain('sawVisibleSurface = true;');
+    expect(source).toContain('if (sawVisibleSurface && !visibleNow) {');
+    expect(source).toContain('await report(site, `sourcepoint:${framework}:silent`, settings.globalPreference);');
+    // Polls independently of the MutationObserver so it reports as soon as the
+    // surface disappears, not only after the full 10s button-hydration window
+    // (validate.js's default handleWaitMs is 6s, shorter than that window).
+    expect(source).toContain('const deadline = Date.now() + 9000;');
+    expect(source).toContain('function userClickedRecently(withinMs = 15000) {');
+    // waitForDismissal() must use the same shared selector list, and must check
+    // every DOM match per selector (not just the first), matching the fix already
+    // applied to hasVisibleSelector() elsewhere in this file for the same reason.
+    expect(source).toContain('if (!hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS)) return true;');
+  });
+
   it('USNAT_OPT_OUT includes .gu-btn-dns (guardian-specific class)', () => {
     expect(source).toContain('.gu-btn-dns');
   });
@@ -646,6 +752,42 @@ describe('main.js — guardian main-world-only guards', () => {
 describe('dom-handler.js — platform/CMP coverage', () => {
   const source = readSource('content/dom-handler.js');
 
+  it('includes CookieHub handlers for accept, reject, and custom with real per-category toggles (live-verified on monday.com and semrush.com)', () => {
+    expect(source).toContain("cmp.id === 'cookiehub'");
+    expect(source).toContain('executeCookieHubFlow');
+    expect(source).toContain('setCookieHubCategoryState');
+    expect(source).toContain('.ch2-allow-all-btn');
+    expect(source).toContain('.ch2-deny-all-btn');
+    expect(source).toContain('.ch2-open-settings-btn');
+    expect(source).toContain('.ch2-save-settings-btn');
+  });
+
+  it('waits for CookieHub settings rows to actually populate before matching categories (semrush.com fix)', () => {
+    // Confirmed live: the settings panel container can render before its
+    // .ch2-settings-option rows finish populating (several seconds later).
+    expect(source).toContain("await waitForAnyVisible(['.ch2-settings-option'], 8000);");
+  });
+
+  it('falls back through multiple heading selectors for CookieHub categories, not the whole option text (semrush.com fix)', () => {
+    // Not every CookieHub theme marks its heading with role="heading" (confirmed
+    // missing live on semrush.com, present on monday.com) — must fall back
+    // through common heading tags and finally first-line-of-text, never the
+    // full container text (that already caused one false-positive match
+    // against the Necessary option's own description on monday.com).
+    expect(source).toContain('details.querySelector(\'[role="heading"], strong, b, h1, h2, h3, h4, h5, h6\')');
+    expect(source).toContain("details.textContent?.split('\\n').map((line) => line.trim()).find((line) => line.length > 0)");
+  });
+
+  it('falls back to Deny All after repeated CookieHub custom-match failures instead of leaving the modal stuck open (semrush.com fix)', () => {
+    // Confirmed live on semrush.com: without this, no category ever matched,
+    // Save was never clicked, and the settings modal stayed open indefinitely
+    // while dom-handler.js silently retried forever.
+    expect(source).toContain('const COOKIEHUB_CUSTOM_MAX_ATTEMPTS = 3;');
+    expect(source).toContain('settingsRoot.dataset.emcCookiehubAttempts');
+    expect(source).toContain('if (attempts >= COOKIEHUB_CUSTOM_MAX_ATTEMPTS) {');
+    expect(source).toContain("return 'dom:cookiehub:reject_all';");
+  });
+
   it('includes Pandectes handlers for accept, reject, custom, and CCPA-style custom flows', () => {
     expect(source).toContain('PANDECTES_ACTIONABLE_SURFACE_SELECTORS');
     expect(source).toContain("cmp.id === 'pandectes'");
@@ -691,6 +833,27 @@ describe('dom-handler.js — platform/CMP coverage', () => {
     expect(source).toContain("functionality_storage: prefs.functional ? 'granted' : 'denied'");
     expect(source).toContain("ad_storage: wantsAdvertisingCategoryConsent(prefs) ? 'granted' : 'denied'");
     expect(source).toContain("document.dispatchEvent(new Event('borlabs-cookie-consent-saved'));");
+  });
+
+  it('recognizes the legacy self-hosted "Cookie Law Info" WebToffee markup as a CookieYes actionable surface (confirmed live on iabeurope.eu)', () => {
+    // #cookie-law-info-bar was already a cmps.json detector and already had legacy
+    // click candidates below, but was missing from the actionable-surface gate that
+    // executeCookieYesFlow checks first — so legacy-markup sites were detected, then
+    // silently bailed out before ever trying those candidates.
+    expect(source).toContain('COOKIEYES_ACTIONABLE_SURFACE_SELECTORS');
+    const actionableMatch = source.match(/const COOKIEYES_ACTIONABLE_SURFACE_SELECTORS = \[([\s\S]*?)\];/);
+    expect(actionableMatch).not.toBeNull();
+    expect(actionableMatch[1]).toContain("'#cookie-law-info-bar'");
+    expect(actionableMatch[1]).toContain("'.wt-cli-cookie-bar-container'");
+
+    expect(source).toContain('.wt-cli-accept-all-btn');
+    expect(source).toContain('.cli_action_button[data-cli_action="accept"]');
+    expect(source).toContain('.cookie_action_close_header_reject');
+    expect(source).toContain('.cli_settings_button');
+    expect(source).toContain('#wt-cli-save-preferences-btn');
+    expect(source).toContain('.wt-cli-save-preferences-btn');
+    expect(source).toContain('.cli-user-preference-checkbox');
+    expect(source).toContain('async function setCheckboxStateByIdOrSelector(id, selector, checked) {');
   });
 
   it('uses Civic purpose values for IAB custom toggles and accepts the dedicated close button class', () => {
@@ -798,6 +961,27 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain("sp-message-open");
     expect(source).toContain("[id^='sp_message_container']");
     expect(source).toContain('cmp_api:Sourcepoint:guardian_reject');
+  });
+
+  it('proactively syncs Guardian USNat opt-out via the real API even when no banner is visible (live-verified fix)', () => {
+    // Root cause: tryGuardianSourcepointHandler() (driven by startGuardianRetryLoop)
+    // only calls postRejectAll when hasVisibleSourcepointSelector() is true. Guardian's
+    // CCPA layer-1 experience is typically a footer link only, with no banner shown to
+    // most US visitors, so ccpaDoNotSell was silently never applied. Live-verified fix:
+    // theguardian.com/us, ccpaDoNotSell=true, footer "Do Not Sell or Share" link opened
+    // after our fix ran — the real Sourcepoint privacy-manager toggle read
+    // aria-checked="true" (opted out), matching the extension preference.
+    expect(source).toContain('function syncGuardianUsNatConsent() {');
+    expect(source).toContain('if (_handled || _guardianProactiveSynced || !_prefs) return;');
+    expect(source).toContain('if (!GUARDIAN_REJECT_API_HOSTS.has(window.location.hostname)) return;');
+    expect(source).toContain('if (typeof window._sp_?.usnat?.postRejectAll !== \'function\') return;');
+    expect(source).toContain('if (hasVisibleSourcepointSelector()) return;');
+    expect(source).toContain("if (_prefs.ccpaDoNotSell === false) return;");
+    expect(source).toContain('invokeGuardianRejectPreference();');
+    // Wired into the existing Guardian-only retry loop, not a new global timer.
+    const loopMatch = source.match(/function startGuardianRetryLoop\(\) \{[\s\S]*?\n  \}/);
+    expect(loopMatch).not.toBeNull();
+    expect(loopMatch[0]).toContain('syncGuardianUsNatConsent();');
   });
 
   it('keeps BBC onetrust handling scoped to explicit OneTrust save controls', () => {
@@ -1064,6 +1248,313 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     expect(source).toContain('const verified = await waitForTruendoConsentState(w, desiredState, 4000);');
     expect(source).toContain("method: prefs.globalPreference === 'custom'");
     expect(source).toContain('return true;');
+  });
+});
+
+describe('cmp-api-handler.js — Fides support (live-verified 2026-08-09)', () => {
+  const source = readSource('content/cmp-api-handler.js');
+
+  it('calls the real, verified window.Fides.updateConsent API rather than clicking DOM buttons', () => {
+    // nytimes.com and wired.com both drifted from Sourcepoint to Fides with no handler
+    // in this codebase at all. Fides' own banner buttons call this same method
+    // internally — confirmed live via Fides.updateConsent.toString() that the parameter
+    // is `consent`, not the initially-guessed `noticeConsent` (which threw "Either
+    // consent object or fidesString must be provided").
+    expect(source).toContain('Fides: async (w, prefs) => {');
+    expect(source).toContain('if (!fides?.initialized) return false;');
+    expect(source).toContain('fides.updateConsent({ consent: desired });');
+    expect(source).toContain('const verified = await waitForFidesConsentState(desired, 2000);');
+    expect(source).toContain("method: prefs.globalPreference === 'custom' ? 'cmp_api:Fides:custom' : 'cmp_api:Fides'");
+  });
+
+  it('is attempted even when no banner is visible, since Fides frequently exposes actionable consent state via the API alone', () => {
+    // Confirmed live on wired.com: Fides.initialized === true with zero visible Fides
+    // DOM elements. Without this, shouldAttemptHandler()'s default visibility gate
+    // would never even call the handler.
+    expect(source).toContain("if (name === 'Fides' && window.Fides?.initialized) return true;");
+  });
+
+  it('classifies notices by keyword, not a hardcoded per-site notice_key list, since naming is not a stable Fides convention', () => {
+    // Confirmed live: nytimes.com uses one combined "targeted_advertising_gpp_us_national"
+    // notice; wired.com uses six differently-named notices for the same underlying
+    // concepts (social_media, essential, sales_sharing_targeted_advertising, analytics,
+    // functional, audience_measurement).
+    expect(source).toContain('function classifyFidesNotice(notice) {');
+    expect(source).toContain('if (FIDES_ESSENTIAL_RE.test(text)) return null;');
+    expect(source).toContain('if (FIDES_ADVERTISING_RE.test(text)) return \'advertising\';');
+    expect(source).toContain('if (FIDES_ANALYTICS_RE.test(text)) return \'analytics\';');
+    expect(source).toContain('if (FIDES_FUNCTIONAL_RE.test(text)) return \'functional\';');
+    expect(source).toContain("return 'uncategorized';");
+  });
+
+  it('never touches notice_only entries (pure disclosures) or essential/necessary notices', () => {
+    // Confirmed live: a default US session on wired.com serves six notices that are ALL
+    // consent_mechanism "notice_only" — nothing to opt in/out of, only a disclosure.
+    expect(source).toContain("if (!n?.notice_key || n.consent_mechanism === 'notice_only') return false;");
+    expect(source).toContain('const FIDES_ESSENTIAL_RE = /essential|necessary|strictly required/i;');
+  });
+
+  it('honors the accept_all + ccpaDoNotSell hybrid for CCPA/sale-style notices (live-verified against real Fides.consent)', () => {
+    // Same shape as the Guardian accept_all + ccpaDoNotSell fix elsewhere in this file:
+    // an advertising/sale-style notice must stay opted out even when everything else is
+    // accepted. Live-verified via the real extension on nytimes.com: accept_all with
+    // ccpaDoNotSell=true still produced Fides.consent.targeted_advertising_gpp_us_national
+    // === false, while plain accept_all (ccpaDoNotSell=false) produced true.
+    expect(source).toContain("case 'advertising': return Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;");
+  });
+
+  it('does not report or change anything when the desired state already matches, avoiding false repeat reports', () => {
+    expect(source).toContain('const changed = actionable.some((n) => Boolean(current[n.notice_key]) !== desired[n.notice_key]);');
+    expect(source).toContain('if (!changed) return false;');
+  });
+
+  it('routes TCF (GDPR/EU) experiences through real button clicks instead of the notice-only API (live-verified fix, 2026-08-09)', () => {
+    // User-reported bug: the notice-level updateConsent() call above correctly
+    // sets Fides.consent/tcf_purpose_consents/the fides_string cookie (confirmed
+    // via network + cookie inspection), but never drove the actual banner's
+    // visibility — a real DE VPN session on both nytimes.com and wired.com
+    // showed the banner still fully on screen after this handler reported
+    // success. Root cause: TCF-enabled experiences render a real banner
+    // (#fides-banner-container) plus a separate modal (#fides-modal), and only
+    // Fides' own banner click handlers resolve banner visibility — the notice
+    // API is a completely separate concern.
+    expect(source).toContain('if (hasFidesTcfBanner()) {');
+    expect(source).toContain('return await handleFidesTcfBanner(prefs);');
+    expect(source).toContain("function hasFidesTcfBanner() {");
+    expect(source).toContain("return !!document.querySelector('#fides-banner-container, #fides-modal');");
+  });
+
+  it('checks real on-screen position for the Fides banner, not just box size, since Fides hides it via an off-screen transform', () => {
+    // Confirmed live: Fides slides its banner below the viewport as its close
+    // animation (a CSS transform), not display:none or DOM removal —
+    // getBoundingClientRect() still reports a full-size box (e.g. 1280x360)
+    // positioned at top:900 in a 720px-tall viewport. The shared isVisible()
+    // helper used by every other CMP handler in this file only checks box
+    // size/display/visibility, not viewport position, so it would misreport
+    // this as still visible — deliberately not changed, since that helper is
+    // shared across every CMP handler in this file and changing it needs its
+    // own full regression pass, not a Fides-scoped fix.
+    expect(source).toContain('function isFidesElementOnScreen(el) {');
+    expect(source).toContain('return rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;');
+  });
+
+  it('escalates to the modal when the visible banner has no direct button, since this varies per Fides deployment', () => {
+    // Confirmed live: nytimes.com's simple banner shows Reject All / Accept
+    // All / Manage Preferences directly. wired.com's simple banner offers only
+    // Accept All + "Your Privacy Choices" — the real Reject All only exists
+    // inside the modal opened from there. Both are handled by one escalation
+    // path rather than a per-site branch.
+    expect(source).toContain('async function clickFidesBannerOrModalButton(wantsFullAccept) {');
+    expect(source).toContain('if (tryClickFidesButton(bannerSelector)) return true;');
+    expect(source).toContain('if (!tryClickFidesButton(FIDES_BANNER_MANAGE_PREFERENCES_SEL)) return false;');
+    expect(source).toContain('if (!(await waitForFidesModalOpen(2000))) return false;');
+    expect(source).toContain('return tryClickFidesButton(modalSelector);');
+    expect(source).toContain('async function handleFidesTcfBanner(prefs) {');
+    expect(source).toContain('if (!(await clickFidesBannerOrModalButton(wantsFullAccept))) return false;');
+  });
+
+  it('treats custom and the accept_all+ccpaDoNotSell hybrid as a full reject in TCF mode, honestly labeled, matching the spiegel.de precedent', () => {
+    // Granular per-purpose toggling inside the Fides TCF modal isn't
+    // implemented yet — same documented constraint as Sourcepoint's GDPR
+    // privacy manager on spiegel.de (full reject is the safer default over a
+    // granular selection that can't be verified as actually saved). Every
+    // outcome live-verified via the real extension across 5 scenarios on both
+    // nytimes.com and wired.com via a real DE VPN session: reject_all,
+    // accept_all, accept_all+ccpaDoNotSell=true, and two custom variants all
+    // produced a dismissed banner with the correct, honestly-labeled method.
+    expect(source).toContain("function fidesTcfMethodFor(wantsFullAccept, prefs) {");
+    expect(source).toContain("if (wantsFullAccept) return 'cmp_api:Fides:tcf_accept_all';");
+    expect(source).toContain("if (prefs.globalPreference === 'custom') return 'cmp_api:Fides:tcf_custom_as_reject';");
+    expect(source).toContain("return 'cmp_api:Fides:tcf_reject_all';");
+  });
+
+  it('proactively resyncs Fides TCF sites that show no banner on return visits, since Fides trusts an existing decision cookie and never re-prompts (live-verified fix)', () => {
+    // Reproduced live: with Reject All already recorded, switching the
+    // extension's own preference to Accept All and revisiting produced zero
+    // visible banner and zero re-applied consent — identical in shape to the
+    // known OneTrust "modal suppressed on return visit" gap
+    // syncOneTrustConsent() already solves. Fides.showModal() can force the
+    // modal open even here; confirmed live it correctly opens with the right
+    // action button present, and clicking it correctly applies and closes.
+    expect(source).toContain('function isFidesTcfSite() {');
+    expect(source).toContain("return window.Fides?.options?.tcfEnabled === true;");
+    expect(source).toContain('async function syncFidesTcfConsent(prefs) {');
+    expect(source).toContain("if (typeof window.Fides?.showModal !== 'function') return false;");
+    // Gated on a prior real decision existing, so this never races a genuine
+    // first-time visitor's organic banner.
+    expect(source).toContain('if (!window.Fides?.fides_string) return false;');
+    // Gated on a per-hostname, per-preference-signature sessionStorage marker
+    // so this forces the (visibly disruptive) modal open at most once per
+    // browsing session for a matching preference, not on every page view.
+    expect(source).toContain("const storageKey = `emc:fides:tcf:synced:${window.location.hostname}`;");
+    expect(source).toContain('if (stored === signature) return false;');
+    expect(source).toContain('window.Fides.showModal();');
+  });
+
+  it('waits for the real FidesUpdated completion event before trusting a click, not just visual banner dismissal (live-verified race condition fix)', () => {
+    // Reproduced live: the banner/modal disappearing visually happens BEFORE
+    // Fides finishes internally computing and persisting the full TCF
+    // consent decision. Reopening "Your Privacy Choices" immediately after
+    // Accept All dismissed showed only 2 of 29 toggles correctly checked;
+    // waiting even ~300ms first showed all 29 correct. FidesUpdated fires
+    // ~500-600ms after the click, consistently, well after visual dismissal
+    // — confirmed live via a direct event listener test. The listener must
+    // be attached before the click, not after, since the event can fire
+    // faster than the time it takes to set one up post-click.
+    expect(source).toContain('function waitForFidesUpdatedEvent(timeoutMs = 3000) {');
+    expect(source).toContain("window.addEventListener('FidesUpdated', handler);");
+    // Both callers attach the listener before clicking.
+    expect(source).toContain('const updatedPromise = waitForFidesUpdatedEvent(3000);\n    if (!(await clickFidesBannerOrModalButton(wantsFullAccept))) return false;\n    await updatedPromise;');
+    expect(source).toContain('const updatedPromise = waitForFidesUpdatedEvent(3000);\n    if (!clickFidesModalButton(wantsFullAccept)) return false;\n    await updatedPromise;');
+  });
+
+  it('waits for the banner/modal button to actually be on-screen before the first click attempt, not just present in the DOM (live-verified fix, ethyca.com, 2026-08-11)', () => {
+    // Reproduced live via a debug log: our MutationObserver-driven retry fires the
+    // instant the banner container is inserted into the DOM, but the banner then
+    // slides into view via its own opening animation (mirroring the already-known
+    // closing slide-out) — isFidesElementOnScreen() correctly reported "not on
+    // screen yet" at that first instant, and since nothing else reliably
+    // re-triggers a retry once a pure CSS/attribute change finishes (the
+    // MutationObserver here only watches childList/subtree), a banner caught
+    // mid-animation on the first attempt could be left completely unhandled.
+    expect(source).toContain('async function waitForFidesElementOnScreen(selector, timeoutMs = 1500) {');
+    expect(source).toContain('await waitForFidesElementOnScreen(bannerSelector, 1500);\n    if (tryClickFidesButton(bannerSelector)) return true;');
+  });
+
+  it('runs a dedicated, generic Fides watch that keeps retrying well past the shared 15s/10s generic retry cutoffs (live-verified fix, ethyca.com, 2026-08-11)', () => {
+    // Confirmed live via repeated VPN runs: ethyca.com's Fides banner consistently
+    // appeared 15-20+ seconds after page load (Fides makes a real server
+    // round-trip to decide the geo-specific experience before rendering
+    // anything, visibly slower under VPN) — well past both the non-SPA
+    // MutationObserver's 15000ms disconnect and the SPA scheduled-poll list's
+    // 10000ms final checkpoint, so a banner this slow could go completely
+    // unhandled with neither generic mechanism still watching. This is a
+    // single, self-contained watch (started once, unconditionally, at
+    // bootstrap) so it does not depend on window.Fides already existing by the
+    // time any of the other paths' fixed checkpoints run.
+    expect(source).toContain('const FIDES_WATCH_WINDOW_MS = 35000;');
+    expect(source).toContain('function startFidesWatch() {');
+    expect(source).toContain("if (!_prefs || typeof window.Fides === 'undefined') return;");
+    expect(source).toContain('startFidesWatch();');
+  });
+
+  it('declares the Fides watch timer near the top-level state block, not inline next to startFidesWatch(), to avoid a temporal-dead-zone crash', () => {
+    // Regression guard for a real bug caught during live verification: an
+    // earlier version declared `let _fidesWatchTimer` right next to
+    // startFidesWatch() further down the file, but startFidesWatch() is called
+    // from the early bootstrap code — before that `let` would be reachable.
+    // The resulting "Cannot access '_fidesWatchTimer' before initialization"
+    // TDZ error was an uncaught synchronous exception partway through this
+    // IIFE's top-level execution, which silently aborted every statement after
+    // it — including all the other retry-loop wiring — making it look like
+    // Fides handling had stopped working entirely rather than throwing a
+    // visible error. Confirmed live: reverting to the inline declaration
+    // reproduced zero `__emc_handled__` events on ethyca.com even after 20+
+    // seconds of observation with the banner genuinely on screen.
+    expect(source).toContain('let _guardianRetryTimer = null;');
+    const preambleMatch = source.match(/let _guardianRetryTimer = null;[\s\S]{0,900}/);
+    expect(preambleMatch).toBeTruthy();
+    expect(preambleMatch[0]).toContain('let _fidesWatchTimer = null;');
+    expect(preambleMatch[0]).toContain('const FIDES_WATCH_WINDOW_MS = 35000;');
+  });
+});
+
+describe('cmp-api-handler.js — Didomi custom-mode support (live-verified fix, 2026-08-10/11)', () => {
+  const source = readSource('content/cmp-api-handler.js');
+
+  it('no longer collapses custom mode into setUserDisagreeToAll() — the pre-existing generic bug behind the elpais.com report', () => {
+    // Before this fix, the Didomi handler's `else` branch fired identically for
+    // both reject_all and custom, so custom mode silently behaved like a full
+    // reject regardless of the user's actual per-category choices (confirmed
+    // live: Functional/Analytics on in the popup, but every purpose showed
+    // "Disagree" on reopen on elpais.com). Not site-specific — this is the
+    // shared Tier 2 handler that runs for every Didomi deployment.
+    expect(source).toContain("if (prefs.globalPreference === 'accept_all') {\n        w.Didomi?.setUserAgreeToAll?.();");
+    expect(source).toContain("if (prefs.globalPreference !== 'custom') {\n        w.Didomi?.setUserDisagreeToAll?.();");
+    expect(source).toContain('return applyDidomiCustomConsent(w, prefs);');
+  });
+
+  it('applies real per-purpose granular consent via the documented, non-deprecated setUserConsentStatusForAll API', () => {
+    // Confirmed live via fn.toString() introspection 2026-08-10 that
+    // setUserConsentStatusForAll(enabled, disabled, vendorsEnabled, vendorsDisabled)
+    // calls ConsentService.setUserConsentStatus directly (the current entry
+    // point), unlike the 3-arg setUserConsentStatus which calls the
+    // ...Deprecated variant.
+    expect(source).toContain('function applyDidomiCustomConsent(w, prefs) {');
+    expect(source).toContain("if (typeof didomi?.setUserConsentStatusForAll !== 'function' || typeof didomi?.getPurposes !== 'function') {");
+    expect(source).toContain('didomi.setUserConsentStatusForAll(enabled, disabled, [], []);');
+  });
+
+  it('classifies Didomi purpose IDs generically by their standardized IAB/Didomi slugs, with a text-pattern fallback for deployer-custom IDs', () => {
+    // Object.keys(Didomi.getPurposes()) confirmed live on elpais.com to return
+    // Didomi's own standardized 'iab' namespace TCF purpose slugs plus its
+    // standard 'cookies_analytics'/'cookies_marketing'/'cookies_social' vendor-
+    // category IDs — all stable across Didomi deployments, not elpais.com-specific.
+    expect(source).toContain('function classifyDidomiPurpose(purposeId) {');
+    expect(source).toContain("'select_basic_ads', 'create_ads_profile', 'select_personalized_ads',");
+    expect(source).toContain("'cookies_marketing', 'cookies_social',");
+    expect(source).toContain("'measure_content_performance', 'market_research', 'improve_products', 'cookies_analytics',");
+    expect(source).toContain("'cookies', 'create_content_profile', 'select_personalized_content', 'use_limited_data_to_select_content',");
+  });
+
+  it('classifies cookies_marketing/cookies_social as advertising by explicit ID, not by falling through to the uncategorized regex fallback', () => {
+    // Regression guard for a bug caught during live verification: these two
+    // standard Didomi vendor-category IDs don't match any of the FIDES-style
+    // text-pattern fallback regexes (no "ad"/"analytic"/"functional" substring),
+    // so without an explicit Set entry they silently fell through to the
+    // 'uncategorized' bucket. That happened to produce the right disabled
+    // result only because the test's uncategorized preference was 'reject' —
+    // with uncategorized='accept' and advertising=false, they would have been
+    // wrongly enabled. Confirmed live both ways on elpais.com 2026-08-11.
+    expect(source).toContain('DIDOMI_ADVERTISING_PURPOSE_IDS = new Set([');
+    const advertisingSetMatch = source.match(/DIDOMI_ADVERTISING_PURPOSE_IDS = new Set\(\[([\s\S]*?)\]\);/);
+    expect(advertisingSetMatch).toBeTruthy();
+    expect(advertisingSetMatch[1]).toContain('cookies_marketing');
+    expect(advertisingSetMatch[1]).toContain('cookies_social');
+  });
+
+  it('explicitly hides the Didomi notice/preferences UI after applying custom consent, since the API call alone does not dismiss it', () => {
+    // Confirmed live 2026-08-10: unlike setUserAgreeToAll()/setUserDisagreeToAll(),
+    // setUserConsentStatusForAll() left #didomi-notice visible 8+ seconds with no
+    // explicit hide — same class of gap already fixed for Fides this session
+    // (consent applied correctly underneath, but the banner never actually left
+    // the screen). Mirrors the existing `w.Cookiebot.hide?.()` pattern.
+    expect(source).toContain('try { didomi.notice?.hide?.(); } catch (_) {}');
+    expect(source).toContain('try { didomi.preferences?.hide?.(); } catch (_) {}');
+  });
+
+  it('watches for and removes the PRISA/Didomi leftover #acceptationCMPWall backdrop after every Didomi path, not just custom', () => {
+    // Confirmed live via a real user screenshot on elpais.com 2026-08-11:
+    // #acceptationCMPWall.cmp-overlay (PRISA's own CMP-integration wrapper
+    // around Didomi, loaded from cmp.prisa.com — separate from Didomi's own
+    // #didomi-popup/#didomi-notice) got stuck fullscreen and blocking
+    // (pointer-events: auto, z-index: 5000, aria-hidden="false") after the
+    // Didomi popup itself was already gone. It's normally transient (observed
+    // self-clearing ~1s after Didomi resolves across several live runs), so a
+    // single fire-and-forget hide isn't reliable — a bounded MutationObserver
+    // watch (mirroring the existing OneTrust startOneTrustCleanupWatch()
+    // pattern) is used instead. Wired into all three Didomi branches
+    // (accept_all, reject_all, custom), not just the custom path this bug was
+    // first noticed alongside.
+    expect(source).toContain("const DIDOMI_WALL_SELECTOR = '#acceptationCMPWall.cmp-overlay';");
+    expect(source).toContain('function startDidomiWallCleanupWatch() {');
+    expect(source).toContain('function closeDidomiLeftoverWall() {');
+    const didomiHandlerMatch = source.match(/Didomi: \(w, prefs\) => \{[\s\S]*?\n    \},/);
+    expect(didomiHandlerMatch).toBeTruthy();
+    expect((didomiHandlerMatch[0].match(/startDidomiWallCleanupWatch\(\)/g) || []).length).toBe(2);
+    expect(source).toContain('startDidomiWallCleanupWatch();\n\n    return true;\n  }');
+  });
+
+  it('also clears the cmp-scroll-lock left behind by removing the wall directly instead of via its own close handler (live-verified fix, 2026-08-11)', () => {
+    // User report: after the wall-removal fix above shipped, the wall itself was
+    // confirmed gone but the page was still unscrollable, then confirmed via
+    // live DOM inspection that <body> carries a 'cmp-scroll-lock' class. PRISA's
+    // script locks scroll while the backdrop is shown and normally undoes it in
+    // its own close handler — bypassing that handler by removing the div
+    // directly skips the unlock too. 'scroll-lock' is also cleared as a generic
+    // fallback for other PRISA properties, plus a direct inline-style branch.
+    expect(source).toContain("el.classList?.remove('scroll-lock', 'cmp-scroll-lock');");
+    expect(source).toContain("if (el.style?.overflow === 'hidden') el.style.overflow = '';");
   });
 });
 
@@ -1481,13 +1972,45 @@ describe('frame handlers — temporary skip guards', () => {
     expect(mainSource).toContain('event.isTrusted');
     expect(mainSource).toContain('isManualConsentOpenTarget(target)');
     expect(mainSource).toContain('await isManualConsentOpenSuppressed()');
-    expect(mainSource).toContain('if (await isManualConsentOpenSuppressed()) return { ok: true, manualOpenSuppressed: true };');
+    // reportAction() carries a Usercentrics-only exemption (it must not discard a
+    // completed Usercentrics outcome reported after the user made a choice), so
+    // the suppression check here is conditional rather than an unconditional guard.
+    expect(mainSource).toContain("if (!isUsercentricsActionMethod(method) && await isManualConsentOpenSuppressed()) {\n    return { ok: true, manualOpenSuppressed: true };\n  }");
     expect(mainSource).toContain('async function flushPendingPreHandleAction(signature) {\n  if (await isManualConsentOpenSuppressed()) return false;');
     expect(mainSource.indexOf('if (!force && await isManualConsentOpenSuppressed())')).toBeLessThan(mainSource.indexOf('scheduleShopifyWatch(prefs);'));
     expect(spSource).toContain('if (await isManualConsentOpenSuppressed(site)) return;');
     expect(cmSource).toContain('if (await isManualConsentOpenSuppressed(topSite)) return;');
     expect(appConsentSource).toContain('if (await isManualConsentOpenSuppressed(referrerHost())) return;');
     expect(cmSource).toContain('if (!suppressed) chrome.runtime.sendMessage');
+  });
+
+  it('clears the manual-consent-open marker immediately on a reload, instead of waiting out the full suppression window (live-verified fix, 2026-08-10)', () => {
+    // User-reported: repeated reload-and-retest during debugging kept
+    // getting blocked, because MANUAL_CONSENT_SUPPRESS_MS (120000ms) is a
+    // blind timer with no check on whether the manually-opened panel is
+    // still actually open. A reload destroys whatever panel was open along
+    // with the rest of the old document, so there's no reason to keep
+    // suppressing for the rest of the window — but the old logic couldn't
+    // tell "still on the same page, panel might genuinely still be open"
+    // apart from "reloaded since, panel is definitely gone" without this.
+    //
+    // CURRENT_PAGE_LOAD_ID is a fresh random value generated once per
+    // content-script injection (i.e. once per navigation/reload). Live-
+    // verified: seeding a FRESH (0ms old) marker with a foreign pageLoadId —
+    // simulating "set by a page instance before this one" — was correctly
+    // cleared and did not suppress automation, despite being well within the
+    // old 120s window.
+    const mainSource = readSource('content/main.js');
+    expect(mainSource).toContain('const CURRENT_PAGE_LOAD_ID = `${Date.now()}:${Math.random().toString(36).slice(2)}`;');
+    expect(mainSource).toContain('pageLoadId: CURRENT_PAGE_LOAD_ID,');
+    expect(mainSource).toContain('const markerPredatesThisPageLoad = payload.pageLoadId && payload.pageLoadId !== CURRENT_PAGE_LOAD_ID;');
+    expect(mainSource).toContain('if (markerPredatesThisPageLoad || Date.now() - payload.timestamp >= MANUAL_CONSENT_SUPPRESS_MS) {');
+    // Proactive self-cleanup so the stored marker doesn't visibly linger in
+    // storage inspection long after it has stopped actually suppressing
+    // anything, even if nothing happens to re-check it on an idle page.
+    expect(mainSource).toContain('setTimeout(async () => {');
+    expect(mainSource).toContain('if (current?.[MANUAL_CONSENT_OPEN_KEY]?.pageLoadId === CURRENT_PAGE_LOAD_ID) {');
+    expect(mainSource).toContain('}, MANUAL_CONSENT_SUPPRESS_MS + 500);');
   });
 
   it('heuristic fallback skips BBC and LA Times', () => {
@@ -1768,6 +2291,8 @@ describe('sp-frame-handler.js — guardian top-frame: no click in VM', () => {
         runtime: { sendMessage: vi.fn(async () => ({})) },
       },
       sessionStorage: { getItem: vi.fn(() => null), setItem: vi.fn() },
+      setTimeout,
+      clearTimeout,
       console: { warn: vi.fn(), error: vi.fn(), log: vi.fn() },
     };
     sandbox.window.top = {};
@@ -1809,9 +2334,17 @@ describe('tcf-interceptor.js — guardian hostname: __tcfapi NOT defined', () =>
         location: { hostname: 'www.bbc.com' },
         __tcfapi: undefined,
         __tcfapiBuffer: undefined,
+        frames: {},
+        addEventListener: vi.fn(),
       },
-      document: { addEventListener: vi.fn() },
+      document: {
+        addEventListener: vi.fn(),
+        createElement: vi.fn(() => ({ style: {} })),
+        body: { appendChild: vi.fn() },
+        documentElement: { appendChild: vi.fn() },
+      },
       console: { log: vi.fn(), warn: vi.fn() },
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     };
 
     const context = vm.createContext(sandbox);
@@ -1829,11 +2362,17 @@ describe('tcf-interceptor.js — guardian hostname: __tcfapi NOT defined', () =>
         location: { hostname: 'www.bbc.com' },
         __tcfapi: undefined,
         __tcfapiBuffer: undefined,
+        frames: {},
+        addEventListener: vi.fn(),
       },
       document: {
         addEventListener: vi.fn((name, handler) => listeners.set(name, handler)),
+        createElement: vi.fn(() => ({ style: {} })),
+        body: { appendChild: vi.fn() },
+        documentElement: { appendChild: vi.fn() },
       },
       console: { log: vi.fn(), warn: vi.fn() },
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     };
 
     const context = vm.createContext(sandbox);
@@ -1852,5 +2391,92 @@ describe('tcf-interceptor.js — guardian hostname: __tcfapi NOT defined', () =>
     expect(() => sandbox.window.__tcfapi('getTCData', 2)).not.toThrow();
     expect(() => sandbox.window.__tcfapi('removeEventListener', 2)).not.toThrow();
     expect(() => sandbox.window.__tcfapi('unsupportedCommand', 2)).not.toThrow();
+  });
+
+  it('produces a non-empty tcString once prefs arrive (was hardcoded to "" before the zeit.de refresh-loop fix)', () => {
+    const source = readSource('content/tcf-interceptor.js');
+
+    const listeners = new Map();
+    const sandbox = {
+      window: {
+        location: { hostname: 'www.bbc.com' },
+        __tcfapi: undefined,
+        __tcfapiBuffer: undefined,
+        frames: {},
+        addEventListener: vi.fn(),
+      },
+      document: {
+        addEventListener: vi.fn((name, handler) => listeners.set(name, handler)),
+        createElement: vi.fn(() => ({ style: {} })),
+        body: { appendChild: vi.fn() },
+        documentElement: { appendChild: vi.fn() },
+      },
+      console: { log: vi.fn(), warn: vi.fn() },
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    };
+
+    const context = vm.createContext(sandbox);
+    vm.runInContext(source, context);
+
+    listeners.get('__emc_prefs__')?.({
+      detail: { globalPreference: 'reject_all', functional: false, analytics: false, advertising: false },
+    });
+
+    const data = sandbox.window.__tcfapi('getTCData', 2);
+    expect(typeof data.tcString).toBe('string');
+    expect(data.tcString.length).toBeGreaterThan(0);
+    // Core segment + mandatory (TCF v2.3) Disclosed Vendors segment, '.'-joined.
+    expect(data.tcString).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+  });
+
+  it('creates a hidden __tcfapiLocator iframe and relays postMessage __tcfapiCall requests (IAB cross-frame CMP discovery)', () => {
+    const source = readSource('content/tcf-interceptor.js');
+
+    const listeners = new Map();
+    const created = [];
+    const appended = [];
+    const sandbox = {
+      window: {
+        location: { hostname: 'www.bbc.com' },
+        __tcfapi: undefined,
+        __tcfapiBuffer: undefined,
+        frames: {},
+        addEventListener: vi.fn((name, handler) => listeners.set(name, handler)),
+      },
+      document: {
+        addEventListener: vi.fn(),
+        createElement: vi.fn(() => {
+          const el = { style: {} };
+          created.push(el);
+          return el;
+        }),
+        body: { appendChild: vi.fn((el) => appended.push(el)) },
+        documentElement: { appendChild: vi.fn((el) => appended.push(el)) },
+      },
+      console: { log: vi.fn(), warn: vi.fn() },
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    };
+
+    const context = vm.createContext(sandbox);
+    vm.runInContext(source, context);
+
+    // A hidden locator iframe was created and attached so cross-origin frames can find it.
+    expect(created).toHaveLength(1);
+    expect(created[0].name).toBe('__tcfapiLocator');
+    expect(appended).toContain(created[0]);
+
+    // Relays a postMessage __tcfapiCall the way a cross-origin ad-vendor iframe would send one.
+    const relay = listeners.get('message');
+    expect(typeof relay).toBe('function');
+
+    let responsePayload = null;
+    const fakeSource = { postMessage: (data) => { responsePayload = data; } };
+    relay({
+      data: { __tcfapiCall: { command: 'ping', version: 2, parameter: undefined, callId: 42 } },
+      source: fakeSource,
+    });
+
+    expect(responsePayload?.__tcfapiReturn?.callId).toBe(42);
+    expect(responsePayload?.__tcfapiReturn?.success).toBe(true);
   });
 });

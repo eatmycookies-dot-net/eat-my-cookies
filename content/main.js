@@ -1086,6 +1086,17 @@ function isManualConsentOpenTarget(target) {
   return inFooter || privacySettingsUrl;
 }
 
+// Unique per document instance (a fresh value every navigation, including a
+// same-URL reload) — used to tell "this marker is from the page instance
+// that's still running right now, the panel it opened might genuinely still
+// be up" apart from "this marker is left over from before a reload, so
+// whatever it opened is long gone, destroyed along with the rest of that old
+// document." A blind time-based window alone can't tell those apart: a user
+// who reloads to retest gets punished with the same up-to-120s wait as
+// someone still actively reading the panel, even though the reload already
+// guarantees nothing is open anymore.
+const CURRENT_PAGE_LOAD_ID = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+
 async function markManualConsentOpen(target) {
   try {
     await chrome.storage.local.set({
@@ -1093,12 +1104,28 @@ async function markManualConsentOpen(target) {
         site,
         timestamp: Date.now(),
         url: location.href,
+        pageLoadId: CURRENT_PAGE_LOAD_ID,
         target: (target.textContent || target.getAttribute?.('aria-label') || target.getAttribute?.('title') || target.getAttribute?.('href') || '')
           .trim()
           .replace(/\s+/g, ' ')
           .slice(0, 120),
       },
     });
+    // Proactive self-cleanup so the stored marker doesn't linger and look
+    // like it's still active in storage inspection long after it has
+    // stopped actually suppressing anything — it otherwise only gets
+    // removed the next time something happens to call
+    // isManualConsentOpenSuppressed(), which may not happen again on an
+    // idle page. Only removes it if it's still the exact same marker (a
+    // newer click since then must not be clobbered).
+    setTimeout(async () => {
+      try {
+        const current = await chrome.storage.local.get({ [MANUAL_CONSENT_OPEN_KEY]: null });
+        if (current?.[MANUAL_CONSENT_OPEN_KEY]?.pageLoadId === CURRENT_PAGE_LOAD_ID) {
+          await chrome.storage.local.remove(MANUAL_CONSENT_OPEN_KEY);
+        }
+      } catch (_) {}
+    }, MANUAL_CONSENT_SUPPRESS_MS + 500);
   } catch (_) {}
 }
 
@@ -1106,7 +1133,15 @@ async function isManualConsentOpenSuppressed(host = site) {
   try {
     const result = await chrome.storage.local.get({ [MANUAL_CONSENT_OPEN_KEY]: null });
     const payload = result?.[MANUAL_CONSENT_OPEN_KEY];
-    if (!payload?.timestamp || Date.now() - payload.timestamp >= MANUAL_CONSENT_SUPPRESS_MS) {
+    if (!payload?.timestamp) {
+      await chrome.storage.local.remove(MANUAL_CONSENT_OPEN_KEY);
+      return false;
+    }
+    // A page load/reload since the marker was set is proof the manually
+    // opened panel is gone — the whole document it lived in was destroyed —
+    // so there's no reason to keep waiting out the rest of the window.
+    const markerPredatesThisPageLoad = payload.pageLoadId && payload.pageLoadId !== CURRENT_PAGE_LOAD_ID;
+    if (markerPredatesThisPageLoad || Date.now() - payload.timestamp >= MANUAL_CONSENT_SUPPRESS_MS) {
       await chrome.storage.local.remove(MANUAL_CONSENT_OPEN_KEY);
       return false;
     }

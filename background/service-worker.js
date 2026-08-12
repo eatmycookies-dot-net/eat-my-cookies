@@ -9,6 +9,7 @@ import {
   clearSiteOverrides,
   clearUnsupportedSite,
   setUnsupportedSite,
+  runStorageMigrations,
 } from '../utils/storage.js';
 import { formatBadgeCount, recordAction, recordSite, getNewMilestones } from '../utils/stats.js';
 import {
@@ -35,6 +36,7 @@ const DW_RETURN_PENDING_KEY = '__emc_dw_return_pending__';
 const DW_RETURN_CLEANUP_DELAY_MS = 12000;
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  await runStorageMigrations();
   await ensureContextMenus();
   await refreshContextMenusForActiveTab();
 

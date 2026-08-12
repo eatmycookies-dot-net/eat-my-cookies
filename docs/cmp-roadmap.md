@@ -18,6 +18,7 @@ These families already have runtime support and should not be described as the n
 - `Complianz`, `CookieYes`, `Ketch`, `Osano`, `Pandectes`
 - `Borlabs Cookie`, `Cookie Information`, `Cookie Wow`
 - `Cookie Control by Civic`, `Truendo`, `Clickio`, `cookiesjsr`, `privacymanager.io`
+- `CookieHub`
 
 Several of those still need better live regression targets or tighter support wording, but that is validation and hardening work, not greenfield CMP expansion.
 
@@ -33,7 +34,9 @@ Before adding more families, the highest-value next steps are:
    Current status: generic handling exists, but the public regression story is still weak and real sites such as `theverge.com`, `e-core.com`, and `exame.com` show hybrid stacks.
 4. `Cookie Wow`
    Current status: implementation exists, but a stable public regression target is still missing.
-5. Public regression targets for `Usercentrics`, `Quantcast Choice`, `Axeptio`, `Termly`, and `Osano`
+5. `CookieHub`
+   Current status: added 2026-08-09, initially as a declarative-only `rules/cmps.json` entry, then rebuilt same-day as a full `dom-handler.js` flow (`executeCookieHubFlow`) after live verification on a real customer site (`monday.com`, US/CCPA region — via Wappalyzer's public CookieHub customer list) surfaced that the first-layer banner has no direct Deny All in US/CCPA mode (only inside the settings modal) and that `.ch2-container` is a class, not an id, as the first declarative-only version had assumed. Reject All, Accept All, and Custom (real per-category toggles, matched by visible label heading text since CookieHub's `name="c-N"` attribute is publisher-configured, not a stable semantic id) are all live-verified working end-to-end via a real headed Playwright run with the extension loaded. EU/GDPR-region first-layer markup is still unconfirmed — see `docs/cmp-impact-map.md`.
+6. Public regression targets for `Usercentrics`, `Quantcast Choice`, `Axeptio`, `Termly`, and `Osano`
    Current status: runtime support exists, but these should not be treated as strong public roadmap wins until they have stable validation targets in `tests/sites.json` and corresponding public support notes.
 
 ## Next Truly New CMP Families
@@ -47,10 +50,9 @@ Once the existing partials above are tightened up, the next unsupported CMP fami
 | 3 | `Gemius` | Large Central/Eastern European measurement + consent vendor. Confirmed live on 5 top-ranked sites: `onet.pl`, `interia.pl`, `sport.pl`, `sport.tvp.pl` (Poland), `abola.pt` (Portugal). | Start with `onet.pl` or `interia.pl` — both are already `dom:consentmanager` overlap risks per `docs/cmp-impact-map.md`, so confirm Gemius is the actual consent gate and not a secondary analytics tag before building a handler. |
 | 4 | `Ensighten/Cheq` | Established enterprise tag management + consent. Confirmed live (`ENSIGHTEN_SRC`) on `cnn.com` — a top-10 global site already `Automation-covered` for us via Sourcepoint, so this may be a secondary tag-management layer rather than the primary consent gate; verify before assuming a new handler is required. | Fingerprint `cnn.com` specifically to determine whether Ensighten fires before or alongside the existing Sourcepoint flow. |
 | 5 | `Ströer Media Solutions` | Large German media/ad-tech group. Confirmed live (explicit `Ströer Digital Publishing GmbH` branding, `stroeerws.de` infrastructure) on `t-online.de`, a top-50 global news site. Relevant given existing German-site coverage (`spiegel.de`, `zeit.de`, `faz.net`, `sueddeutsche.de`). | Fingerprint `t-online.de` directly; check whether other Ströer-owned properties share the same consent surface. |
-| 6 | `CookieHub` | Broad SMB and mid-market footprint with a likely reusable hosted-banner shape. No live target confirmed in the 2026-08-08 pass — demoted below the evidenced items above. | Fingerprint a small live corpus and confirm whether it fits `rules/cmps.json` cleanly or needs a helper in `content/dom-handler.js`. |
-| 7 | `Piwik PRO Consent Manager` | Distinct European enterprise/public-sector value. Not on the IAB TCF registry and no live target confirmed in the 2026-08-08 pass — demoted. | Split discovery between cloud-hosted and first-party/on-prem targets before choosing selectors or API hooks. |
-| 8 | `Crownpeak Universal Consent Platform / Evidon` | Real legacy-enterprise gap. `Evidon` is on the IAB TCF registry but no live target was confirmed in the 2026-08-08 pass — demoted. | Identify one legacy Evidon target and one newer Crownpeak target before designing a shared handler. |
-| 9 | `Commanders Act TrustCommander` | Still a meaningful France/EU enterprise gap, but lower payoff than the items above and no live target confirmed in the 2026-08-08 pass. | Build a French-market discovery set and confirm whether the consent layer is banner-first, privacy-center-first, or TCF-frame-heavy. |
+| 6 | `Piwik PRO Consent Manager` | Distinct European enterprise/public-sector value. Not on the IAB TCF registry and no live target confirmed in the 2026-08-08 pass — demoted. | Split discovery between cloud-hosted and first-party/on-prem targets before choosing selectors or API hooks. |
+| 7 | `Crownpeak Universal Consent Platform / Evidon` | Real legacy-enterprise gap. `Evidon` is on the IAB TCF registry but no live target was confirmed in the 2026-08-08 pass — demoted. | Identify one legacy Evidon target and one newer Crownpeak target before designing a shared handler. |
+| 8 | `Commanders Act TrustCommander` | Still a meaningful France/EU enterprise gap, but lower payoff than the items above and no live target confirmed in the 2026-08-08 pass. | Build a French-market discovery set and confirm whether the consent layer is banner-first, privacy-center-first, or TCF-frame-heavy. |
 
 ## Lower-Priority New Families
 

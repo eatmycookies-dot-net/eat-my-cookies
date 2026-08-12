@@ -17,6 +17,28 @@
   const GUARDIAN_ACCESSIBILITY_PATH = '/help/accessibility-help';
   const GUARDIAN_HOSTS = new Set(['www.theguardian.com', 'support.theguardian.com']);
   const TEMPORARILY_UNSUPPORTED_TOP_SITES = new Set(['www.bbc.com', 'latimes.com', 'www.latimes.com', 'membership.latimes.com']);
+  const SP_VISIBLE_CONSENT_SELECTORS = [
+    '[id^="sp_message_container"]',
+    '[id^="sp_message_iframe"]',
+    '[class*="sp_message_container"]',
+    '.sp_choice_type_REJECT_ALL',
+    '.sp_choice_type_ACCEPT_ALL',
+    '.sp_choice_type_11',
+    '.sp_choice_type_12',
+    '.sp_choice_type_SAVE_AND_EXIT',
+    '.message-component',
+  ];
+
+  // Mirrors cmp-api-handler.js's userClickedRecently() — used below so a real
+  // user manually dismissing a banner during the observation window isn't
+  // misattributed to us as a silent Sourcepoint-suppressed success.
+  let _lastTrustedClick = 0;
+  document.addEventListener('click', (e) => {
+    if (e.isTrusted) _lastTrustedClick = Date.now();
+  }, { capture: true, passive: true });
+  function userClickedRecently(withinMs = 15000) {
+    return _lastTrustedClick > 0 && Date.now() - _lastTrustedClick < withinMs;
+  }
 
   function isSourcepointHost(host = window.location.hostname) {
     return /sourcepoint\.com|sourcepointcmp\.|sp-prod\.net|privacy-mgmt\.com/.test(host);
@@ -38,6 +60,79 @@
       ) ||
       docEl?.dataset?.spMessageId !== undefined
     );
+  }
+
+  const SP_SHELL_ONLY_SELECTORS = ['[id^="sp_message_container"]', '[id^="sp_message_iframe"]'];
+
+  // See the call site in run() for the full explanation. Backs off entirely
+  // (no report) the moment isSPFrame() becomes true at any point, handing
+  // off to the normal detection/click/report flow below — this only ever
+  // reports for the specific case where a bare shell appeared and vanished
+  // without isSPFrame()'s deeper markers ever appearing at all.
+  async function watchForSilentTopFrameSuppression(site) {
+    const deadline = Date.now() + 8000;
+    let sawShell = false;
+    while (Date.now() < deadline) {
+      if (isSPFrame()) return;
+      const visibleNow = hasVisibleSelector(SP_SHELL_ONLY_SELECTORS);
+      if (visibleNow) sawShell = true;
+      if (sawShell && !visibleNow) {
+        // Confirm this is a real, stable disappearance rather than a brief
+        // reflow/transition flicker before Sourcepoint finishes rendering an
+        // actual interactive banner. Confirmed live on spiegel.de: a shell
+        // flicker briefly false-triggered this before the real accept
+        // banner (and its own dedicated, more specific report) had rendered,
+        // and this watcher's less-specific report won the background's
+        // dedup race against the correct one.
+        let confirmed = true;
+        for (let i = 0; i < 3; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          if (isSPFrame() || hasVisibleSelector(SP_SHELL_ONLY_SELECTORS)) {
+            confirmed = false;
+            break;
+          }
+        }
+        if (!confirmed) continue;
+
+        if (userClickedRecently()) return;
+        if (await isDisabledForTopSite()) return;
+        if (await isManualConsentOpenSuppressed(site)) return;
+        const settings = await chrome.storage.sync.get({ globalPreference: 'reject_all', onboardingComplete: false });
+        if (!settings.onboardingComplete) return;
+        if (isFrameCoolingDown(site, settings.globalPreference)) return;
+        // The real click-based report (if one fires) is sent from inside the
+        // cross-origin SP iframe — a different frame/document than this
+        // top-frame watcher, so the background's per-document dedup key
+        // never matches between the two and can't suppress a duplicate here.
+        // Confirmed live on spiegel.de's accept flow: without this check,
+        // both reports landed and totalActionsCount was inflated by one.
+        // Reading the already-recorded stats (rather than adding new
+        // cross-frame messaging) is the smallest fix for that gap. Compares
+        // against window.location.hostname, not the `site` param
+        // (referrerHost()'s value) — for a direct top-level navigation
+        // referrerHost() returns 'unknown' (no document.referrer or
+        // ancestorOrigins), which background normalizes to the real
+        // hostname before storing, so comparing the raw 'unknown' against
+        // the normalized stored value always missed the duplicate. This
+        // function only ever runs in the top frame, so location.hostname is
+        // reliably the real site here.
+        if (await hasRecentActivityFor(window.location.hostname, settings.globalPreference)) return;
+        await report(site, 'sourcepoint:silent_shell', settings.globalPreference);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  async function hasRecentActivityFor(hostname, preference, withinMs = 10000) {
+    try {
+      const { stats } = await chrome.storage.local.get({ stats: null });
+      const recent = stats?.recentActivity?.[0];
+      if (!recent || recent.site !== hostname || recent.preference !== preference) return false;
+      return Date.now() - new Date(recent.timestamp).getTime() < withinMs;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── GDPR selectors ──────────────────────────────────────────────────────────
@@ -162,6 +257,25 @@
     const site = referrerHost();
     if (TEMPORARILY_UNSUPPORTED_TOP_SITES.has(site) || TEMPORARILY_UNSUPPORTED_TOP_SITES.has(window.location.hostname)) return;
 
+    // Sourcepoint's own loader can render a bare sp_message_container/iframe
+    // shell in the TOP frame and then remove it within ~1s, without ever
+    // populating the sp_choice_type/data-sp-action markup isSPFrame() below
+    // requires. Confirmed live on zeit.de: tcf-interceptor.js's
+    // __tcfapiLocator bridge (MAIN world, document_start) lets the nested
+    // cross-origin consent iframe discover our already-answered TCF signal
+    // before Sourcepoint decides whether to render an interactive banner at
+    // all, so it renders nothing and isSPFrame() below never returns true —
+    // run() would otherwise exit at its retry-loop timeout having detected,
+    // and reported, nothing, even though the shell's own appear-then-vanish-
+    // within-1s lifecycle (no button ever offered) is real, observable
+    // evidence that Sourcepoint deferred to our earlier signal. Only run in
+    // the top frame: nested SP iframes are cross-origin, so this frame can
+    // see the <iframe> element itself (same-origin DOM) but not what is or
+    // isn't inside it.
+    if (window === window.top) {
+      void watchForSilentTopFrameSuppression(site);
+    }
+
     const isFTShell = isPotentialFTShell(site);
     // isSPFrame()/hasConsentSignals() rely on DOM content (sp_choice_type classes,
     // data-sp-action, cookie/consent keywords) that Sourcepoint's own JS renders
@@ -209,11 +323,26 @@
 
     if (GUARDIAN_HOSTS.has(site)) {
       if (settings.globalPreference === 'accept_all') {
-        await handleGuardianAcceptFrame(site, settings.globalPreference);
+        await handleGuardianAcceptFrame(site, settings.globalPreference, effectiveUsNatOptOut(settings));
         return;
       }
       if (site === 'support.theguardian.com') {
         await handleGuardianSupportRejectFrame(site, settings.globalPreference);
+        return;
+      }
+      // www.theguardian.com has no free reject flow wired up here (see the
+      // MAIN-world-only comments above handleGuardianAcceptFrame). Some
+      // editions/sections (confirmed live on theguardian.com/europe) go
+      // further and only offer "Accept all" or a paid subscription to
+      // reject — the only "reject"-labeled control present is the
+      // sp_choice_type_9 paid upsell that looksLikePaidAction() already
+      // refuses to click. Silently doing nothing every page load leaves the
+      // user with no explanation; report it the same honest way
+      // ACCEPT_OR_WARN_SITES does for other consent-or-pay walls so it
+      // shows up in the popup instead of looking like the extension is
+      // simply broken here.
+      if (site === 'www.theguardian.com' && guardianRejectIsPaidWallOnly()) {
+        await reportGuardianPaidWallUnsupported(site);
       }
       return;
     }
@@ -330,8 +459,24 @@
 
     if (!accept && openPrivacyManager()) return;
 
+    // Complements watchForSilentTopFrameSuppression() (see run()) for the case
+    // where isSPFrame() DID pass (a real interactive banner was detected) but
+    // no button was ever successfully clicked, and the surface disappeared on
+    // its own anyway — e.g. an auto-timeout dismissal or a selector mismatch.
+    // Unlike an actual click, this path never fires Sourcepoint's own
+    // postRejectAll/postCustom POST to their backend (see the file header
+    // comment), so it cannot itself prove the choice was persisted with
+    // Sourcepoint or its vendors, only that the on-page UI resolved without
+    // our intervention. Gated on having genuinely seen a visible consent
+    // surface first, and on no trusted click having happened, so a real user
+    // manually dismissing the banner themselves isn't misattributed to us.
+    let sawVisibleSurface = hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS);
+
     // Buttons hydrate asynchronously in some SP builds — watch the DOM.
     const observer = new MutationObserver(async () => {
+      if (!sawVisibleSurface && hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS)) {
+        sawVisibleSurface = true;
+      }
       const shouldReportDeferredBloombergImmediateDismiss =
         site === 'www.bloomberg.com' &&
         !isUSNat &&
@@ -390,9 +535,47 @@
       childList: true, subtree: true,
     });
     setTimeout(() => observer.disconnect(), 10000);
+
+    // Runs independently of the observer above (which only reacts to DOM
+    // mutations — SP can finish tearing its own UI down in one mutation burst,
+    // after which nothing further changes for the observer to react to).
+    // Polls every 250ms instead of waiting out the full 10s button-hydration
+    // budget in one shot: validate.js's default handleWaitMs is 6s, and a real
+    // user checking the popup right after the banner vanishes shouldn't have
+    // to wait 10s for the counter to catch up. Capped below 10s so it can't
+    // outlive the observer's own window.
+    const deadline = Date.now() + 9000;
+    while (Date.now() < deadline) {
+      const visibleNow = hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS);
+      if (visibleNow) sawVisibleSurface = true;
+      if (sawVisibleSurface && !visibleNow) {
+        if (!userClickedRecently()) {
+          await report(site, `sourcepoint:${framework}:silent`, settings.globalPreference);
+        }
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
   }
 
-  async function handleGuardianAcceptFrame(site, preference) {
+  async function handleGuardianAcceptFrame(site, preference, wantsUsNatOptOut = false) {
+    // Hybrid preference (accept_all + ccpaDoNotSell=true): the plain
+    // close/accept button below never touches the USNat "Do not sell or
+    // share" toggle at all, so a user who wants everything else accepted but
+    // still wants to stay opted out of sale would silently end up fully
+    // opted in. Confirmed live: with this preference combination, only the
+    // toggle-aware save path below resolves the panel — the close-button
+    // path leaves it open. The underlying .pm-toggle/switch-container markup
+    // is the same on both Guardian hosts (confirmed live on
+    // www.theguardian.com/us), unlike the plain-accept path below, which
+    // stays support.theguardian.com-only since it was never shown to fail on
+    // www.theguardian.com.
+    if (wantsUsNatOptOut && isGuardianSupportPrivacyManagerOpen()) {
+      if (await applyGuardianSupportPrivacyChoice(true, site, preference, 'accept_optout')) {
+        return true;
+      }
+    }
+
     if (site === 'support.theguardian.com' && isGuardianSupportPrivacyManagerOpen()) {
       if (await applyGuardianSupportPrivacyChoice(false, site, preference, 'accept')) {
         return true;
@@ -492,6 +675,25 @@
     return phrases.map(p => `text:${p}`);
   }
 
+  // Some Sourcepoint consent-or-pay walls offer a "reject" choice that is
+  // actually a paid subscription, not a free opt-out — confirmed live on
+  // theguardian.com/europe: the button's own title/aria-label is literally
+  // "Reject all and subscribe" for a €5/month product, using a distinct
+  // sp_choice_type (9) instead of the usual REJECT_ALL/13. That's exactly
+  // the kind of text our existing generic `[aria-label*="Reject All" i]` /
+  // `button[title*="Reject All" i]` fallback selectors are designed to
+  // catch — a plain substring match can't tell it apart from a genuine free
+  // reject button, and confirmed live that it does match. Must never
+  // auto-click anything whose own text signals a paid/subscription action —
+  // this cannot be allowed to trigger a purchase on the user's behalf, on
+  // this or any other Sourcepoint site with a similarly-worded upsell.
+  const PAID_ACTION_TEXT_RE = /\bsubscri(?:be|ption|ing)\b|\bpay\b|\bpaid\b|€\s?\d|\$\s?\d|£\s?\d|\bper\s+month\b|\/\s*month\b|\bpremium\b/i;
+
+  function looksLikePaidAction(el) {
+    const text = `${el.textContent || ''} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`;
+    return PAID_ACTION_TEXT_RE.test(text);
+  }
+
   function findClickTarget(selectors) {
     for (const sel of selectors) {
       let el;
@@ -500,7 +702,7 @@
       } else {
         el = document.querySelector(sel);
       }
-      if (el && isVisible(el)) return el;
+      if (el && isVisible(el) && !looksLikePaidAction(el)) return el;
     }
     return null;
   }
@@ -510,6 +712,38 @@
     if (!el) return false;
     dispatchSyntheticClick(el);
     return true;
+  }
+
+  // Same lookup as findClickTarget but without the paid-action filter, so
+  // callers can tell "no reject control at all" apart from "a reject
+  // control exists but it's the paid upsell" — the latter is what we want
+  // to report as an honest unsupported-here state instead of silently
+  // never handling the page.
+  function findRawCandidate(selectors) {
+    for (const sel of selectors) {
+      const el = sel.startsWith('text:') ? findByText(sel.slice(5)) : document.querySelector(sel);
+      if (el && isVisible(el)) return el;
+    }
+    return null;
+  }
+
+  function guardianRejectIsPaidWallOnly() {
+    const candidate = findRawCandidate(GDPR_REJECT);
+    return !!candidate && looksLikePaidAction(candidate);
+  }
+
+  let guardianPaidWallReported = false;
+  async function reportGuardianPaidWallUnsupported(site) {
+    if (guardianPaidWallReported) return;
+    guardianPaidWallReported = true;
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'REPORT_UNSUPPORTED_SITE',
+        site,
+        reason: 'This page currently only offers "Accept all" or a paid subscription to opt out of tracking. Eat My Cookies will not click a paid option on your behalf.',
+        allowAcceptOverride: true,
+      });
+    } catch (_) {}
   }
 
   // Checks every element matching each selector, not just the first DOM match.
@@ -1174,6 +1408,7 @@
       // "reject everything" could previously leave some categories at
       // whatever their default state was instead of actually rejecting them.
       if (!(await waitForElementVisible(rejectButton, 2000))) continue;
+      if (looksLikePaidAction(rejectButton)) continue;
       dispatchSyntheticClick(rejectButton);
       rejectedAny = true;
       await new Promise((resolve) => setTimeout(resolve, 80));
@@ -1184,22 +1419,7 @@
   async function waitForDismissal(timeoutMs = 4000) {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
-      const visibleControls = [
-        '[id^="sp_message_container"]',
-        '[id^="sp_message_iframe"]',
-        '[class*="sp_message_container"]',
-        '.sp_choice_type_REJECT_ALL',
-        '.sp_choice_type_ACCEPT_ALL',
-        '.sp_choice_type_11',
-        '.sp_choice_type_12',
-        '.sp_choice_type_SAVE_AND_EXIT',
-        '.message-component',
-      ].some((sel) => {
-        const el = document.querySelector(sel);
-        return el && isVisible(el);
-      });
-
-      if (!visibleControls) return true;
+      if (!hasVisibleSelector(SP_VISIBLE_CONSENT_SELECTORS)) return true;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
     return false;
