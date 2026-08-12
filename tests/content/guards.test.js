@@ -1407,6 +1407,56 @@ describe('cmp-api-handler.js — Fides support (live-verified 2026-08-09)', () =
     expect(source).toContain('const updatedPromise = waitForFidesUpdatedEvent(3000);\n    if (!(await clickFidesBannerOrModalButton(wantsFullAccept))) return false;\n    await updatedPromise;');
     expect(source).toContain('const updatedPromise = waitForFidesUpdatedEvent(3000);\n    if (!clickFidesModalButton(wantsFullAccept)) return false;\n    await updatedPromise;');
   });
+
+  it('waits for the banner/modal button to actually be on-screen before the first click attempt, not just present in the DOM (live-verified fix, ethyca.com, 2026-08-11)', () => {
+    // Reproduced live via a debug log: our MutationObserver-driven retry fires the
+    // instant the banner container is inserted into the DOM, but the banner then
+    // slides into view via its own opening animation (mirroring the already-known
+    // closing slide-out) — isFidesElementOnScreen() correctly reported "not on
+    // screen yet" at that first instant, and since nothing else reliably
+    // re-triggers a retry once a pure CSS/attribute change finishes (the
+    // MutationObserver here only watches childList/subtree), a banner caught
+    // mid-animation on the first attempt could be left completely unhandled.
+    expect(source).toContain('async function waitForFidesElementOnScreen(selector, timeoutMs = 1500) {');
+    expect(source).toContain('await waitForFidesElementOnScreen(bannerSelector, 1500);\n    if (tryClickFidesButton(bannerSelector)) return true;');
+  });
+
+  it('runs a dedicated, generic Fides watch that keeps retrying well past the shared 15s/10s generic retry cutoffs (live-verified fix, ethyca.com, 2026-08-11)', () => {
+    // Confirmed live via repeated VPN runs: ethyca.com's Fides banner consistently
+    // appeared 15-20+ seconds after page load (Fides makes a real server
+    // round-trip to decide the geo-specific experience before rendering
+    // anything, visibly slower under VPN) — well past both the non-SPA
+    // MutationObserver's 15000ms disconnect and the SPA scheduled-poll list's
+    // 10000ms final checkpoint, so a banner this slow could go completely
+    // unhandled with neither generic mechanism still watching. This is a
+    // single, self-contained watch (started once, unconditionally, at
+    // bootstrap) so it does not depend on window.Fides already existing by the
+    // time any of the other paths' fixed checkpoints run.
+    expect(source).toContain('const FIDES_WATCH_WINDOW_MS = 35000;');
+    expect(source).toContain('function startFidesWatch() {');
+    expect(source).toContain("if (!_prefs || typeof window.Fides === 'undefined') return;");
+    expect(source).toContain('startFidesWatch();');
+  });
+
+  it('declares the Fides watch timer near the top-level state block, not inline next to startFidesWatch(), to avoid a temporal-dead-zone crash', () => {
+    // Regression guard for a real bug caught during live verification: an
+    // earlier version declared `let _fidesWatchTimer` right next to
+    // startFidesWatch() further down the file, but startFidesWatch() is called
+    // from the early bootstrap code — before that `let` would be reachable.
+    // The resulting "Cannot access '_fidesWatchTimer' before initialization"
+    // TDZ error was an uncaught synchronous exception partway through this
+    // IIFE's top-level execution, which silently aborted every statement after
+    // it — including all the other retry-loop wiring — making it look like
+    // Fides handling had stopped working entirely rather than throwing a
+    // visible error. Confirmed live: reverting to the inline declaration
+    // reproduced zero `__emc_handled__` events on ethyca.com even after 20+
+    // seconds of observation with the banner genuinely on screen.
+    expect(source).toContain('let _guardianRetryTimer = null;');
+    const preambleMatch = source.match(/let _guardianRetryTimer = null;[\s\S]{0,900}/);
+    expect(preambleMatch).toBeTruthy();
+    expect(preambleMatch[0]).toContain('let _fidesWatchTimer = null;');
+    expect(preambleMatch[0]).toContain('const FIDES_WATCH_WINDOW_MS = 35000;');
+  });
 });
 
 describe('cmp-api-handler.js — Didomi custom-mode support (live-verified fix, 2026-08-10/11)', () => {

@@ -137,6 +137,17 @@
     '.tru_overlay',
   ];
   let _guardianRetryTimer = null;
+  // Declared here (not inline next to startFidesWatch() further down) because
+  // startFidesWatch() is called from the early bootstrap code, before a `let`/
+  // `const` declared later in this same script would be reachable — confirmed
+  // live via a real "Cannot access '_fidesWatchTimer' before initialization"
+  // TDZ crash that silently aborted the rest of this IIFE's setup (a
+  // synchronous uncaught error partway through top-level script execution
+  // halts every statement after it, which is why this looked like Fides
+  // handling had stopped working entirely rather than throwing a visible,
+  // easy-to-spot error in the console during initial testing).
+  let _fidesWatchTimer = null;
+  const FIDES_WATCH_WINDOW_MS = 35000;
 
   // This is independent of a consent action. After a reload, main.js correctly
   // skips an already-handled page, but Zoom's broken native footer control still
@@ -988,6 +999,26 @@
     return false;
   }
 
+  // Confirmed live on ethyca.com 2026-08-11: our MutationObserver-driven retry
+  // fires the instant the banner container is inserted into the DOM, but the
+  // banner then slides into view via its own opening animation (mirroring the
+  // already-known closing slide-out) — isFidesElementOnScreen() correctly
+  // reports "not on screen yet" at that first instant (confirmed via a debug
+  // log: the click attempt ran and failed within the same second the banner
+  // appeared). Unlike the closing case, nothing else reliably re-triggers a
+  // retry once the animation finishes (a pure CSS/attribute change doesn't
+  // necessarily fire the childList-only MutationObserver watching for CMP
+  // handling elsewhere in this file), so without this wait the banner could be
+  // left permanently unhandled after a single too-early attempt.
+  async function waitForFidesElementOnScreen(selector, timeoutMs = 1500) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (isFidesElementOnScreen(document.querySelector(selector))) return true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
+  }
+
   async function waitForFidesTcfDismissal(timeoutMs = 3000) {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
@@ -1056,6 +1087,7 @@
     const bannerSelector = wantsFullAccept ? FIDES_BANNER_ACCEPT_ALL_SEL : FIDES_BANNER_REJECT_ALL_SEL;
     const modalSelector = wantsFullAccept ? FIDES_MODAL_ACCEPT_ALL_SEL : FIDES_MODAL_REJECT_ALL_SEL;
 
+    await waitForFidesElementOnScreen(bannerSelector, 1500);
     if (tryClickFidesButton(bannerSelector)) return true;
     if (!tryClickFidesButton(FIDES_BANNER_MANAGE_PREFERENCES_SEL)) return false;
     if (!(await waitForFidesModalOpen(2000))) return false;
@@ -1335,6 +1367,7 @@
   bootstrapPrefsFromDataset();
   ensureUsercentricsEventListener();
   ensureUsercentricsShadowObservers();
+  startFidesWatch();
   if (_prefs?.globalPreference) {
     if (GUARDIAN_HOSTS.has(window.location.hostname)) {
       startGuardianRetryLoop();
@@ -1484,6 +1517,42 @@
       tryHandlers();
       syncGuardianUsNatConsent();
     }, 400);
+  }
+
+  // Fides sites can take much longer than every other CMP this codebase handles to
+  // even show a banner — confirmed live on ethyca.com 2026-08-11: the banner
+  // container consistently appeared 15-20+ seconds after page load (a real,
+  // repeated observation across many live VPN runs, not a one-off — Fides makes a
+  // real server round-trip to decide the geo-specific experience before it renders
+  // anything, and that round-trip is visibly slower under VPN). The generic retry
+  // mechanisms elsewhere in this file (the non-SPA MutationObserver, which
+  // disconnects after 15000ms; the SPA scheduled-poll list, whose last checkpoint is
+  // 10000ms) both give up long before a banner this slow ever appears, so a
+  // late-appearing Fides banner — or even a late-appearing `window.Fides` global
+  // itself — could go completely unhandled. Not because any click logic is wrong,
+  // but because nothing was still watching by the time there was something to
+  // click. This is a single, self-contained watch (started once, unconditionally,
+  // at bootstrap) rather than scattered calls tied to the other retry paths' own
+  // timing, specifically so it does not depend on `window.Fides` already existing
+  // by the time any of those other paths' fixed checkpoints run — it waits for
+  // Fides to appear at all, then keeps retrying after that. Generic to any Fides
+  // site rather than a host allowlist, since the slow geo-decision round-trip is a
+  // property of the Fides SDK/backend itself, not specific to one deployer.
+  function startFidesWatch() {
+    if (_fidesWatchTimer) return;
+    const started = Date.now();
+    _fidesWatchTimer = setInterval(() => {
+      if (_handled || Date.now() - started > FIDES_WATCH_WINDOW_MS) {
+        clearInterval(_fidesWatchTimer);
+        _fidesWatchTimer = null;
+        return;
+      }
+      // Keep waiting quietly for prefs (isolated-world bootstrap can lag this
+      // MAIN-world script) and for window.Fides itself (the slow part) to appear —
+      // neither missing one is a reason to give up within the overall window.
+      if (!_prefs || typeof window.Fides === 'undefined') return;
+      tryHandlers();
+    }, 500);
   }
 
   function sourcepointSelectors() {

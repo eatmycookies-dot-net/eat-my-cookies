@@ -60,6 +60,14 @@ Two more real bugs, both caught live by the user immediately after the fix above
 - **A grey "shadow" stayed over the page after the banner was dismissed.** The site's own CMP integration shows a brief backdrop element while it resolves consent, normally removed automatically a moment later — but it isn't always reliably removed on its own, and sometimes stayed stuck on screen well after the actual cookie banner was gone. Fixed by actively watching for and removing it for a few seconds after every Didomi action (accept, reject, and custom), not just custom.
 - **Page scrolling stayed locked even after the fix above removed the shadow.** The site also locks scrolling while that backdrop is shown, normally released by its own closing logic — which gets skipped when the extension removes the backdrop directly instead. Fixed by also releasing the scroll lock in the same cleanup step. The user confirmed the exact mechanism live, which made this a same-day, one-shot fix rather than a guess.
 
+### Fides — a banner that never got clicked, and a banner that took too long to show up
+
+Reported live on ethyca.com: the cookie banner stayed fully on screen even though the extension already knew how to click its buttons. Two separate, real bugs, neither specific to this one site:
+
+- **The click could fire a split second too early.** A banner starts appearing the moment the site decides to show it, but then visually slides into view over the next fraction of a second — the extension's very first attempt to click it could land during that split second, before there was actually anything on screen yet to click, and nothing was reliably prompting it to try again afterward. Fixed by giving it a brief window to confirm the button is genuinely visible before the first attempt.
+- **Some sites take much longer than others to even show a banner at all.** This one consistently took 15-20+ seconds — long enough that the extension's normal retry window had already given up by the time there was anything to interact with. Fixed with a longer-lived, dedicated retry window for this CMP specifically, so a slow-to-appear banner doesn't get missed entirely.
+- Verified against the sites already relying on this same banner-click logic (nytimes.com, wired.com) to confirm neither fix changed their existing, already-working behavior.
+
 ## v1.3.3
 
 ### ZEIT (zeit.de) / Sourcepoint refresh-loop and activity-counting fix
