@@ -911,6 +911,13 @@ async function tryCMPs(cmps, prefs) {
       }
       continue;
     }
+    if (cmp.id === 'portalcookiebanner') {
+      const portalCookieBannerResult = await executePortalCookieBannerFlow(cmp, prefs);
+      if (portalCookieBannerResult) {
+        return { method: portalCookieBannerResult, cmpName: cmp.name };
+      }
+      continue;
+    }
     if (cmp.id === 'cookiehub') {
       const cookieHubResult = await executeCookieHubFlow(cmp, prefs);
       if (cookieHubResult) {
@@ -2061,6 +2068,116 @@ async function executeCookieYesFlow(cmp, prefs) {
   if (!(await waitForDismissal(cmp, selectorActions(cookieYesDismissSelectors()), 5000))) return false;
 
   return prefs.globalPreference === 'custom' ? 'dom:cookieyes:custom' : `dom:cookieyes:${prefs.globalPreference}`;
+}
+
+// Live-verified 2026-08-11 on lush.com/de/en. Real light-DOM buttons with
+// stable data-test hooks (no shadow DOM, no obfuscated-classname dependency)
+// — #portal-cookie-banner is the banner container, [data-test="cookie__set"]
+// opens a preferences modal (dynamic id="portal-N", not queryable reliably)
+// with per-category checkboxes. The modal's own Save button carries no
+// data-test attribute, so it's matched by text instead, excluding any button
+// that still has a data-test attribute (that would be the banner's own
+// accept/reject/set-preferences openers, still present in the DOM behind the
+// modal overlay).
+const PORTAL_COOKIE_BANNER_ACTIONABLE_SURFACE_SELECTORS = [
+  '#portal-cookie-banner',
+  '[data-test="cookie__accept"]',
+  '[data-test="cookie__reject"]',
+  '[data-test="cookie__set"]',
+];
+
+function portalCookieBannerDismissSelectors() {
+  return [
+    '#portal-cookie-banner',
+    '[data-test="cookie__accept"]',
+    '[data-test="cookie__reject"]',
+    '[data-test="cookie__set"]',
+  ];
+}
+
+// Category checkbox ids/labels ("statistical", "chat") observed on lush.com
+// are this deployer's own configuration, not a stable vendor-wide taxonomy —
+// unlike Fides' notice_key, there is no SDK-level enum to read here at all.
+// Classified by keyword against the checkbox's own label text, the same
+// approach already used for CookieHub/Fides elsewhere in this file, so this
+// generalizes to other sites reusing the same banner component with
+// differently-named categories rather than hardcoding lush.com's exact ids.
+function classifyPortalCookieBannerCheckboxLabel(text) {
+  const t = (text || '').toLowerCase();
+  if (/necessary|essential|required/.test(t)) return 'essential';
+  if (/analytic|statistic|performance/.test(t)) return 'analytics';
+  if (/market|advertis|targeting/.test(t)) return 'advertising';
+  if (/functional|preference|chat|personalisation|personalization/.test(t)) return 'functional';
+  return 'uncategorized';
+}
+
+function desiredPortalCookieBannerValue(bucket, prefs) {
+  switch (bucket) {
+    case 'advertising': return wantsAdvertisingCategoryConsent(prefs);
+    case 'analytics': return Boolean(prefs.analytics);
+    case 'functional': return Boolean(prefs.functional) || prefs.uncategorized === 'accept';
+    default: return prefs.uncategorized === 'accept';
+  }
+}
+
+function clickPortalCookieBannerSaveButton() {
+  const candidates = Array.from(document.querySelectorAll('button')).filter((b) => {
+    if (!isVisible(b)) return false;
+    if (b.hasAttribute('data-test')) return false;
+    return /set preferences|save preferences|^save$|confirm/i.test((b.textContent || '').trim());
+  });
+  const target = candidates[candidates.length - 1] || candidates[0];
+  if (!target) return false;
+  return dispatchSyntheticClick(target) || dispatchNativeClick(target);
+}
+
+async function executePortalCookieBannerFlow(cmp, prefs) {
+  if (!hasVisibleSelector(PORTAL_COOKIE_BANNER_ACTIONABLE_SURFACE_SELECTORS)) {
+    return false;
+  }
+
+  if (prefs.globalPreference === 'accept_all' &&
+      (clickFirstVisibleNative(['[data-test="cookie__accept"]']) || clickFirstVisible(['[data-test="cookie__accept"]']))) {
+    if (await waitForDismissal(cmp, selectorActions(portalCookieBannerDismissSelectors()), 5000)) {
+      return 'dom:portalcookiebanner:accept_all';
+    }
+  }
+
+  if (prefs.globalPreference === 'reject_all' &&
+      (clickFirstVisibleNative(['[data-test="cookie__reject"]']) || clickFirstVisible(['[data-test="cookie__reject"]']))) {
+    if (await waitForDismissal(cmp, selectorActions(portalCookieBannerDismissSelectors()), 5000)) {
+      return 'dom:portalcookiebanner:reject_all';
+    }
+  }
+
+  const flowPrefs = normalizeImportedFlowPrefs(prefs);
+  const opened = clickFirstVisibleNative(['[data-test="cookie__set"]']) ||
+    clickFirstVisible(['[data-test="cookie__set"]']);
+  if (!opened) return false;
+  if (!(await waitForAnyVisible(['input[type="checkbox"]:not(#necessary)'], 4000))) return false;
+  await delay(200);
+
+  const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'))
+    .filter((el) => isVisible(el) && !el.disabled && el.id !== 'necessary');
+  if (!checkboxes.length) return false;
+
+  let appliedCount = 0;
+  for (const checkbox of checkboxes) {
+    const labelText = checkbox.closest('label')?.textContent || checkbox.parentElement?.textContent || '';
+    const bucket = classifyPortalCookieBannerCheckboxLabel(labelText);
+    if (bucket === 'essential') continue;
+    const desired = desiredPortalCookieBannerValue(bucket, flowPrefs);
+    const applied = await setCheckboxState(checkbox, desired);
+    if (applied === false) return false;
+    if (applied === true) appliedCount++;
+  }
+  if (appliedCount === 0) return false;
+
+  await delay(250);
+  if (!clickPortalCookieBannerSaveButton()) return false;
+  if (!(await waitForDismissal(cmp, selectorActions(portalCookieBannerDismissSelectors()), 5000))) return false;
+
+  return prefs.globalPreference === 'custom' ? 'dom:portalcookiebanner:custom' : `dom:portalcookiebanner:${prefs.globalPreference}`;
 }
 
 // Live-verified 2026-08-09 on monday.com (real customer site, US/CCPA region —

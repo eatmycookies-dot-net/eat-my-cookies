@@ -19,6 +19,17 @@
   // Forbes, Bloomberg, and NBC News also expose incidental CM-like frame patterns while their
   // actual consent flow lives in the top-level page; letting this handler run there
   // causes homepage redirects and duplicate/triplicate counts.
+  // lush.com's own first-party "Portal Cookie Banner" (rules/cmps.json id
+  // "portalcookiebanner", handled by dom-handler.js's executePortalCookieBannerFlow)
+  // false-triggers isConsentManagerFrame()'s body-text sniff — its banner copy
+  // literally contains "Necessary cookies", which matches the /necessary cookies/i
+  // pattern below, and its own "Reject non-essential" button then satisfies this
+  // handler's generic 'text:reject' selector. Confirmed live 2026-08-11: without
+  // this exclusion, this handler clicks the real Reject button first and reports
+  // 'consentmanager:frame' before the dedicated Portal Cookie Banner flow ever runs
+  // — the end result happens to be correct by coincidence, but custom-mode
+  // per-category toggling would never be exercised, and accept_all would incorrectly
+  // read as "reject" (this handler doesn't know about lush.com's real accept button).
   const CM_FRAME_EXCLUDED_SITES = new Set([
     'www.bbc.com',
     'latimes.com',
@@ -29,6 +40,8 @@
     'www.nbcnews.com',
     'www.zoom.com',
     'github.com',
+    'www.lush.com',
+    'lush.com',
   ]);
 
   const REJECT_SELS = [

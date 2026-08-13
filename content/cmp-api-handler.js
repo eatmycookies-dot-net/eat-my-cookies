@@ -743,6 +743,88 @@
       }));
       return false;
     },
+    // Transcend Consent Manager (airgap.js). Confirmed live 2026-08-11 on
+    // factsmgt.com (window.airgap + window.transcend, script served from
+    // transcend-cdn.com/*/airgap.js) — no prior entry anywhere in this repo.
+    //
+    // window.airgap.optIn(purposeNames) / airgap.optOut(purposeNames) are the
+    // real API calls Transcend's own banner buttons use internally (read
+    // directly from the minified airgap.js source rather than guessed:
+    // optOut = e=>vm(e,zh(!1)), optIn = e=>vm(e,zh(!0))). Deliberately
+    // API-only, no DOM clicking: the visible banner renders inside a closed
+    // shadow root attached to #transcend-consent-manager — confirmed live via
+    // document.elementFromPoint() hit-testing the on-screen banner back to
+    // that host element while el.shadowRoot, el.innerHTML, and a full-document
+    // text search for the banner's own copy all reported it as empty/absent.
+    // Declarative selector clicking (rules/cmps.json, dom-handler.js) cannot
+    // reach this CMP's UI at all, unlike every other CMP in this file.
+    //
+    // Purpose names (Analytics/Functional/Advertising/SaleOfInfo/
+    // FirstPartyAnalytics, read live via getPurposeTypes()) are a stable,
+    // vendor-wide taxonomy baked into the airgap.js SDK itself — unlike
+    // Fides' per-deployer notice_key, no keyword classification is needed,
+    // just filtering to non-essential + configurable purposes.
+    //
+    // Custom mode is treated as a full reject, the same honest constraint
+    // already documented for Sourcepoint's GDPR privacy manager and Fides'
+    // TCF mode: mapping Transcend's purpose taxonomy onto this extension's
+    // functional/analytics/advertising categories would need per-deployer
+    // verification this codebase doesn't have yet for more than one site.
+    //
+    // Open verification gap (see docs/cmp-impact-map.md): on the one live
+    // site tested, this script was served from a /cm-test/ (staging) CDN
+    // path, airgap.getRegimes()/getPurposes() both returned {} (no active
+    // privacy regime bound to the session), and every optOut()/optIn() call
+    // logged "airgap.setConsent(): Authorization proof is untrusted" without
+    // changing getConsent() — so real end-to-end persistence has not been
+    // confirmed live yet. This handler honestly returns false rather than
+    // report success when the state doesn't verifiably change, same as every
+    // other handler in this file.
+    Transcend: async (w, prefs) => {
+      const airgap = w.airgap;
+      if (!airgap?.initialized) return false;
+
+      let purposeTypes;
+      try {
+        purposeTypes = airgap.getPurposeTypes?.();
+      } catch (_) {
+        return false;
+      }
+      if (!purposeTypes || typeof purposeTypes !== 'object') return false;
+
+      const configurablePurposes = Object.keys(purposeTypes).filter((name) => {
+        const p = purposeTypes[name];
+        return p && p.configurable && !p.essential;
+      });
+      if (!configurablePurposes.length) return false;
+
+      const wantsAcceptAll = prefs.globalPreference === 'accept_all' && prefs.ccpaDoNotSell !== true;
+      const desired = {};
+      for (const name of configurablePurposes) desired[name] = wantsAcceptAll;
+
+      try {
+        if (wantsAcceptAll) {
+          airgap.optIn(configurablePurposes);
+        } else {
+          airgap.optOut(configurablePurposes);
+        }
+      } catch (_) {
+        return false;
+      }
+
+      const verified = await waitForTranscendConsentState(desired, 2000);
+      if (!verified) return false;
+
+      _handled = true;
+      document.dispatchEvent(new CustomEvent('__emc_handled__', {
+        detail: {
+          method: prefs.globalPreference === 'custom'
+            ? 'cmp_api:Transcend:custom_as_reject'
+            : `cmp_api:Transcend:${wantsAcceptAll ? 'accept_all' : 'reject_all'}`,
+        },
+      }));
+      return false;
+    },
   };
 
   // ── Didomi custom-consent purpose classification ────────────────────────────
@@ -944,6 +1026,21 @@
     while (Date.now() - started < timeoutMs) {
       const current = window.Fides?.consent || {};
       if (Object.entries(desired).every(([key, value]) => Boolean(current[key]) === value)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
+  }
+
+  // Transcend's per-purpose consent value is tri-state ("Auto" | true | false),
+  // not a plain boolean like Fides' — strict equality against the desired
+  // boolean (rather than Boolean(current[key])) is required so an unresolved
+  // "Auto" value is correctly treated as "not yet verified" instead of
+  // coercing to true and false-positively matching a desired `true`.
+  async function waitForTranscendConsentState(desired, timeoutMs = 2000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const current = window.airgap?.getConsent?.()?.purposes || {};
+      if (Object.entries(desired).every(([key, value]) => current[key] === value)) return true;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return false;
@@ -2128,6 +2225,11 @@
     // exposing real, actionable consent state via the API (confirmed live) — gate on
     // initialization, not visibility, same as the Truendo/Nike special cases below.
     if (name === 'Fides' && window.Fides?.initialized) return true;
+    // Transcend's banner renders inside a closed shadow root (no visible
+    // selector this file could ever match) and can also be fully actionable
+    // via the API with zero visible DOM at all — gate on SDK initialization,
+    // same as the Fides case immediately above.
+    if (name === 'Transcend' && window.airgap?.initialized) return true;
     if (hasVisibleSelector(CMP_SELECTORS[name] ?? [])) return true;
     if (name === 'Nike') {
       return NIKE_CCPA_HOSTS.has(window.location.hostname) &&

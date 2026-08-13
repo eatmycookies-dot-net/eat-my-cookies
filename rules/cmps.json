@@ -936,6 +936,35 @@
         { "type": "css_selector", "value": "[id^=\"fides-\"], [class*=\"fides-banner\"]" }
       ],
       "actions": {}
+    },
+    {
+      "id": "transcend",
+      "name": "Transcend",
+      "note": "Real logic lives in cmp-api-handler.js's CMP_HANDLERS.Transcend (Tier 2, MAIN world) — window.airgap.optIn()/optOut() are Transcend Consent Manager's real, documented APIs, confirmed live 2026-08-11 on factsmgt.com (window.airgap + window.transcend, script served from transcend-cdn.com/*/airgap.js). No declarative actions here: the visible banner renders inside a closed shadow root attached to #transcend-consent-manager, unreachable from any script context (confirmed live via elementFromPoint hit-testing, shadowRoot access, and full-document text search all failing to reach the real button elements while the banner was visibly on screen), so DOM click automation cannot work for this CMP at all. Pending validation: on the one live site tested (a /cm-test/ staging airgap.js bundle), airgap.getRegimes()/getPurposes() were empty and every optOut()/optIn() call logged 'Authorization proof is untrusted' without changing getConsent() — see docs/cmp-impact-map.md for the full writeup and private/human-validation-backlog.md for the open follow-up against a production (non-test) Transcend deployment.",
+      "detectors": [
+        { "type": "js_global", "value": "window.airgap" },
+        { "type": "js_global", "value": "window.transcend" },
+        { "type": "script_src", "value": "transcend-cdn.com" }
+      ],
+      "actions": {}
+    },
+    {
+      "id": "portalcookiebanner",
+      "name": "Portal Cookie Banner",
+      "note": "Confirmed live 2026-08-11 on lush.com/de/en. Element ids (#portal-cookie-banner, #portal-N for the preferences modal) suggest this is the site's own first-party consent banner built on a generic 'Portal' DOM-rendering utility rather than an off-the-shelf third-party CMP product used broadly elsewhere — flagged honestly since it may not generalize beyond lush.com and sites sharing the same component library. The accept/reject/open-preferences buttons use stable data-test hooks ([data-test='cookie__accept'|'cookie__reject'|'cookie__set']); real per-category toggling (custom mode) is handled in dom-handler.js's executePortalCookieBannerFlow via keyword classification of checkbox label text, since the category ids seen on lush.com ('statistical', 'chat') are this deployer's own configuration, not a stable vendor-wide taxonomy. Live-verified: reject/accept/custom all write a real lush-commerce-cookies cookie matching the requested categories, and accept_all correctly gates real GA/Clarity/Pinterest tracking cookies that reject_all does not set. No CCPA/USNat surface was observed on this deployment — GDPR/EU cookie-category consent only.",
+      "detectors": [
+        { "type": "css_selector", "value": "#portal-cookie-banner" },
+        { "type": "css_selector", "value": "[data-test='cookie__accept']" },
+        { "type": "css_selector", "value": "[data-test='cookie__reject']" }
+      ],
+      "actions": {
+        "reject_all": [
+          { "type": "click", "selector": "[data-test='cookie__reject']" }
+        ],
+        "accept_all": [
+          { "type": "click", "selector": "[data-test='cookie__accept']" }
+        ]
+      }
     }
   ]
 }

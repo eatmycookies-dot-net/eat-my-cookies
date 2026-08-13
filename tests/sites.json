@@ -3416,6 +3416,23 @@
       "consentSelectors": [
         "#privacy_manager_modal"
       ]
+    },
+    {
+      "name": "Lush (DE)",
+      "url": "https://www.lush.com/de/en",
+      "region": "EU",
+      "locale": "de-DE",
+      "acceptLanguage": "de-DE,de;q=0.9",
+      "cmp": "Portal Cookie Banner",
+      "tier": "dom",
+      "bannerSelectors": [
+        "#portal-cookie-banner",
+        "[data-test='cookie__accept']",
+        "[data-test='cookie__reject']"
+      ],
+      "consentSelectors": [
+        "[data-test='cookie__reject']"
+      ]
     }
   ]
 }
