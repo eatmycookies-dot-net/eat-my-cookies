@@ -2584,30 +2584,15 @@
     },
     {
       "name": "Diariomotor Clickio",
-      "url": "https://www.diariomotor.com/diariomotor-sin-cookies/",
+      "url": "https://www.diariomotor.com/",
       "region": "EU",
       "locale": "es-ES",
       "acceptLanguage": "es-ES,es;q=0.9,en;q=0.8",
-      "cmp": "Clickio",
-      "tier": "dom",
-      "preference": "custom",
-      "categoryPreferences": {
-        "functional": true,
-        "analytics": false,
-        "advertising": false,
-        "ccpaDoNotSell": true,
-        "uncategorized": "reject"
-      },
-      "bannerSelectors": [
-        "#cl-consent",
-        ".cl-consent__inner",
-        ".dm-button.cursor-pointer"
-      ],
-      "consentSelectors": [
-        ".cl-consent__btn--outline",
-        ".cl-consent-tabs__item",
-        ".dm-button.cursor-pointer"
-      ]
+      "cmp": "Clickio (consent-or-pay)",
+      "tier": "n/a",
+      "note": "Saving anything other than full accept redirects away from the article to /diariomotor-sin-cookies/, a subscription-upsell page, instead of showing the content. Accept is the only path that keeps you on the page you were reading — confirmed live 2026-08-12.",
+      "bannerSelectors": [],
+      "consentSelectors": []
     },
     {
       "name": "LiveRamp Cookie Preferences",

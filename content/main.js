@@ -187,22 +187,6 @@ const ACCEPT_OR_WARN_SITES = {
       'text:accetta',
     ],
   },
-  'www.diariomotor.com': {
-    reason: 'This Clickio wall currently offers accepting cookies or a paid consentless path. Reject/custom preferences are not available here without the subscription flow.',
-    detectSelectors: [
-      '#cl-consent',
-      '.cl-consent__inner',
-      'text:rechazar por',
-      'text:gestionar opciones',
-      'text:de acuerdo y cerrar',
-    ],
-    watchSelectors: ['#cl-consent', '.cl-consent__inner'],
-    acceptSelectors: [
-      '.cl-consent__btn:not(.cl-consent__btn--outline)',
-      '.cl-consent__btn--primary',
-      'text:de acuerdo y cerrar',
-    ],
-  },
   'mundokodi.com': {
     reason: 'This Clickio wall currently offers accepting cookies or a paid consentless path. Reject/custom preferences are not available here without the subscription flow.',
     detectSelectors: [
@@ -214,6 +198,34 @@ const ACCEPT_OR_WARN_SITES = {
     ],
     watchSelectors: ['#cl-consent', '.cl-consent__inner'],
     acceptSelectors: [
+      '.cl-consent__btn:not(.cl-consent__btn--outline)',
+      '.cl-consent__btn--primary',
+      'text:de acuerdo y cerrar',
+    ],
+  },
+  'www.diariomotor.com': {
+    // Re-added 2026-08-12 after a user report that the "free reject" path added
+    // earlier that day doesn't actually work in practice. Live-verified: saving
+    // anything other than full accept (the real, free `[data-role="b_save"]`
+    // "Aceptar lo seleccionado" control — genuinely records a real reject TCF
+    // string, this is not a code bug) makes the site's own script redirect away
+    // from the article to /diariomotor-sin-cookies/, a subscription-upsell
+    // landing page, instead of returning the user to the content they were
+    // reading. Accepting everything via `[data-role="b_save_all"]`/the banner's
+    // own accept button never redirects. So reject/custom is honest at the CMP
+    // level but not at the content-access level the user actually cares about —
+    // this is what ACCEPT_OR_WARN_SITES exists to flag rather than overclaim.
+    reason: 'Saving anything other than full accept on this Clickio wall redirects away from the article to a subscription-upsell page instead of showing the content — accepting cookies is the only path that keeps you on the page you were reading.',
+    detectSelectors: [
+      '#cl-consent',
+      '.cl-consent__inner',
+      'text:rechazar por',
+      'text:gestionar opciones',
+      'text:de acuerdo y cerrar',
+    ],
+    watchSelectors: ['#cl-consent', '.cl-consent__inner'],
+    acceptSelectors: [
+      '[data-role="b_agree"]',
       '.cl-consent__btn:not(.cl-consent__btn--outline)',
       '.cl-consent__btn--primary',
       'text:de acuerdo y cerrar',
@@ -5054,9 +5066,32 @@ function reloadRetryKey(signature) {
   return `${RUN_GUARD_PREFIX}:reload-retry:${site}:${location.pathname}:${signature}`;
 }
 
+// Keyed by site + pathname + preference signature only — with no notion of which
+// page *load* set it, a marker from a prior visit to the same path looks
+// identical to one from the page currently on screen. sessionStorage survives
+// reloads/navigations within a tab by design (that's why it's used here over an
+// in-memory flag: it must outlive the async retry/watcher loops within one page
+// instance), but that same durability means a site that legitimately re-shows its
+// banner on every fresh navigation to the same path (confirmed live on
+// diariomotor.com's homepage: a genuinely new Clickio banner appears on every
+// revisit, not a stale rerender) gets permanently locked out for the rest of the
+// tab's session after the first successful run — a plain reload never clears it.
+// Stamping/checking CURRENT_PAGE_LOAD_ID (already used for the same class of bug
+// in the manual-consent-open marker below) fixes this: a marker whose pageLoadId
+// doesn't match the page currently running is proof a real navigation happened
+// since, so it's stale and must not suppress a fresh attempt. A marker set and
+// checked within the *same* page instance (repeated watcher/retry calls, no
+// navigation in between) still correctly blocks re-handling either way.
 function wasHandledForCurrentPage(preference) {
   try {
-    return sessionStorage.getItem(handledKey(preference)) === '1';
+    const raw = sessionStorage.getItem(handledKey(preference));
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (parsed?.pageLoadId && parsed.pageLoadId !== CURRENT_PAGE_LOAD_ID) {
+      sessionStorage.removeItem(handledKey(preference));
+      return false;
+    }
+    return true;
   } catch (_) {
     return false;
   }
@@ -5064,7 +5099,7 @@ function wasHandledForCurrentPage(preference) {
 
 function markHandledForCurrentPage(preference) {
   try {
-    sessionStorage.setItem(handledKey(preference), '1');
+    sessionStorage.setItem(handledKey(preference), JSON.stringify({ pageLoadId: CURRENT_PAGE_LOAD_ID }));
   } catch (_) {}
 }
 

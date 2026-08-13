@@ -26,10 +26,8 @@ Several of those still need better live regression targets or tighter support wo
 
 Before adding more families, the highest-value next steps are:
 
-1. `Clickio`
-   Current status: generic handler exists, but `diariomotor.com/diariomotor-sin-cookies/` failed reproducibly on Sunday, July 19, 2026.
-2. `Cookie Control by Civic`
-   Current status: mixed evidence. `help.uis.cam.ac.uk` passed, `peterborough.gov.uk/cookies` showed handler overlap, and `childrenscommissioner.gov.uk/privacy/cookies/` failed reproducibly on Sunday, July 19, 2026.
+1. `Clickio` — **Corrected 2026-08-12: accept-only, not "done."** The shared `executeClickioFlow`/`applyClickioAllOffAcrossTabs` bugs (locale-blind category matching, a broken tab-switching selector) were real and are fixed generically using Clickio's own stable `data-role` attributes — that part holds. But a same-day user report found that on `diariomotor.com`, saving anything other than full accept redirects away from the article to a subscription-upsell page, and a recorded reject decision doesn't even suppress the banner on the next page view the way accept does — so reject/custom isn't real support, it's a dark pattern that happens to complete without a code error. Re-added the `ACCEPT_OR_WARN_SITES` override for this host (with corrected reason text) rather than claiming it's fixed. See `docs/cmp-impact-map.md`'s "Clickio" section for the full story. `mundokodi.com`'s identical-looking override was left untouched throughout (unverified either way).
+2. `Cookie Control by Civic` — **Done, fixed 2026-08-12.** All three tracked live targets (`help.uis.cam.ac.uk`, `peterborough.gov.uk/cookies`, `childrenscommissioner.gov.uk/privacy/cookies/`) now pass reject_all/accept_all/custom. Root cause was a shared save/close helper (`finalizeCookieControlCivicPreferences`) that gave up immediately when a site lacked `#ccc-dismiss-button`/`.ccc-close-button`, instead of falling through to the `#ccc-close` control it already had code for. This also explains peterborough.gov.uk's prior handler-overlap symptom. See `docs/cmp-impact-map.md`'s "Cookie Control by Civic" section for the full writeup.
 3. `privacymanager.io` / Launchpad
    Current status: generic handling exists, but the public regression story is still weak and real sites such as `theverge.com`, `e-core.com`, and `exame.com` show hybrid stacks.
 4. `Cookie Wow`

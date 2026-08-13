@@ -766,7 +766,22 @@ function isSPA() {
   return false;
 }
 
+// Every CMP branch below clicks its way through banners/preference centers, which
+// steals focus onto whatever button was clicked last (confirmed live on
+// peterborough.gov.uk/cookies: focus was left on the Cookie Control settings
+// opener after the flow finished). Capture/restore focus around the whole
+// dispatch rather than per-click, since focus only needs to end up back where it
+// started once the flow is actually done — not after every intermediate click.
 async function tryCMPs(cmps, prefs) {
+  const previouslyFocused = captureFocusedElement();
+  try {
+    return await tryCMPsCore(cmps, prefs);
+  } finally {
+    restoreFocusedElement(previouslyFocused);
+  }
+}
+
+async function tryCMPsCore(cmps, prefs) {
   const host = location.hostname;
 
   for (const cmp of cmps) {
@@ -2734,13 +2749,31 @@ async function executeTruendoApiFlow(prefs) {
   return 'dom:truendo:custom';
 }
 
+function clickioLooksLikePaidAction(el) {
+  const text = el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  return /\bsubscri(?:be|ption|ing)\b|\bpay\b|\bpaid\b|€\s?\d|\$\s?\d|£\s?\d|\bper\s+month\b|\/\s*(?:mo|month)\b|\bpremium\b/i.test(text);
+}
+
+function clickioOpenPreferencesButton() {
+  // `data-role="b_options"` is Clickio's own stable identifier for the real "manage
+  // options" control, regardless of locale. Fall back to the outline-button class only
+  // for older deployments without data-role, and even then skip anything that reads like
+  // a paid decline (some Clickio banners render "Reject for €0.99/mo" with the same
+  // outline class as the real settings opener — see diariomotor.com).
+  const byRole = firstVisibleElement(['[data-role="b_options"]']);
+  if (byRole) return byRole;
+  const candidates = Array.from(document.querySelectorAll('.cl-consent__btn--outline')).filter(isVisible);
+  return candidates.find((el) => !clickioLooksLikePaidAction(el)) ?? null;
+}
+
 async function executeClickioFlow(cmp, prefs) {
   if (!hasVisibleSelector(CLICKIO_ACTIONABLE_SURFACE_SELECTORS)) {
     return false;
   }
 
   if (prefs.globalPreference === 'accept_all' &&
-      clickFirstVisible(['.cl-consent__btn:not(.cl-consent__btn--outline)', '.cl-consent__btn--primary'])) {
+      (clickFirstVisible(['[data-role="b_agree"]']) ||
+       clickFirstVisible(['.cl-consent__btn:not(.cl-consent__btn--outline)', '.cl-consent__btn--primary']))) {
     if (await waitForDismissal(cmp, selectorActions(clickioDismissSelectors()), 5000)) {
       return 'dom:clickio:accept_all';
     }
@@ -2748,7 +2781,10 @@ async function executeClickioFlow(cmp, prefs) {
 
   const flowPrefs = normalizeImportedFlowPrefs(prefs);
   const preferencesVisible = hasVisibleSelector(CLICKIO_PREFERENCE_SELECTORS);
-  const opened = preferencesVisible || clickFirstVisible(['.cl-consent__btn--outline']);
+  const opened = preferencesVisible || (() => {
+    const btn = clickioOpenPreferencesButton();
+    return btn ? (dispatchNativeClick(btn) || dispatchSyntheticClick(btn)) : false;
+  })();
   if (!opened) return false;
   if (!(await waitForAnyVisible(CLICKIO_PREFERENCE_SELECTORS, 4000))) return false;
 
@@ -2777,16 +2813,26 @@ async function executeClickioFlow(cmp, prefs) {
     Boolean(flowPrefs.analytics),
   );
 
-  if (prefs.globalPreference !== 'accept_all') {
-    await applyClickioAllOffAcrossTabs();
-  }
+  // Some Clickio deployments (confirmed live on diariomotor.com, es-ES) don't expose the
+  // per-purpose heading markup the checks above rely on at all, in any language — only a
+  // blunt per-tab "disable all" control. When that's the only lever available, its own
+  // success must count, or reject/custom can never complete on those sites even though a
+  // real free opt-out exists. Applying "all off" after any partial per-category selection
+  // is intentional here (mirrors the existing honest-full-reject behavior for CMPs where
+  // granular application can't be reliably verified, e.g. spiegel.de / Fides TCF).
+  const allOffApplied = prefs.globalPreference !== 'accept_all' ? await applyClickioAllOffAcrossTabs() : false;
 
   const appliedResults = [appliedStorage, appliedAdvertising, appliedContent, appliedAnalytics];
   const appliedCount = appliedResults.filter((value) => value !== null).length;
-  if (appliedCount === 0 || appliedResults.includes(false)) return false;
+  const categoriesApplied = appliedCount > 0 && !appliedResults.includes(false);
+  if (!categoriesApplied && !allOffApplied) return false;
 
   await delay(250);
-  const saveClicked = clickFirstVisible(['.cl-consent__btn.cl-consent__btn--outline.cl-consent-node-a']) ||
+  // `data-role="b_save"` ("Save selected") must not be confused with `b_save_all`
+  // ("Accept all") — both can share the `.cl-consent__btn--outline` class, and clicking
+  // the wrong one would silently accept everything on a reject/custom request.
+  const saveClicked = clickFirstVisible(['[data-role="b_save"]']) ||
+    clickFirstVisible(['.cl-consent__btn.cl-consent__btn--outline.cl-consent-node-a']) ||
     clickButtonByTextWithin(document, /(?:save settings|agree to selected|accept selected|salva impostazioni)/i);
   if (!saveClicked) return false;
   if (!(await waitForDismissal(cmp, selectorActions(clickioDismissSelectors()), 5000))) return false;
@@ -5100,11 +5146,15 @@ async function expandCookieControlCivicIabSections() {
 
 async function finalizeCookieControlCivicPreferences(cmp) {
   const controller = window.ClickControl ?? window.CookieControl;
-  const saved = clickFirstVisibleNative(['#ccc-dismiss-button', '.ccc-close-button']) ||
-    clickFirstVisible(['#ccc-dismiss-button', '.ccc-close-button']);
-  if (!saved) return false;
 
-  if (await waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 1500)) {
+  // Not every deployment exposes #ccc-dismiss-button / .ccc-close-button (confirmed live:
+  // childrenscommissioner.gov.uk's preference panel has neither) — a miss here must fall
+  // through to the other close mechanisms below rather than giving up immediately, or
+  // reject/custom can never finish saving on those sites even though a real close control
+  // exists.
+  const dismissClicked = clickFirstVisibleNative(['#ccc-dismiss-button', '.ccc-close-button']) ||
+    clickFirstVisible(['#ccc-dismiss-button', '.ccc-close-button']);
+  if (dismissClicked && (await waitForDismissal(cmp, selectorActions(cookieControlCivicDismissSelectors()), 1500))) {
     return true;
   }
 
@@ -5117,6 +5167,13 @@ async function finalizeCookieControlCivicPreferences(cmp) {
     } catch (_) {}
   }
 
+  // #ccc-close is a plain "close the panel" control that preserves whatever toggle
+  // states were just set (live-verified: toggling only Analytics on and clicking
+  // #ccc-close saved {"analytics":"accepted"} with marketing left out entirely).
+  // This must never fall back to #ccc-recommended-settings ("I Accept Cookies") as a
+  // substitute close button — live-verified that control unconditionally accepts every
+  // category regardless of current toggle state, which would silently turn a real
+  // reject/custom selection into an accept-all outcome.
   const closed = clickFirstVisibleNative(['#ccc-close']) ||
     clickFirstVisible(['#ccc-close']);
   if (!closed) return false;
@@ -5275,14 +5332,15 @@ async function waitForAriaToggleState(control, checked, timeoutMs = 700) {
 }
 
 async function applyClickioAllOffAcrossTabs() {
-  const tabSelectors = [
-    '.cl-consent-tabs__item',
-    "[title='Legitimate interest']",
-    "[title='Manage partners']",
-  ];
+  // Clickio's tab nav ("Purposes" / "Legitimate interest" / "Manage partners") is only
+  // reachable through the localized `title` text on older assumptions here — every real
+  // deployment inspected instead exposes a stable `data-role="b_tab"` on each nav link,
+  // regardless of language, so tab-switching must key off that rather than English text.
+  const tabs = Array.from(document.querySelectorAll('[data-role="b_tab"]')).filter(isVisible);
+  const iterations = tabs.length > 0 ? tabs : [null];
 
-  for (const selector of tabSelectors) {
-    const tab = firstVisibleElement([selector]);
+  let clickedAny = false;
+  for (const tab of iterations) {
     if (tab) {
       dispatchNativeClick(tab) || dispatchSyntheticClick(tab);
       await delay(150);
@@ -5292,10 +5350,14 @@ async function applyClickioAllOffAcrossTabs() {
       '.cl-consent-tabs__content [data-role="alloff"]',
     ]);
     if (allOff) {
-      dispatchNativeClick(allOff) || dispatchSyntheticClick(allOff);
+      if (dispatchNativeClick(allOff) || dispatchSyntheticClick(allOff)) {
+        clickedAny = true;
+      }
       await delay(120);
     }
   }
+
+  return clickedAny;
 }
 
 async function setPrivacyManagerSliderState(patterns, checked) {
@@ -5547,6 +5609,33 @@ function restoreScrollPosition(position) {
   if (!position) return;
   try {
     window.scrollTo(position.x, position.y);
+  } catch (_) {}
+}
+
+function captureFocusedElement() {
+  try {
+    return document.activeElement ?? null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function restoreFocusedElement(previouslyFocused) {
+  try {
+    const current = document.activeElement;
+    if (!current || current === previouslyFocused) return;
+    if (previouslyFocused &&
+        previouslyFocused !== document.body &&
+        previouslyFocused !== document.documentElement &&
+        typeof previouslyFocused.focus === 'function' &&
+        document.contains(previouslyFocused)) {
+      previouslyFocused.focus({ preventScroll: true });
+      return;
+    }
+    // No meaningful prior focus (typically <body>, the common default) — release
+    // focus from whatever button the flow last clicked rather than leaving it
+    // stranded there.
+    if (typeof current.blur === 'function') current.blur();
   } catch (_) {}
 }
 
