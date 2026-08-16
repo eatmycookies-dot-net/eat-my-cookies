@@ -920,53 +920,78 @@ async function readLeMondePurposeStateMismatch(page, expectedStates) {
 
   const visible = await waitForAny(page, ['[data-gdpr-params-purpose]'], 7000);
   if (!visible) return { purpose: 'settings', expected: 'visible', actual: 'hidden' };
-  await page.waitForTimeout(1000);
 
-  const snapshot = await page.evaluate(() => {
-    const visibleEnough = (el) => {
-      const row = el.closest('section, article, li, div') ?? el;
-      const rect = row.getBoundingClientRect();
-      const style = getComputedStyle(row);
-      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-    };
-    const entries = Array.from(document.querySelectorAll('input[data-gdpr-params-purpose]'))
-      .filter(visibleEnough)
-      .map((input) => ({
-        purpose: input.getAttribute('data-gdpr-params-purpose'),
-        checked: Boolean(input.checked),
-      }))
-      .filter((entry) => Boolean(entry.purpose));
-    const rawCookie = document.cookie
-      .split('; ')
-      .filter((part) => part.startsWith('lmd_consent='))
-      .at(-1)
-      ?.slice('lmd_consent='.length) ?? null;
-    let cookiePurposes = null;
-    try {
-      cookiePurposes = rawCookie ? JSON.parse(decodeURIComponent(rawCookie))?.purposes ?? null : null;
-    } catch (_) {
-      cookiePurposes = null;
-    }
-    return {
-      entries,
-      cookiePurposes,
-      emcRunSignature: document.documentElement.dataset.emcRunSignature ?? null,
-    };
-  }).catch(() => ({ entries: [], cookiePurposes: null }));
+  // Le Monde's own site JS can throw repeatedly (confirmed live: "targetSelector not
+  // found" / "Cannot set properties of undefined (setting 'PBA')") when the settings
+  // panel is reopened right after a fresh custom save, likely its ad/subscription-nudge
+  // code choking on placeholder targets that don't exist because ads are correctly
+  // disabled — and can keep re-rendering a *second, later* duplicate set of purpose
+  // toggle inputs afterward (already a documented Le Monde quirk — see
+  // syncLeMondeVisibleSettingsFromConsent()'s per-purpose loop over every matching
+  // input, not just the first). A duplicate created after the extension's one-shot
+  // sync ran starts unsynced and only gets fixed on the next MutationObserver-driven
+  // resync. Poll for a snapshot where every expected purpose is fully satisfied
+  // instead of grabbing the first non-empty snapshot, which can catch a stale
+  // not-yet-resynced duplicate and report a false mismatch.
+  const deadline = Date.now() + 6000;
+  let snapshot = { entries: [], cookiePurposes: null };
+  let mismatch = { purpose: 'settings', expected: 'visible', actual: 'hidden' };
+  while (Date.now() < deadline) {
+    snapshot = await page.evaluate(() => {
+      const visibleEnough = (el) => {
+        const row = el.closest('section, article, li, div') ?? el;
+        const rect = row.getBoundingClientRect();
+        const style = getComputedStyle(row);
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+      };
+      const entries = Array.from(document.querySelectorAll('input[data-gdpr-params-purpose]'))
+        .filter(visibleEnough)
+        .map((input) => ({
+          purpose: input.getAttribute('data-gdpr-params-purpose'),
+          checked: Boolean(input.checked),
+        }))
+        .filter((entry) => Boolean(entry.purpose));
+      const rawCookie = document.cookie
+        .split('; ')
+        .filter((part) => part.startsWith('lmd_consent='))
+        .at(-1)
+        ?.slice('lmd_consent='.length) ?? null;
+      let cookiePurposes = null;
+      try {
+        cookiePurposes = rawCookie ? JSON.parse(decodeURIComponent(rawCookie))?.purposes ?? null : null;
+      } catch (_) {
+        cookiePurposes = null;
+      }
+      return {
+        entries,
+        cookiePurposes,
+        emcRunSignature: document.documentElement.dataset.emcRunSignature ?? null,
+      };
+    }).catch(() => ({ entries: [], cookiePurposes: null }));
 
-  const actualEntries = snapshot.entries ?? [];
-
-  for (const [purpose, expected] of Object.entries(expectedStates)) {
-    const controls = actualEntries.filter((entry) => entry.purpose === purpose);
-    if (!controls.length) {
-      return { purpose, expected: Boolean(expected), actual: 'missing', snapshot };
+    const actualEntries = snapshot.entries ?? [];
+    mismatch = null;
+    for (const [purpose, expected] of Object.entries(expectedStates)) {
+      const controls = actualEntries.filter((entry) => entry.purpose === purpose);
+      if (!controls.length) {
+        mismatch = { purpose, expected: Boolean(expected), actual: 'missing', snapshot };
+        break;
+      }
+      const wrong = controls.find((entry) => entry.checked !== Boolean(expected));
+      if (wrong) {
+        mismatch = { purpose, expected: Boolean(expected), actual: wrong.checked, snapshot };
+        break;
+      }
     }
-    const mismatch = controls.find((entry) => entry.checked !== Boolean(expected));
-    if (mismatch) {
-      return { purpose, expected: Boolean(expected), actual: mismatch.checked, snapshot };
-    }
+    if (!mismatch) break;
+    await page.waitForTimeout(300);
   }
-  return null;
+
+  if (process.env.EMC_DEBUG_CONSOLE) {
+    console.log('[emc-debug] lemonde purpose snapshot:', JSON.stringify(snapshot, null, 2), 'mismatch:', JSON.stringify(mismatch));
+  }
+
+  return mismatch;
 }
 
 async function waitForLeMondeConsentCookie(page, timeoutMs = 7000) {
@@ -1054,6 +1079,7 @@ async function openLeMondeCookiePreferences(page) {
   if (await selectorVisible(page, '[data-gdpr-params-purpose]').catch(() => false)) return true;
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
+    if (process.env.EMC_DEBUG_CONSOLE) console.log('[emc-debug] lemonde reopen attempt', attempt);
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
     await page.waitForTimeout(700);
 
@@ -1062,8 +1088,10 @@ async function openLeMondeCookiePreferences(page) {
       .click({ timeout: 2000, force: true })
       .then(() => true)
       .catch(() => false);
+    if (process.env.EMC_DEBUG_CONSOLE) console.log('[emc-debug] lemonde reopen click result', openedByVisibleLink);
     if (openedByVisibleLink) {
-      await waitForAny(page, ['[data-gdpr-params-purpose]', '.gdpr-lmd-params'], 7000);
+      const found = await waitForAny(page, ['[data-gdpr-params-purpose]', '.gdpr-lmd-params'], 7000);
+      if (process.env.EMC_DEBUG_CONSOLE) console.log('[emc-debug] lemonde reopen waitForAny found', found);
       return true;
     }
   }

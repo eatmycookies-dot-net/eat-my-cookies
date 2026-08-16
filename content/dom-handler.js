@@ -3775,9 +3775,22 @@ async function executeTrustArcRejectOrCustom(prefs) {
     if (!clickFirstVisibleWithin(root, ['a.submit'])) return null;
   }
 
-  await waitForAnyVisibleWithin(root, ['a.close'], 4000);
-  clickFirstVisibleWithin(root, ['a.close']);
-  await waitForTrustArcDismissal();
+  // TrustArc saves the choice (cookie + shadow-DOM state) synchronously on the
+  // decline/submit click above — the "Preferences Submitted" confirmation and its
+  // Close button are purely cosmetic afterward. Don't block the return on
+  // dismissing them: runDOMHandler() gives every CMP a single hard 10s budget
+  // (DOM_TIMEOUT_MS) for the whole detect-through-report cycle, and TrustArc's
+  // cold shadow-DOM load can already spend a meaningful chunk of that just to
+  // reach this point. Blocking here previously meant the click had genuinely
+  // succeeded and visibly dismissed the banner, but runDOMHandler's own timeout
+  // fired first and returned null to main.js before this function's result could
+  // be reported — banner gone, but no activity ever recorded (confirmed live on
+  // developers.redhat.com 2026-08-15: reject/custom dismissed the banner but the
+  // popup counter never incremented, while accept_all — a single fast click with
+  // no confirmation step — recorded fine). Best-effort dismiss in the background.
+  waitForAnyVisibleWithin(root, ['a.close'], 4000).then((found) => {
+    if (found) clickFirstVisibleWithin(root, ['a.close']);
+  });
   return isCustom ? 'dom:trustarc:custom' : 'dom:trustarc';
 }
 
