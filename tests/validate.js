@@ -318,6 +318,10 @@ async function testSite(page, site) {
     visitedTopLevelUrls.push(url);
   };
   page.on('framenavigated', recordTopLevelUrl);
+  if (process.env.EMC_DEBUG_CONSOLE) {
+    page.on('console', (msg) => console.log('[page console]', msg.type(), msg.text()));
+    page.on('pageerror', (err) => console.log('[page error]', err.message));
+  }
 
   try {
     await page.goto(site.url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });

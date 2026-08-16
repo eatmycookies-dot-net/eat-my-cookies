@@ -990,6 +990,13 @@ async function tryCMPsCore(cmps, prefs) {
       }
       continue;
     }
+    if (cmp.id === 'trustarc') {
+      const trustArcResult = await executeTrustArcFlow(cmp, prefs);
+      if (trustArcResult) {
+        return { method: trustArcResult, cmpName: cmp.name };
+      }
+      continue;
+    }
 
     const method = prefs.globalPreference === 'accept_all' ? 'accept_all' : 'reject_all';
     const actions = cmp.actions?.[method];
@@ -3705,6 +3712,117 @@ async function waitForGodaddyModalDismissal(root, timeoutMs = 4000) {
     await delay(100);
   }
   return !hasVisibleSelectorWithin(root, [GODADDY_PRIVACY_MODAL_SELECTOR]);
+}
+
+// TrustArc's light-DOM notice bar ("Accept All" / "More Options") only ever exposes
+// accept — reject and per-category custom choices live in a preference manager that
+// TrustArc injects into an open shadow root (`.trustarc_newcm_container`) once "More
+// Options" is clicked. The declarative rules/cmps.json action executor can't reach
+// into shadow DOM, so reject/custom must run through here. Confirmed live on
+// developers.redhat.com 2026-08-12 — see docs/cmp-impact-map.md.
+const TRUSTARC_NOTICE_SELECTOR = '#truste-consent-track';
+const TRUSTARC_ACCEPT_ALL_SELECTOR = '#truste-consent-button';
+const TRUSTARC_MORE_OPTIONS_SELECTOR = '#truste-show-consent2';
+const TRUSTARC_SHADOW_HOST_SELECTOR = '.trustarc_newcm_container';
+
+async function executeTrustArcFlow(cmp, prefs) {
+  if (prefs.globalPreference === 'accept_all') {
+    return executeTrustArcAcceptAll();
+  }
+  return executeTrustArcRejectOrCustom(prefs);
+}
+
+async function executeTrustArcAcceptAll() {
+  const button = firstVisibleElement([TRUSTARC_ACCEPT_ALL_SELECTOR]);
+  if (!button) return null;
+  dispatchNativeClick(button) || dispatchSyntheticClick(button);
+  await waitForTrustArcDismissal();
+  return 'dom:trustarc';
+}
+
+async function executeTrustArcRejectOrCustom(prefs) {
+  // TrustArc's own preference-manager bundle can take a couple of seconds to load
+  // into the shadow root on a cold cache. The retry loop that re-invokes this whole
+  // flow also hides the "More Options" button as soon as it's clicked, so a host
+  // that already exists but isn't populated yet must NOT be treated as "click
+  // failed, give up" — only click "More Options" again if no host exists yet;
+  // otherwise keep polling the one already in flight.
+  const hostAlreadyPending = Boolean(document.querySelector(TRUSTARC_SHADOW_HOST_SELECTOR));
+  if (!hostAlreadyPending && !clickFirstVisible([TRUSTARC_MORE_OPTIONS_SELECTOR])) return null;
+
+  const root = await waitForTrustArcPreferenceManager();
+  if (!root) return null;
+
+  const isCustom = prefs.globalPreference === 'custom';
+  // The one-click "Decline All" shortcut isn't always rendered (confirmed live:
+  // present and visible on one session, present-but-display:none on another —
+  // likely gated by region/config, not something to assume). Fall back to the
+  // same manual toggle-off-then-submit path custom mode already uses whenever
+  // it isn't actionable, rather than failing outright.
+  const declineAllVisible = hasVisibleSelectorWithin(root, ['a.declineAllButtonLower']);
+  if (!isCustom && declineAllVisible) {
+    if (!clickFirstVisibleWithin(root, ['a.declineAllButtonLower'])) return null;
+  } else {
+    // Deployer-observed category naming (redhat.com, 2026-08-12): "Functional Cookies"
+    // covers analytics/performance in its own description, "Advertising Cookies" covers
+    // ad targeting/sharing. Only two categories are ever toggleable; "Required" is locked.
+    const wantFunctional = isCustom && (Boolean(prefs.functional) || Boolean(prefs.analytics));
+    const wantAdvertising = isCustom && Boolean(prefs.advertising) && prefs.ccpaDoNotSell === false;
+    const functionalOk = setTrustArcCategoryState(root, /functional/i, wantFunctional);
+    const advertisingOk = setTrustArcCategoryState(root, /advertising/i, wantAdvertising);
+    if (!functionalOk || !advertisingOk) return null;
+    await delay(200);
+    if (!clickFirstVisibleWithin(root, ['a.submit'])) return null;
+  }
+
+  await waitForAnyVisibleWithin(root, ['a.close'], 4000);
+  clickFirstVisibleWithin(root, ['a.close']);
+  await waitForTrustArcDismissal();
+  return isCustom ? 'dom:trustarc:custom' : 'dom:trustarc';
+}
+
+function findTrustArcPreferenceRoot() {
+  for (const host of document.querySelectorAll(TRUSTARC_SHADOW_HOST_SELECTOR)) {
+    const root = host.shadowRoot;
+    if (root && hasVisibleSelectorWithin(root, ['.cookiecat', 'a.declineAllButtonLower'])) {
+      return root;
+    }
+  }
+  return null;
+}
+
+async function waitForTrustArcPreferenceManager(timeoutMs = 8000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const root = findTrustArcPreferenceRoot();
+    if (root) return root;
+    await delay(100);
+  }
+  return null;
+}
+
+// TrustArc's preference manager marks each category's current In/Out choice with
+// aria-pressed on the option itself (found live via .cookiecat > .switch spans), so
+// state can be read back reliably instead of guessing from CSS class names.
+function setTrustArcCategoryState(root, categoryNamePattern, checked) {
+  const card = Array.from(root.querySelectorAll('.cookiecat'))
+    .find((c) => categoryNamePattern.test(c.querySelector('h3')?.textContent ?? ''));
+  if (!card) return true; // this deployer doesn't offer the category — nothing to toggle
+  const target = card.querySelector(checked ? '.switch span[aria-label^="In "]' : '.switch span[aria-label^="Out "]');
+  if (!target) return false;
+  if (target.getAttribute('aria-pressed') === 'true') return true;
+  return dispatchSyntheticClick(target);
+}
+
+async function waitForTrustArcDismissal(timeoutMs = 4000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const stillVisible = hasVisibleSelector([TRUSTARC_NOTICE_SELECTOR]) ||
+      hasVisibleSelector([TRUSTARC_SHADOW_HOST_SELECTOR]);
+    if (!stillVisible) return true;
+    await delay(100);
+  }
+  return false;
 }
 
 async function waitForInvestisCookieManagerDismissal(cmp) {

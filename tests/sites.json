@@ -3418,6 +3418,21 @@
       "consentSelectors": [
         "[data-test='cookie__reject']"
       ]
+    },
+    {
+      "name": "Red Hat Developer",
+      "url": "https://developers.redhat.com/articles/2026/07/27/standardize-project-context-agentsmd-and-agent-skills",
+      "region": "US",
+      "cmp": "TrustArc",
+      "tier": "dom",
+      "handleWaitMs": 12000,
+      "note": "TrustArc's own preference-manager config declares a 6s internal cmTimeout for the shadow-DOM 'More Options' panel's cold asset load (GWT bundle, fonts from consent.trustarc.com) — reject/custom need more than the default handleWaitMs to open the panel, decline/save, and dismiss the confirmation.",
+      "bannerSelectors": [
+        "#truste-consent-track"
+      ],
+      "consentSelectors": [
+        "#truste-consent-track"
+      ]
     }
   ]
 }

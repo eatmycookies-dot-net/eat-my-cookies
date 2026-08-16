@@ -393,6 +393,29 @@ Consent persistence is not yet human-validated on either layer.
 | `godaddy.com` | US/global | Shadow DOM banner. Seen in Dutch (`/nl`). Multilingual button matching + positional fallback. Pending human validation. |
 | `afternic.com` | US | Full preference modal. Tested on `/forsale/sprout.com` without VPN. Pending human validation. |
 
+### TrustArc
+**Handler files:** `dom-handler.js` (`executeTrustArcFlow` and friends) + `rules/cmps.json` (detectors + `accept_all` only)
+
+Investigated 2026-08-12 after the user asked what CMP developers.redhat.com runs. `rules/cmps.json` already had a `trustarc` entry, but its `reject_all` action targeted selectors (`#truste-consent-required`, `.truste-option-button:first-child`) that don't exist anywhere in the live deployment — dead since whenever it was written, and invisible because TrustArc had zero entries in `tests/sites.json`.
+
+**Real shape, live-probed on developers.redhat.com:** the notice bar (`#truste-consent-track`, no-iframe mode via `js=nj`) is light DOM with only `#truste-consent-button` ("Accept All") and `#truste-show-consent2` ("More Options") — no direct reject at that level. Clicking "More Options" lazily attaches an **open shadow root** to a `.trustarc_newcm_container` host (old GWT preference-manager markup wrapped in shadow DOM) — the declarative action executor's plain `document.querySelector` can't reach in there, so reject/custom had to move to a code-backed handler, following the same shadow-DOM pattern as GoDaddy/Usercentrics.
+
+Inside the shadow root, each category is a `.cookiecat` card with an `<h3>` name and a `div.switch` holding two `span[role=button]` options (`aria-label="In {Category} Cookies"` / `"Out {Category} Cookies"`, `aria-pressed` reflecting current state — read this back instead of the internal `on`/`off`/`active` CSS class names, which don't map onto semantic state the way they read). `a.declineAllButtonLower` bulk-declines and auto-submits; `a.submit` saves manual toggle changes; both surface a "Preferences Submitted" confirmation with `a.close`.
+
+**Two real bugs found only by running this through the actual extension, not just manual clicks (2026-08-12):**
+- The one-click "Decline All" shortcut is not always rendered actionable — present and clickable in an interactive manual session, but `display:none` (confirmed via full computed-style/ancestor dump) when driven through the real extension's retry loop. Root cause unconfirmed (region/config gating vs. some interaction-order dependency) — rather than assume it's always available, `reject_all` now falls back to the same manual per-category toggle-to-Out + Submit path `custom` mode uses whenever the shortcut isn't visible.
+- The retry loop that re-invokes the whole dom-handler flow re-clicked "More Options" on every attempt while a previous click's shadow root was still loading, and TrustArc spawns a **new** `.trustarc_newcm_container` host per click rather than reusing one — so `document.querySelector` (first-match) kept finding a stale/empty host and re-clicking, never patiently waiting out a genuinely slow cold load. Fixed by treating "a host already exists" as "don't click again, just keep polling every host for one with real content" instead of bailing.
+
+Category naming is deployer-specific, not a stable vendor convention (per the general TrustArc/Fides precedent in this doc) — on redhat.com, "Functional Cookies" describes itself as covering analytics/performance use, and "Advertising Cookies" covers ad targeting/sharing; only these two are ever toggleable, "Required" is locked. `custom` maps `functional || analytics` → the Functional toggle, and `advertising && ccpaDoNotSell === false` → the Advertising toggle (fail-safe: an unset/uncertain do-not-sell signal keeps advertising off, matching the existing CookieScript convention rather than a bare negation).
+
+Live-verified via the real extension (`node tests/validate.js --site="Red Hat Developer"`, non-VPN/US): `reject_all` (Decline All fallback path), `accept_all`, and `custom` (including the `ccpaDoNotSell: true` hybrid case forcing Advertising off) all dismiss the banner and record the correct method. Manually cross-checked the resulting cookies (`notice_gdpr_prefs`) and the reopened preference panel's own `aria-pressed` state against a hand-driven custom toggle (Functional In / Advertising Out) — matched exactly, and reopening via the persistent footer "Cookie preferences" link showed the durable saved state rather than resetting it.
+
+**Not yet validated:** EU/VPN session (TrustArc's `behaviorManager: "eu"` config suggests redhat.com may already apply GDPR-style opt-in globally, but this is unconfirmed), and whether the "Decline All" visibility gating correlates with region. See `private/human-validation-backlog.md`.
+
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `developers.redhat.com` | US (non-VPN) | Shadow-DOM preference manager under `.trustarc_newcm_container`. Reject/custom code-backed; accept_all stays a plain declarative light-DOM click. EU/VPN not yet tested. |
+
 ### Consentmo
 **Handler files:** `dom-handler.js` + `rules/cmps.json`
 

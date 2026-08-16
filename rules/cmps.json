@@ -365,16 +365,13 @@
     {
       "id": "trustarc",
       "name": "TrustArc",
+      "note": "Reject and custom click/toggle handling lives in dom-handler.js's executeTrustArcFlow, not these actions — tryCMPs() always takes a dedicated branch for cmp.id 'trustarc' and continues past the generic action executor. TrustArc's 'More Options' preference manager renders inside an open shadow root (.trustarc_newcm_container), which the generic document.querySelector-based action executor can't reach; only accept_all's button is in light DOM, so only that stays a plain declarative action. Confirmed live on developers.redhat.com 2026-08-12 — see docs/cmp-impact-map.md.",
       "detectors": [
         { "type": "js_global",    "value": "window.truste" },
         { "type": "css_selector", "value": "#truste-consent-track" },
         { "type": "css_selector", "value": ".truste_overlay" }
       ],
       "actions": {
-        "reject_all": [
-          { "type": "click", "selector": "#truste-consent-required" },
-          { "type": "click", "selector": ".truste-option-button:first-child" }
-        ],
         "accept_all": [
           { "type": "click", "selector": "#truste-consent-button" }
         ]
