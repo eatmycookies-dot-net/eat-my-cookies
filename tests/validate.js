@@ -914,6 +914,37 @@ async function readOneTrustToggleStateMismatch(page, expectedStates) {
 }
 
 async function readLeMondePurposeStateMismatch(page, expectedStates) {
+  // Le Monde's reopened settings panel can collapse to zero DOM elements entirely
+  // partway through a check (confirmed live: input[data-gdpr-params-purpose] count
+  // drops to 0, correlated with the site's own widget throwing internal errors —
+  // "targetSelector not found" / "Cannot set properties of undefined (setting
+  // 'PBA')" — on reopen, and with the user separately observing a subscription-nudge
+  // overlay appearing when ads are disabled) — not something a longer wait inside
+  // one attempt can recover from once the elements are actually gone. A full-page
+  // screenshot taken at the exact moment of a DOM mismatch (2026-08-15) showed the
+  // settings panel already fully closed, back to the plain article page — this is
+  // real site-side instability in Le Monde's own reopen widget, not a rendering
+  // race the extension can wait out. Retry the whole open-and-check cycle a few
+  // times; a fresh reopen click can succeed even when the previous one collapsed.
+  let last = { purpose: 'settings', expected: 'openable', actual: 'missing' };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    last = await readLeMondePurposeStateMismatchOnce(page, expectedStates);
+    if (!last) return null;
+    // The DOM snapshot can be unstable (see above) even when the cookie — the
+    // actual source of truth for what Le Monde's own site will do — is already
+    // exactly right. Don't fail a save that's genuinely correct just because a
+    // flaky third-party widget didn't hold still long enough to photograph it.
+    if (leMondeCookieMatchesExpected(last.snapshot?.cookiePurposes, expectedStates)) return null;
+  }
+  return last;
+}
+
+function leMondeCookieMatchesExpected(cookiePurposes, expectedStates) {
+  if (!cookiePurposes) return false;
+  return Object.entries(expectedStates).every(([purpose, expected]) => cookiePurposes[purpose] === Boolean(expected));
+}
+
+async function readLeMondePurposeStateMismatchOnce(page, expectedStates) {
   await waitForLeMondeConsentCookie(page, 7000);
   const opened = await openLeMondeCookiePreferences(page);
   if (!opened) return { purpose: 'settings', expected: 'openable', actual: 'missing' };
@@ -988,7 +1019,7 @@ async function readLeMondePurposeStateMismatch(page, expectedStates) {
   }
 
   if (process.env.EMC_DEBUG_CONSOLE) {
-    console.log('[emc-debug] lemonde purpose snapshot:', JSON.stringify(snapshot, null, 2), 'mismatch:', JSON.stringify(mismatch));
+    console.log('[emc-debug] lemonde purpose snapshot:', JSON.stringify(snapshot), 'mismatch:', JSON.stringify(mismatch));
   }
 
   return mismatch;
@@ -1548,18 +1579,36 @@ async function writePreferences(browser, preference, site = null, profileDir = '
 
   if (sw) {
     try {
-      const stored = await sw.evaluate(async (data) => {
-        await Promise.all([
-          new Promise((resolve) => chrome.storage.sync.set(data.payload, resolve)),
-          new Promise((resolve) => chrome.storage.local.set({ siteOverrides: data.siteOverrides }, resolve)),
-          new Promise((resolve) => chrome.storage.local.remove(data.manualConsentOpenKey, resolve)),
-        ]);
-        return await new Promise((resolve) => chrome.storage.sync.get(['globalPreference', 'onboardingComplete', 'categoryPreferences'], resolve));
-      }, { payload, siteOverrides, manualConsentOpenKey: MANUAL_CONSENT_OPEN_KEY });
-      if (stored?.globalPreference === payload.globalPreference &&
-          stored?.onboardingComplete === true &&
-          categoryPreferencesEqual(stored?.categoryPreferences, payload.categoryPreferences)) {
-        return null;
+      // Verify siteOverrides landed too, not just chrome.storage.sync — a site with
+      // siteOverrides configured (e.g. alwaysAccept) reads it back from chrome.storage.local
+      // via a separate GET_SITE_OVERRIDES round-trip in the content script, and only
+      // globalPreference/onboardingComplete/categoryPreferences were being confirmed here.
+      // An unconfirmed siteOverrides write occasionally wasn't durable yet by the time the
+      // content script's own read raced it (worse, and more frequently, under VPN's added
+      // latency — confirmed live 2026-08-15: reproducible even as a lone --vpn --site run,
+      // not just full-batch), silently falling back to the no-override code path and
+      // recording e.g. site_specific:accept_all instead of the expected
+      // site_override:accept_all. Retry the whole write+verify a few times.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const stored = await sw.evaluate(async (data) => {
+          await Promise.all([
+            new Promise((resolve) => chrome.storage.sync.set(data.payload, resolve)),
+            new Promise((resolve) => chrome.storage.local.set({ siteOverrides: data.siteOverrides }, resolve)),
+            new Promise((resolve) => chrome.storage.local.remove(data.manualConsentOpenKey, resolve)),
+          ]);
+          const [syncResult, localResult] = await Promise.all([
+            new Promise((resolve) => chrome.storage.sync.get(['globalPreference', 'onboardingComplete', 'categoryPreferences'], resolve)),
+            new Promise((resolve) => chrome.storage.local.get(['siteOverrides'], resolve)),
+          ]);
+          return { ...syncResult, siteOverrides: localResult?.siteOverrides };
+        }, { payload, siteOverrides, manualConsentOpenKey: MANUAL_CONSENT_OPEN_KEY });
+        if (stored?.globalPreference === payload.globalPreference &&
+            stored?.onboardingComplete === true &&
+            categoryPreferencesEqual(stored?.categoryPreferences, payload.categoryPreferences) &&
+            JSON.stringify(stored?.siteOverrides ?? {}) === JSON.stringify(siteOverrides)) {
+          return null;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
     } catch (_) {
       // SW found but evaluate failed (chrome API not ready) — fall through to page approach

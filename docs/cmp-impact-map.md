@@ -410,7 +410,9 @@ Category naming is deployer-specific, not a stable vendor convention (per the ge
 
 Live-verified via the real extension (`node tests/validate.js --site="Red Hat Developer"`, non-VPN/US): `reject_all` (Decline All fallback path), `accept_all`, and `custom` (including the `ccpaDoNotSell: true` hybrid case forcing Advertising off) all dismiss the banner and record the correct method. Manually cross-checked the resulting cookies (`notice_gdpr_prefs`) and the reopened preference panel's own `aria-pressed` state against a hand-driven custom toggle (Functional In / Advertising Out) — matched exactly, and reopening via the persistent footer "Cookie preferences" link showed the durable saved state rather than resetting it.
 
-**Not yet validated:** EU/VPN session (TrustArc's `behaviorManager: "eu"` config suggests redhat.com may already apply GDPR-style opt-in globally, but this is unconfirmed), and whether the "Decline All" visibility gating correlates with region. See `private/human-validation-backlog.md`.
+**Not yet validated:** EU/VPN session (TrustArc's `behaviorManager: "eu"` config suggests redhat.com may already apply GDPR-style opt-in globally, but this is unconfirmed), and whether the "Decline All" visibility gating correlates with region. A 2026-08-15 attempt got an inconclusive `SKIP` (no banner at all) rather than a real pass/fail — likely TrustArc's server-side session/IP tracking already had that VPN exit node down as "already seen," independent of local cookie/localStorage state. See `private/human-validation-backlog.md`.
+
+**Third real bug, caught live by the user after reloading the rebuilt extension (2026-08-15):** reject/custom correctly dismissed the banner but the popup's activity counter never incremented. `executeTrustArcRejectOrCustom` was blocking its return on waiting for and dismissing TrustArc's "Preferences Submitted" confirmation popup — a purely cosmetic step, since the cookie is already saved synchronously by the decline/submit click itself — but `dom-handler.js`'s `runDOMHandler()` gives every CMP a single hard 10s budget (`DOM_TIMEOUT_MS`) for the whole detect-through-report cycle. On a slow cold shadow-DOM load, the trailing confirmation-dismissal wait could push past that deadline, so `main.js` never received a result to report even though the click had already succeeded. Fixed by returning immediately after the decline/submit click and dismissing the confirmation in the background (not awaited before returning). Verified: `reject_all` and `custom` now both show "activity recorded" in `node tests/validate.js --site="Red Hat Developer"`.
 
 | Site | Region | Special notes |
 |------|--------|--------------|
@@ -441,9 +443,24 @@ Live-verified via the real extension (`node tests/validate.js --site="Red Hat De
 `realmaker.de` did not surface a fresh banner in the same pass, so keep additional Borlabs targets on the watch list.
 
 ### Cookie Wow
-**Handler files:** `dom-handler.js` + `rules/cmps.json`
+**Handler files:** `dom-handler.js` (`executeCookieWowFlow`, `setCookieWowCategoryState`) + `rules/cmps.json`
 
-Public live target still needed for stable regression coverage. Generic analytics/marketing toggle handling is implemented.
+| Site | Region | Special notes |
+|------|--------|--------------|
+| `techsauce.co` | TH/PDPA | Live-verified 2026-08-15 via a real headed `tests/validate.js` run (`dom:cookiewow:custom`). |
+
+**Live verification (2026-08-15).** The roadmap's prior note ("Vendor/help pages probed during this pass did not expose a live consent surface") was accurate as far as it went — `cookiewow.com` and `help.cookiewow.com` are marketing/support pages, not real deployments, and neither shows a banner. The fix was finding an actual customer: `cookiewow.com/en`'s own client-testimonials section names `techsauce.co` (Techsauce, a real Thai tech-media publisher) as a customer, and that site does load the real widget (`cookiecdn.com/cwc.js`, `.cwc-*` markup).
+
+Confirmed live end-to-end:
+- Actionable surface: `.cwc-banner-container` / `.cwc-consent-summary-container`, with `.cwc-accept-button` ("ยอมรับทั้งหมด") and `.cwc-setting-button` ("การตั้งค่าคุกกี้") both visible on first load.
+- Settings panel (`.cwc-category-item` × 3: necessary/analytics/marketing) opens correctly on `.cwc-setting-button` click. Both toggleable categories default to **off** already, and each is independently click-toggleable via its `.cwc-switch` — confirmed with a real synthetic click before adding the test.
+- Category title text matches `COOKIEWOW_ANALYTICS_PATTERNS`/`COOKIEWOW_MARKETING_PATTERNS` exactly: `คุกกี้ในส่วนวิเคราะห์` (analytics) and `คุกกี้ในส่วนการตลาด` (marketing).
+- Save button `.cwc-save-setting-wrapper button` reads "ยืนยันตัวเลือกของฉัน" ("Confirm my choices").
+- `tests/sites.json`'s `Techsauce (TH/PDPA)` entry (`preference: "custom"`, analytics on / marketing off) passed with `dom:cookiewow:custom`, banner dismissed, and `chrome.storage.sync.categoryPreferences` confirmed matching the request before the harness accepted the run — this proves real per-category persistence, not just banner dismissal.
+
+**Headless gap, real and reproducible:** the identical site/config fails with `SKIP — No banner detected (already consented or geo-gated)` under `npm run test:e2e` (headless) but `PASS`es cleanly under `npm run test:e2e:headed`. Cookie Wow appears to suppress its banner for automated/headless browser fingerprints. Anyone re-running this regression target must use headed mode, or the SKIP will be silently misread as "nothing to test" rather than "wrong mode."
+
+No footer/settings reopen path was found on this install — nothing further to verify there.
 
 ### CookieHub
 **Handler files:** `dom-handler.js` (`executeCookieHubFlow`) + `rules/cmps.json`
@@ -541,9 +558,27 @@ Fixed by adding `#cookie-law-info-bar` / `.wt-cli-cookie-bar-container` / `#cliS
 Generic settings-panel handling is implemented via tab traversal (`performance`, `tracking`, `video`).
 
 ### privacymanager.io
-**Handler files:** `dom-handler.js` + `rules/cmps.json`
+**Handler files:** `dom-handler.js` (`executePrivacyManagerFlow`, `executeAdoptBannerFlow`, `setPrivacyManagerSliderState`) + `rules/cmps.json`
 
-Generic slider-based handling is implemented. Public live target still needed for stable regression coverage.
+`executePrivacyManagerFlow` actually covers three visually distinct sub-surfaces under one handler, with different evidence status for each:
+
+1. **Simple LGPD accept banner** (`.banner-lgpd-consent__accept`, `.push-notification--accept-button`) — live-validated, see `uol.com.br`/`terra.com.br` in `docs/site-support-matrix.md`'s Brazil/LGPD section. Accept-only in practice: there is no visible reject/custom control in this banner shell, so reject/custom requests silently fall through to the generic Angular slider path below, which has never been confirmed to exist on either site.
+2. **AdOpt-branded banner** (`#cookie-banner`, `#adopt-accept-all-button`) — live on `exame.com`, but genuinely flaky on reject (see below), not a clean regression target.
+3. **Generic Angular Material slider panel** (`#manageSettings`, `#saveAndExit`, `.notice-title`, `.mat-dialog-title.confirmationDialogTitle`, `#mat-slider`) — **zero live confirmation as of 2026-08-15**, see the search writeup below.
+
+**2026-08-15 search for a live Angular-slider target.** The roadmap's "Finish First" item 3 called this out as needing a stable public regression target. A 2022 DuckDuckGo `privacy-configuration` bug report (issue #334, "privacymanager.io breakage") named four real sites that broke when `privacymanager.io` requests were blocked: `diepresse.com`, `weer.nl`, `pickmypostcode.com`, `geenstijl.nl`. Re-checking all four live, four years later:
+
+- `pickmypostcode.com` — loads fine, but shows no `privacymanager`/`launchpad` script and none of the target selectors; it has moved to a different (uncatalogued) consent stack.
+- `weer.nl` — loads fine, but now runs **Didomi** (`window.Didomi`, `sdk.privacy-center.org`), not privacymanager.io.
+- `diepresse.com` and `estadao.com.br` (a separately-suspected Brazilian Launchpad target from `docs/site-support-matrix.md`'s Brazil pass) both **hung indefinitely** in this session's browser tooling (`navigate` timed out at 300s on repeated attempts, including a fresh tab) — could not be checked at all. `theverge.com`, the flagship Launchpad-adjacent site from earlier passes, timed out the same way. Whether this is bot-detection against the automation stack or a genuine load-time problem on these specific properties is unknown; either way, none of the three could be fingerprinted this session.
+- `geenstijl.nl` — could not be fetched at all (network-level block on the fetch tool used to pre-check reachability before spending a browser timeout on it).
+- `e-core.com` — previously documented (June 2026) as an "AdOpt / HubSpot hybrid" with Launchpad scripts present. Re-checked live 2026-08-15: **no Launchpad/privacymanager script is present anymore**, only `tag.goadopt.io` (pure AdOpt). This site appears to have removed Launchpad entirely since it was last catalogued.
+
+Net result: the classic Angular slider surface this handler was built to support could not be located on any live, checkable site in this pass. It may still exist somewhere in LiveRamp's real customer base, but four independent 2022-era leads and one previously-documented site all came up empty or unreachable. Flagged in `private/human-validation-backlog.md` as an open follow-up — a differently-sourced lead (LiveRamp's own public customer list/case studies, rather than a 2022 breakage report) is the likely next step, plus retrying `diepresse.com`/`estadao.com.br`/`theverge.com` from an environment where they don't hang.
+
+**AdOpt sub-path reproduced live 2026-08-15 (non-VPN), confirming the existing "needs investigation" status is still accurate:** clicking `exame.com`'s real "Do not sell" button does set a genuine `AdoptConsent` cookie recording the opt-out choice, but `#cookie-banner` itself never hides or changes state afterward — it stays fully visible and interactive, pixel-identical to before the click. "Accept" does not have this problem; only reject exhibits it. This means `waitForDismissal()` correctly times out and the flow reports failure (matching the documented `visible=none`-style non-VPN failures) — this is genuine AdOpt-side behavior on this deployment, not a selector or timing bug in `executeAdoptBannerFlow`. A real fix would need a different signal than DOM-visibility to confirm the reject succeeded (e.g. polling the `AdoptConsent` cookie itself), which is a larger scoped change than this pass covered — left as-is rather than guessing at a workaround without live confirmation it actually resolves the underlying flakiness.
+
+**AdOpt (routed through this family via `executeAdoptBannerFlow`):** `exame.com`'s reject_all failed consistently (`recorded=none`, banner never dismissed) — fixed 2026-08-15. The button-text regex only matched `/não vender/i` (infinitive "vender", "to sell"), but the real button reads **"Não venda"** (imperative "venda") — a word-form mismatch, confirmed via a live DOM dump of the banner's actual buttons. Fixed to `/n[ãa]o vend[ae]r?/i`, matching both word forms and the accent-free variant. Verified 3/3 on both `Exame (BR/AdOpt Reject)` and `Exame (BR/AdOpt Accept)`.
 
 ### Iubenda
 **Handler files:** `cmp-api-handler.js` (Tier 2) + `dom-handler.js` + `rules/cmps.json`

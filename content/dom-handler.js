@@ -2968,8 +2968,10 @@ async function executeAdoptBannerFlow(cmp, prefs) {
   if (!clickVisibleButtonWithText(['#cookie-banner'], [
     /do not sell/i,
     /opt out/i,
-    /não vender/i,
-    /nao vender/i,
+    // Real AdOpt button text on exame.com (2026-08-15): "Não venda" — imperative
+    // "venda" ("sell"), not the infinitive "vender" the old patterns expected.
+    // Match both word forms plus the accent-free variant.
+    /n[ãa]o vend[ae]r?/i,
   ])) {
     return false;
   }

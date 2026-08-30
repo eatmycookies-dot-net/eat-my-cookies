@@ -81,6 +81,7 @@ const KETCH_MANUAL_SUPPRESS_MS = 120000;
 let leMondeManualOpenGuardInstalled = false;
 let leMondeManualOpenUntil = 0;
 let leMondeAutomationOpenUntil = 0;
+let leMondeAcceptInFlight = false;
 const LEMONDE_MANUAL_SUPPRESS_MS = 120000;
 const LEMONDE_AUTOMATION_SUPPRESS_MS = 15000;
 let manualUsercentricsOutcomeWatchInstalled = false;
@@ -3052,6 +3053,7 @@ async function handleLeMonde(prefs, siteOverrides) {
   if (isLeMondeManualOpenSuppressed()) {
     if (isLeMondeSettingsSurfaceVisible()) {
       syncLeMondeVisibleSettingsFromConsent();
+      await resyncLeMondeSettingsForLateDuplicates();
     }
     return true;
   }
@@ -3079,6 +3081,30 @@ async function handleLeMonde(prefs, siteOverrides) {
   }
 
   if (prefs.globalPreference === 'accept_all' || siteOverrides.alwaysAccept) {
+    // The watcher scheduleDynamicSiteSpecificWatch() sets up after this same accept
+    // flow already succeeded once, and its own tryHandle() can independently reach
+    // this same branch again on the next DOM mutation (confirmed live 2026-08-15,
+    // reproducible under VPN's added latency: two handleLeMonde entries racing
+    // within ~50-200ms of each other, one from bootstrap() with the real
+    // siteOverrides, one from tryHandle() reading a transiently different value).
+    // Both eventually call reportAction with 'accept_all' preference, and whichever
+    // finishes last wins the recorded activity — occasionally overwriting the
+    // correct site_override:accept_all with the generic site_specific:accept_all
+    // label even though the actual accept already succeeded. Guard against the
+    // redundant duplicate: if Le Monde's own cookie already shows every purpose
+    // accepted, this outcome has already been achieved — don't click or report again.
+    // That alone isn't enough when both calls start within milliseconds of each
+    // other though — neither has a cookie yet at that point — so also hold a
+    // simple in-flight lock across the whole click-and-wait sequence below (the
+    // watcher's own tryHandle() and this function never run on separate threads,
+    // just interleaved async turns, so a plain module-level flag is sufficient).
+    const alreadyAccepted = readLeMondeConsentCookie()?.purposes;
+    if (alreadyAccepted && Object.values(alreadyAccepted).every(Boolean)) {
+      return true;
+    }
+    if (leMondeAcceptInFlight) return true;
+    leMondeAcceptInFlight = true;
+    try {
     const accepted = await clickAndWait(
       [
         'button[data-gdpr-expression="acceptAll"]',
@@ -3112,6 +3138,9 @@ async function handleLeMonde(prefs, siteOverrides) {
       await chrome.runtime.sendMessage({ type: 'CLEAR_UNSUPPORTED_SITE', domain: site });
       await reportAction(siteOverrides.alwaysAccept ? 'site_override:accept_all' : 'site_specific:accept_all', 'accept_all');
       return true;
+    }
+    } finally {
+      leMondeAcceptInFlight = false;
     }
   }
 
@@ -3211,6 +3240,24 @@ function syncLeMondeVisibleSettingsFromConsent() {
     }
   }
   return synced;
+}
+
+// Le Monde's own settings widget can render a second, later duplicate set of
+// purpose toggle inputs shortly after the first set appears (confirmed live,
+// 2026-08-15, correlated with the widget throwing its own internal errors on
+// reopen) — the sync call above only catches inputs that already exist in the
+// DOM at the moment it runs. Relying solely on the MutationObserver-driven
+// watcher to catch a late duplicate on its next pass leaves a window where a
+// manually reopened settings panel shows a stale/wrong value for whichever
+// purpose the duplicate covers. Poll and resync a few more times right after
+// the first sync so a same-tick or shortly-after duplicate gets corrected
+// before the user has a chance to see it.
+async function resyncLeMondeSettingsForLateDuplicates() {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (!isLeMondeManualSettingsOpen()) return;
+    syncLeMondeVisibleSettingsFromConsent();
+  }
 }
 
 function readLeMondeConsentPurposes() {

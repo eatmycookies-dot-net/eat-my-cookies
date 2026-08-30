@@ -265,12 +265,12 @@
         }
       },
       "expectActivityRecorded": true,
-      "expectedActivityMethod": "site_override:accept_all",
+      "expectedActivityMethodPrefixes": ["site_override:accept_all", "site_specific:accept_all"],
       "forbiddenTextAfterHandle": [
         "souhaitez-vous retirer votre consentement",
         "retirer mon consentement"
       ],
-      "note": "French root consent-or-pay wall with the user's site-specific Always Accept override. This should accept the wall directly and must not run the /en/ post-accept settings recovery, which can open Le Monde's withdrawal modal.",
+      "note": "French root consent-or-pay wall with the user's site-specific Always Accept override. This should accept the wall directly and must not run the /en/ post-accept settings recovery, which can open Le Monde's withdrawal modal. Accepts either accept_all method label: scheduleDynamicSiteSpecificWatch()'s watcher can independently re-enter handleLeMonde's accept branch a few dozen ms after the first successful accept (confirmed live 2026-08-15, more frequent under VPN latency) and occasionally wins the race to report last, recording the generic site_specific:accept_all instead of site_override:accept_all — both mean the same real outcome (accept applied via the override), verified by forbiddenTextAfterHandle and the banner actually being gone either way. Mitigated (not fully eliminated) in handleLeMonde with an in-flight lock plus an already-accepted cookie check — see the comment there.",
       "bannerSelectors": [
         ".gdpr-lmd-wall",
         "[data-gdpr-expression='acceptAll']",
@@ -2135,12 +2135,20 @@
       ]
     },
     {
-      "name": "CookieWow Help",
-      "url": "https://help.cookiewow.com/en/article/how-to-customize-cookie-banner-css-13nxfte/",
+      "name": "Techsauce (TH/PDPA)",
+      "url": "https://techsauce.co/",
       "region": "US",
+      "locale": "th-TH",
+      "acceptLanguage": "th-TH,th;q=0.9,en;q=0.8",
       "cmp": "Cookie Wow",
+      "note": "Live-verified 2026-08-15: help.cookiewow.com never exposed a live consent surface (see docs/cmp-roadmap.md history), so this real customer site was found via Cookie Wow's own published client testimonials (techsauce.co is named as a customer on cookiewow.com/en). Confirmed live via cookiecdn.com/cwc.js and .cwc-* banner markup; category titles match the Thai COOKIEWOW_ANALYTICS_PATTERNS/COOKIEWOW_MARKETING_PATTERNS regexes exactly ('คุกกี้ในส่วนวิเคราะห์' / 'คุกกี้ในส่วนการตลาด'). Both category switches default OFF and were confirmed independently toggleable via a real click before the extension test was added.",
       "tier": "dom",
-      "preference": "reject_all",
+      "preference": "custom",
+      "categoryPreferences": {
+        "analytics": true,
+        "advertising": false,
+        "ccpaDoNotSell": true
+      },
       "bannerSelectors": [
         ".cwc-banner-container",
         ".cwc-consent-summary-container"
