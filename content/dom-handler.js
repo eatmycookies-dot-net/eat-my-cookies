@@ -788,6 +788,8 @@ async function tryCMPsCore(cmps, prefs) {
     if (cmp.id === 'sourcepoint') continue;
     if (!detectCMP(cmp)) continue;
     if (isCMPBlockedOnHost(cmp.id, host, prefs.globalPreference)) continue;
+    // Already answered, and the site isn't asking — don't re-open anything.
+    if (cmp.id === 'onetrust' && oneTrustConsentAlreadySatisfied(prefs)) continue;
     if (cmp.id === 'onetrust' && prefs.globalPreference === 'accept_all' && shouldUseOneTrustPrivacyCenterAccept(prefs, host)) {
       if (await executeOneTrustPrivacyCenterAccept(cmp, prefs, host)) {
         return { method: `dom:${cmp.id}`, cmpName: cmp.name };
@@ -1171,7 +1173,7 @@ async function completeOneTrustPreferenceCenterAction(cmp, prefs, host, method, 
     ])) hideVisibleOneTrustSurfaces();
     schedulePreservedOneTrustStateSync(host, expectedGroups);
     scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);
-    if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2000))) {
+    if (Object.keys(expectedGroups).length && !(await confirmOneTrustConsentSaved(expectedGroups))) {
       return false;
     }
     return waitForOneTrustDismissalAfterSettle(cmp, actions, host);
@@ -1187,7 +1189,7 @@ async function completeOneTrustPreferenceCenterAction(cmp, prefs, host, method, 
   ])) hideVisibleOneTrustSurfaces();
   schedulePreservedOneTrustStateSync(host, expectedGroups);
   scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);
-  if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2000))) {
+  if (Object.keys(expectedGroups).length && !(await confirmOneTrustConsentSaved(expectedGroups))) {
     return false;
   }
   return waitForOneTrustDismissalAfterSettle(cmp, actions, host);
@@ -3420,11 +3422,50 @@ async function ensureOneTrustPreferenceCenterVisible(selectors, timeoutMs = 4000
   return waitForAnyVisible(selectors, Math.max(1800, Math.floor(timeoutMs / 2)));
 }
 
+
+// OneTrust decides whether to re-prompt from `OptanonAlertBoxClosed` — a timestamp it
+// writes when a choice is made — NOT from the group states in `OptanonConsent`. The
+// extension only ever wrote the latter, so on sites where our save path didn't leave
+// OneTrust to set the former itself (API-driven saves, or a surface we hid before its
+// own handler finished), consent WAS correctly recorded and the banner still came back
+// on every single page view. Reported live on cnbc.com: "every page view it consumes
+// again". Dismissing a banner repeatedly is not the job; saving the choice so the site
+// stops asking is.
+//
+// Strictly gated on `OptanonConsent` already existing, i.e. on consent having actually
+// been written. Writing this marker without that would suppress the banner while
+// recording nothing — silencing the prompt instead of answering it, which is worse than
+// the bug it fixes.
+function ensureOneTrustChoiceRecorded() {
+  try {
+    const cookies = document.cookie || '';
+    if (!cookies.includes('OptanonConsent=')) return false;
+    if (/(?:^|;\s*)OptanonAlertBoxClosed=/.test(cookies)) return true;
+
+    const stamp = new Date().toISOString();
+    const base = `OptanonAlertBoxClosed=${stamp}; path=/; max-age=31536000; SameSite=Lax`;
+    document.cookie = base;
+    // Also try the registrable-domain scope OneTrust itself uses, so the choice still
+    // counts when the user moves between www and apex hosts. An invalid domain (e.g. a
+    // public suffix) is rejected by the browser as a silent no-op, and the host-only
+    // cookie above still applies.
+    const labels = location.hostname.split('.');
+    if (labels.length >= 2) {
+      const parent = labels.slice(-2).join('.');
+      try { document.cookie = `${base}; domain=.${parent}`; } catch (_) {}
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function waitForOneTrustDismissalAfterSettle(cmp, actions, host, timeoutMs = 4000) {
   if (!(await waitForDismissal(cmp, actions, timeoutMs))) {
     await settleOneTrustAfterAction(host);
-    return waitForDismissal(cmp, actions, 1500);
+    if (!(await waitForDismissal(cmp, actions, 1500))) return false;
   }
+  ensureOneTrustChoiceRecorded();
   return true;
 }
 
@@ -3549,6 +3590,54 @@ function expectedOneTrustConsentGroupsForPrefs(prefs) {
     expectedGroups[entry.id] = nextState;
   }
   return expectedGroups;
+}
+
+// Is what we managed to read from the DOM actually enough to conclude "already handled"?
+//
+// Categories are discovered from the DOM, so a preference center that has not hydrated yet
+// yields a PARTIAL expectation, and a partial expectation can match the cookie while the
+// thing the user actually asked for is still unapplied. Measured on cnbc.com: under
+// accept_all + CCPA opt-out, the incidental numeric groups (1, 4, 6, 7) matched on some
+// loads before ot-group-id-OSSTA_BG existed, which skipped the flow and left the sale
+// opt-out ON — an intermittent regression of `CNBC (Accept + CCPA Opt-Out)` (1 in 3 runs)
+// that a single clean run would have hidden.
+//
+// Two requirements, both about evidence rather than timing (a timing fix would just move
+// the race):
+//   1. At least one recognised category (C000x or a "_BG" opt-out). Incidental numeric or
+//      uncategorized groups are never sufficient on their own.
+//   2. If the user wants the sale opt-out, either a "_BG" group is part of what we
+//      verified, or the recorded cookie has no "_BG" group at all — i.e. this site has no
+//      sale opt-out to get wrong. Anything else means the decisive control exists but we
+//      cannot currently see it.
+function oneTrustExpectationIsDecisive(expectedGroups, prefs) {
+  const ids = Object.keys(expectedGroups);
+  if (!ids.length) return false;
+  if (!ids.some((id) => /^C\d{4}$/.test(id) || ONETRUST_CCPA_GROUP_ID_RE.test(id))) return false;
+  if (prefs.ccpaDoNotSell === false) return true;
+  if (ids.some((id) => ONETRUST_CCPA_GROUP_ID_RE.test(id))) return true;
+  const recorded = readOneTrustConsentGroups();
+  return Boolean(recorded) && !Object.keys(recorded).some((id) => ONETRUST_CCPA_GROUP_ID_RE.test(id));
+}
+
+// ISOLATED-world twin of cmp-api-handler.js's oneTrustConsentAlreadySatisfied(). Both
+// worlds need it: the MAIN-world handler returning "not handled" is exactly what hands
+// the page to this one, so guarding only there would just move the repeat here.
+// See the full rationale (and the live cnbc.com measurements) on the MAIN-world copy.
+function oneTrustConsentAlreadySatisfied(prefs) {
+  if (typeof prefs?.ccpaDoNotSell !== 'boolean') return false;
+  if (hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS)) return false;
+
+  const expectedGroups = {};
+  for (const entry of oneTrustCategoryToggles()) {
+    const desired = desiredOneTrustEntryState(entry, prefs);
+    if (desired === null) continue;
+    expectedGroups[entry.id] = desired;
+    if (Boolean(entry.toggle?.checked) !== desired) return false;
+  }
+  if (!oneTrustExpectationIsDecisive(expectedGroups, prefs)) return false;
+
+  return oneTrustConsentGroupsStrictMatch(expectedGroups);
 }
 
 function selectorActions(selectors) {
@@ -5885,19 +5974,71 @@ function readOneTrustConsentGroups() {
   }
 }
 
+// Strict verification, with a patient last-resort fallback kept OUT of the polling loop.
+//
+// Three attempts at this rule, each corrected by a real failure:
+//  1. Tolerant from the start → declared success before the opt-out was written
+//     (`CNBC (Accept + CCPA Opt-Out)` left the user opted IN).
+//  2. Strict forever → a group OneTrust never records in `groups=` (CCPA "_BG" opt-outs)
+//     read as permanent failure, so the flow never concluded success, never recorded the
+//     choice, and the site re-prompted on every page view (live cnbc.com report).
+//  3. Tolerant at the normal 2s deadline → still too eager: cnbc.com needs longer than
+//     that to settle, so accepting early stopped work it hadn't finished.
+//
+// So: poll STRICTLY, and only after a deliberately patient window fall back to the
+// weaker evidence — consent was written, and every group we can actually see holds what
+// we asked for. Absence alone is never sufficient (some expected group must be present),
+// so "nothing written" still reads as failure.
+function oneTrustConsentGroupsStrictMatch(expectedGroups) {
+  const groups = readOneTrustConsentGroups();
+  return Boolean(groups &&
+    Object.entries(expectedGroups).every(([group, expected]) => groups[group] === Boolean(expected)));
+}
+
+// The fallback is deliberately narrow: it only forgives an absent group whose id looks
+// like a CCPA opt-out ("_BG" suffix), because those are the ones OneTrust genuinely does
+// not record in `groups=`. An ordinary C000x category that is missing almost always just
+// means "not written yet", and forgiving those made cnbc.com stop working before it had
+// finished — so those stay strict and keep the flow trying.
+function oneTrustConsentGroupsAcceptableAtDeadline(expectedGroups) {
+  const groups = readOneTrustConsentGroups();
+  if (!groups) return false;
+  let sawPresentGroup = false;
+  for (const [group, expected] of Object.entries(expectedGroups)) {
+    if (!(group in groups)) {
+      // Cookie can't speak for this group. Only a CCPA "_BG" opt-out gets the benefit of
+      // the doubt, and even then only if the control itself corroborates it: an unflipped
+      // toggle is positive evidence the save has NOT finished, and accepting there is
+      // what left `CNBC (Accept + CCPA Opt-Out)` opted IN. Absent cookie AND absent
+      // control is the only genuinely unverifiable case.
+      if (!ONETRUST_CCPA_GROUP_ID_RE.test(group)) return false;
+      const toggle = document.getElementById(`ot-group-id-${group}`);
+      if (toggle && Boolean(toggle.checked) !== Boolean(expected)) return false;
+      continue;
+    }
+    sawPresentGroup = true;
+    if (groups[group] !== Boolean(expected)) return false;
+  }
+  return sawPresentGroup;
+}
+
 async function waitForOneTrustConsentGroups(expectedGroups, timeoutMs) {
   if (!expectedGroups || Object.keys(expectedGroups).length === 0) return true;
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const groups = readOneTrustConsentGroups();
-    if (groups && Object.entries(expectedGroups).every(([group, expected]) => groups[group] === expected)) {
-      return true;
-    }
+    if (oneTrustConsentGroupsStrictMatch(expectedGroups)) return true;
     await delay(100);
   }
-  const groups = readOneTrustConsentGroups();
-  return Boolean(groups &&
-    Object.entries(expectedGroups).every(([group, expected]) => groups[group] === expected));
+  return oneTrustConsentGroupsStrictMatch(expectedGroups);
+}
+
+// Final "did the save actually take?" decision. Patient on purpose: this runs once, after
+// the click, and being slow here is far cheaper than concluding either failure (which
+// re-runs the whole flow) or success (which stops work that hasn't finished) too early.
+async function confirmOneTrustConsentSaved(expectedGroups) {
+  if (!expectedGroups || Object.keys(expectedGroups).length === 0) return true;
+  if (await waitForOneTrustConsentGroups(expectedGroups, 6000)) return true;
+  return oneTrustConsentGroupsAcceptableAtDeadline(expectedGroups);
 }
 
 function disableVisibleOneTrustToggles() {

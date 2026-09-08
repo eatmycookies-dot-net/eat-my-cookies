@@ -215,6 +215,11 @@
         return handleDisneyPrivacyChoices(prefs);
       }
 
+      // Nothing to do when the recorded consent already matches and the site isn't asking.
+      // See oneTrustConsentAlreadySatisfied() — this is what stops cnbc.com re-opening its
+      // hidden preference center (and re-counting a cookie) on every page view.
+      if (oneTrustConsentAlreadySatisfied(prefs)) return false;
+
       // Detect USNat modal first — applies to both accept and reject paths.
       // USNat "Notice of Right to Opt Out" banners use "Submit" as the confirm label.
       // GDPR preference centers use "Accept All" or "Confirm My Choices" — never "Submit".
@@ -1336,6 +1341,63 @@
   let _debounceTimer = null;
   let _proactiveSynced = false;
   let _guardianProactiveSynced = false;
+  // Some OneTrust CCPA deployments (e.g. marriott.com) never show an on-screen banner
+  // for a normal US visit — the only surface is a persistent footer opener like
+  // "Your Privacy Choices"/"Tracking Preferences" (#ot-sdk-btn) that OneTrust renders
+  // on every page regardless of consent state. handleOneTrustPrivacyCenterReject/Accept
+  // treat that opener's mere DOM presence as reason enough to proactively click it open
+  // and drive the reject/accept flow, since it's the only mechanism available to apply
+  // ccpaDoNotSell on these hosts.
+  //
+  // Two things went wrong with an earlier version of this fix, both found live:
+  //  1. A hard one-shot "only ever try once" guard broke cnbc.com, which also opens a
+  //     fully-hidden surface but genuinely needs a later retry to succeed (its first
+  //     proactive attempt can lose a race with the page's own hydration).
+  //  2. A time-based cooldown between reopens (reverted along with the above) still
+  //     didn't fix marriott.com itself: a busy/slow page (live search results,
+  //     continuous personalization DOM churn) can make `commitOneTrustPreferenceProfile`
+  //     force-hide the visibly-opened surface (`settleOneTrustAfterAction`'s fallback,
+  //     which only checks that *some* OptanonConsent cookie exists, not that the groups
+  //     we asked for actually match) *before* its own group-verification check has a
+  //     chance to pass — so the popup visibly "closes" (looking like success) while the
+  //     function still correctly returns `false` internally, and the next scheduled
+  //     retry has no choice but to re-click the footer opener and show real, on-page UI
+  //     again, since we'd already hidden the previous one. Every subsequent attempt pays
+  //     that same "reopen visible UI" cost even though the only thing that actually
+  //     needs to keep retrying is the invisible API call.
+  //
+  // Fix: once a hidden surface has been opened once and its real category structure
+  // discovered (`oneTrustCategoryEntries()` returned rows), cache that structure and
+  // retry purely via `window.OneTrust.UpdateConsent` on every later attempt — no DOM
+  // click, nothing shown to the user — exactly like the existing `syncOneTrustConsent()`
+  // silent-resync path elsewhere in this file. The visible open/close a user can ever
+  // see is capped at once per page load; everything after that is invisible retries
+  // until the cookie actually reflects the requested state (or the page gives up).
+  let _oneTrustHiddenSurfaceCategoryEntries = null;
+
+  // Retries applying consent for a previously-discovered hidden OneTrust surface purely
+  // via the API — no DOM interaction, so it can be called on every scheduled check
+  // without ever showing the user anything. Returns true only once the cookie actually
+  // reflects the requested category states.
+  async function retryOneTrustHiddenSurfaceSilently(method, prefs) {
+    const entries = _oneTrustHiddenSurfaceCategoryEntries;
+    const updateConsent = window.OneTrust?.UpdateConsent;
+    if (!entries?.length || typeof updateConsent !== 'function') return false;
+
+    const expectedGroups = {};
+    for (const entry of entries) {
+      const nextState = desiredOneTrustEntryState(entry, prefs);
+      if (nextState === null) continue;
+      expectedGroups[entry.id] = nextState;
+      try { updateConsent('Category', `${entry.id}:${nextState ? '1' : '0'}`); } catch (_) {}
+    }
+    if (!Object.keys(expectedGroups).length) return false;
+    if (!(await waitForOneTrustConsentGroups(expectedGroups, 1500))) return false;
+
+    _handled = true;
+    document.dispatchEvent(new CustomEvent('__emc_handled__', { detail: { method } }));
+    return true;
+  }
   let _lastTrustedClick = 0;
   let _usercentricsHostObserver = null;
   let _usercentricsShadowRoots = new WeakSet();
@@ -1412,6 +1474,13 @@
     if (typeof window.OneTrust?.RejectAll !== 'function') return;
     if (hasVisibleSelector(CMP_SELECTORS.OneTrust ?? [])) return;
     if (!document.cookie.includes('OptanonConsent=')) return;
+    // Nothing to sync when the cookie already says exactly what we'd write. Without this
+    // the resync fired on EVERY page view of every OneTrust site, and on a host that
+    // reloads as a side effect of any consent write (kpmg.com does) that silent write is
+    // a page reload — reported live as "when I switch from custom to accept all, the
+    // website keeps reloading forever". It never surfaced as an auto-disable because this
+    // path deliberately reports nothing, so the loop-breaker never sees it.
+    if (oneTrustConsentAlreadySatisfied(_prefs)) return;
     _proactiveSynced = true;
     if (_prefs.ccpaDoNotSell !== false) {
       window.OneTrust.RejectAll();
@@ -2482,9 +2551,36 @@
     const preferPreferenceCenterPersistence = settingsVisible ||
       privacyChoicesEntryPresent ||
       oneTrustCategoryEntries().length > 0;
+    // REVERTED 2026-09-06 (see docs/cmp-impact-map.md's "Fifth iteration"): a prior version
+    // of this function bypassed preferPreferenceCenterPersistence for any plain reject_all
+    // preference, preferring a site's native "Reject All" button over the granular
+    // per-category commit flow. That was meant to fix marriott.com, but caused real,
+    // repeated production regressions on cnbc.com and kpmg.com instead — both sites'
+    // native Reject All button reloads the page as a side effect, and the reload-survival
+    // mechanism meant to handle that (dispatchPreHandleIfOneTrustFlowStarts →
+    // persistPendingPreHandleAction → flushPendingPreHandleAction) turned out not to
+    // reliably recover on the real sites even after being wired up and passing a
+    // synthetic local-fixture regression test — the fixture's simplified timing and
+    // single-category shape didn't faithfully reproduce whatever causes the real
+    // post-reload expectedGroups match to fail. Rather than keep iterating on a mechanism
+    // that has now caused three rounds of real-world breakage (each "fix" validated only
+    // in a synthetic environment that turned out not to match reality), this bypass was
+    // removed entirely. marriott.com's popup-reopening annoyance returns as a result, but
+    // that is a strictly less severe failure mode than an infinite reload loop or a
+    // repeated auto-disable on a previously-stable site.
+    const canUseDirectRejectAll = false;
 
     if (!settingsVisible && !actionableSurfaceVisible && !privacyChoicesEntryPresent) {
       return false;
+    }
+
+    // Nothing is actually on screen yet — proceeding only because a persistent footer
+    // opener exists in the DOM. See _oneTrustHiddenSurfaceCategoryEntries above: once
+    // we've discovered this host's category structure once, every later attempt is a
+    // silent API-only retry that never touches the DOM again.
+    const openingHiddenSurface = !settingsVisible && !actionableSurfaceVisible;
+    if (openingHiddenSurface && _oneTrustHiddenSurfaceCategoryEntries) {
+      return retryOneTrustHiddenSurfaceSilently(method, prefs);
     }
 
     const rejectSelectors = [
@@ -2496,7 +2592,7 @@
       'button[title*="Refuse All" i]',
     ];
     if (!forcePrivacyCenterReject &&
-        !preferPreferenceCenterPersistence &&
+        (canUseDirectRejectAll || !preferPreferenceCenterPersistence) &&
         clickFirstVisible(rejectSelectors)) {
       await settleOneTrustAfterAction(host);
       return finalizeOneTrustHandled(method, 5000, host);
@@ -2514,8 +2610,13 @@
       return false;
     }
 
+    if (openingHiddenSurface) {
+      const entries = oneTrustCategoryEntries();
+      if (entries.length) _oneTrustHiddenSurfaceCategoryEntries = entries;
+    }
+
     if (!forcePrivacyCenterReject &&
-        !preferPreferenceCenterPersistence &&
+        (canUseDirectRejectAll || !preferPreferenceCenterPersistence) &&
         clickFirstVisible(rejectSelectors)) {
       await settleOneTrustAfterAction(host);
       restoreScrollPosition(scrollPosition);
@@ -2527,12 +2628,25 @@
 
   async function handleOneTrustPrivacyCenterAccept(method = 'cmp_api:OneTrust', prefs = _prefs) {
     const settingsVisible = hasVisibleSelector(ONETRUST_PREFERENCE_CENTER_SELECTORS);
+    const actionableSurfaceVisible = hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS);
+
+    // See _oneTrustHiddenSurfaceCategoryEntries: once discovered, retry silently via the
+    // API instead of reopening real, on-page UI (e.g. accept_all + ccpaDoNotSell hybrid).
+    const openingHiddenSurface = !settingsVisible && !actionableSurfaceVisible;
+    if (openingHiddenSurface && _oneTrustHiddenSurfaceCategoryEntries) {
+      return retryOneTrustHiddenSurfaceSilently(method, prefs);
+    }
 
     const { opened, scrollPosition } = openOneTrustPreferenceCenter(window.location.hostname, { settingsVisible });
     if (!opened) return false;
 
     if (!(await ensureOneTrustPreferenceCenterVisible(ONETRUST_PREFERENCE_CENTER_SELECTORS, 4000))) {
       return false;
+    }
+
+    if (openingHiddenSurface) {
+      const entries = oneTrustCategoryEntries();
+      if (entries.length) _oneTrustHiddenSurfaceCategoryEntries = entries;
     }
 
     return commitOneTrustPreferenceProfile(prefs, method, window.location.hostname, scrollPosition);
@@ -3087,7 +3201,7 @@
       if (host !== 'www.zoom.com' && hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) hideVisibleOneTrustSurfaces();
       schedulePreservedOneTrustStateSync(host, expectedGroups);
       scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);
-      if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2000))) {
+      if (Object.keys(expectedGroups).length && !(await confirmOneTrustConsentSaved(expectedGroups))) {
         return false;
       }
       return finalizeOneTrustHandled(method, 5000, host);
@@ -3104,7 +3218,7 @@
       if (hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) hideVisibleOneTrustSurfaces();
       schedulePreservedOneTrustStateSync(host, expectedGroups);
       scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);
-      if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2000))) {
+      if (Object.keys(expectedGroups).length && !(await confirmOneTrustConsentSaved(expectedGroups))) {
         return false;
       }
       return finalizeOneTrustHandled(method, 5000, host);
@@ -3114,7 +3228,7 @@
     if (host !== 'www.zoom.com' && hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) hideVisibleOneTrustSurfaces();
     schedulePreservedOneTrustStateSync(host, expectedGroups);
     scheduleOneTrustPostSaveSettle(host, scrollPosition, expectedGroups);
-    if (Object.keys(expectedGroups).length && !(await waitForOneTrustConsentGroups(expectedGroups, 2000))) {
+    if (Object.keys(expectedGroups).length && !(await confirmOneTrustConsentSaved(expectedGroups))) {
       return false;
     }
     return finalizeOneTrustHandled(method, 5000, host);
@@ -3292,6 +3406,67 @@
       expectedGroups[entry.id] = nextState;
     }
     return expectedGroups;
+  }
+
+  // "The site already holds the user's answer, so leave it alone."
+  //
+  // Measured on the real www.cnbc.com (2026-09-06, real extension, reject_all): every page
+  // view produced a fresh cmp_api:OneTrust:ccpa action — 3 views, 3 actions — even though
+  // OptanonConsent already carried OSSTA_BG:0 at t=0 of each load. cnbc.com never shows a
+  // banner on those loads (no #onetrust-banner-sdk in the DOM at all); the extension was
+  // opening the hidden preference center ITSELF and re-applying a choice that was already
+  // saved, so the user saw a modal flash open and closed on every single page and the
+  // "cookies eaten" counter kept incrementing for one decision.
+  //
+  // Deliberately narrow, because a false positive here means silently ignoring a real
+  // consent prompt:
+  //  - Any VISIBLE OneTrust surface disqualifies the skip. A visible banner or preference
+  //    center is the site actively asking, and it gets answered whatever the cookie says.
+  //  - Requires a complete prefs object. bootstrapPrefsFromDataset() produces a
+  //    globalPreference-only shape whose absent category flags would read as `false` and
+  //    manufacture an expectation the user never expressed.
+  //  - Requires at least one expected group AND a strict cookie match on every one of
+  //    them. No expectations, or a cookie that can't speak for a group, means no evidence,
+  //    which means act normally.
+  //  - A cookie match alone is not enough. Categories are discovered from the DOM, so a
+  //    preference center that hasn't hydrated yet yields a PARTIAL expectation. Measured:
+  //    on cnbc.com the incidental numeric groups (1, 4, 6, 7) can match under accept_all
+  //    while the CCPA opt-out itself is still opted IN — which skipped the flow and left
+  //    `CNBC (Accept + CCPA Opt-Out)` with ot-group-id-OSSTA_BG stuck at true. So every
+  //    toggle that IS present must also already hold its desired state, and the
+  //    expectation itself has to be decisive — see oneTrustExpectationIsDecisive().
+  function oneTrustExpectationIsDecisive(expectedGroups, prefs) {
+    const ids = Object.keys(expectedGroups);
+    if (!ids.length) return false;
+    // Incidental numeric/uncategorized groups are never sufficient evidence on their own.
+    if (!ids.some((id) => /^C\d{4}$/.test(id) || ONETRUST_CCPA_GROUP_ID_RE.test(id))) return false;
+    if (prefs.ccpaDoNotSell === false) return true;
+    // The user wants the sale opt-out: either we verified a "_BG" group, or the recorded
+    // cookie has none at all (this site has no sale opt-out to get wrong). Anything else
+    // means the decisive control exists but isn't visible to us yet.
+    if (ids.some((id) => ONETRUST_CCPA_GROUP_ID_RE.test(id))) return true;
+    const recorded = readOneTrustConsentGroups();
+    return Boolean(recorded) && !Object.keys(recorded).some((id) => ONETRUST_CCPA_GROUP_ID_RE.test(id));
+  }
+
+  function oneTrustConsentAlreadySatisfied(prefs) {
+    if (typeof prefs?.ccpaDoNotSell !== 'boolean') return false;
+    if (hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS)) return false;
+    if (hasVisibleSelector(ONETRUST_VISIBLE_SELECTORS)) return false;
+
+    const entries = oneTrustCategoryEntries();
+    const expectedGroups = {};
+    for (const entry of entries) {
+      const desired = desiredOneTrustEntryState(entry, prefs);
+      if (desired === null) continue;
+      expectedGroups[entry.id] = desired;
+      // Positive evidence the choice has NOT been applied: the control itself disagrees.
+      const toggle = document.getElementById(`ot-group-id-${entry.id}`);
+      if (toggle && Boolean(toggle.checked) !== desired) return false;
+    }
+    if (!oneTrustExpectationIsDecisive(expectedGroups, prefs)) return false;
+
+    return oneTrustConsentGroupsStrictMatch(expectedGroups);
   }
 
   function closeZoomOneTrustBannerIfVisible() {
@@ -3573,19 +3748,71 @@
     }
   }
 
+  // Strict verification, with a patient last-resort fallback kept OUT of the polling loop.
+  //
+  // Three attempts at this rule, each corrected by a real failure:
+  //  1. Tolerant from the start → declared success before the opt-out was written
+  //     (`CNBC (Accept + CCPA Opt-Out)` left the user opted IN).
+  //  2. Strict forever → a group OneTrust never records in `groups=` (CCPA "_BG" opt-outs)
+  //     read as permanent failure, so the flow never concluded success, never recorded the
+  //     choice, and the site re-prompted on every page view (live cnbc.com report).
+  //  3. Tolerant at the normal 2s deadline → still too eager: cnbc.com needs longer than
+  //     that to settle, so accepting early stopped work it hadn't finished.
+  //
+  // So: poll STRICTLY, and only after a deliberately patient window fall back to the
+  // weaker evidence — consent was written, and every group we can actually see holds what
+  // we asked for. Absence alone is never sufficient (some expected group must be present),
+  // so "nothing written" still reads as failure.
+  function oneTrustConsentGroupsStrictMatch(expectedGroups) {
+    const groups = readOneTrustConsentGroups();
+    return Boolean(groups &&
+      Object.entries(expectedGroups).every(([group, expected]) => groups[group] === Boolean(expected)));
+  }
+
+  // The fallback is deliberately narrow: it only forgives an absent group whose id looks
+  // like a CCPA opt-out ("_BG" suffix), because those are the ones OneTrust genuinely does
+  // not record in `groups=`. An ordinary C000x category that is missing almost always just
+  // means "not written yet", and forgiving those made cnbc.com stop working before it had
+  // finished — so those stay strict and keep the flow trying.
+  function oneTrustConsentGroupsAcceptableAtDeadline(expectedGroups) {
+    const groups = readOneTrustConsentGroups();
+    if (!groups) return false;
+    let sawPresentGroup = false;
+    for (const [group, expected] of Object.entries(expectedGroups)) {
+      if (!(group in groups)) {
+        // Cookie can't speak for this group. Only a CCPA "_BG" opt-out gets the benefit of
+        // the doubt, and even then only if the control itself corroborates it: an unflipped
+        // toggle is positive evidence the save has NOT finished, and accepting there is
+        // what left `CNBC (Accept + CCPA Opt-Out)` opted IN. Absent cookie AND absent
+        // control is the only genuinely unverifiable case.
+        if (!ONETRUST_CCPA_GROUP_ID_RE.test(group)) return false;
+        const toggle = document.getElementById(`ot-group-id-${group}`);
+        if (toggle && Boolean(toggle.checked) !== Boolean(expected)) return false;
+        continue;
+      }
+      sawPresentGroup = true;
+      if (groups[group] !== Boolean(expected)) return false;
+    }
+    return sawPresentGroup;
+  }
+
   async function waitForOneTrustConsentGroups(expectedGroups, timeoutMs) {
     if (!expectedGroups || Object.keys(expectedGroups).length === 0) return true;
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
-      const groups = readOneTrustConsentGroups();
-      if (groups && Object.entries(expectedGroups).every(([group, expected]) => groups[group] === expected)) {
-        return true;
-      }
+      if (oneTrustConsentGroupsStrictMatch(expectedGroups)) return true;
       await delay(100);
     }
-    const groups = readOneTrustConsentGroups();
-    return Boolean(groups &&
-      Object.entries(expectedGroups).every(([group, expected]) => groups[group] === expected));
+    return oneTrustConsentGroupsStrictMatch(expectedGroups);
+  }
+
+  // Final "did the save actually take?" decision. Patient on purpose: this runs once, after
+  // the click, and being slow here is far cheaper than concluding either failure (which
+  // re-runs the whole flow) or success (which stops work that hasn't finished) too early.
+  async function confirmOneTrustConsentSaved(expectedGroups) {
+    if (!expectedGroups || Object.keys(expectedGroups).length === 0) return true;
+    if (await waitForOneTrustConsentGroups(expectedGroups, 6000)) return true;
+    return oneTrustConsentGroupsAcceptableAtDeadline(expectedGroups);
   }
 
   function disableVisibleOneTrustToggles() {
@@ -4358,11 +4585,49 @@
     return waitForAnyVisible(selectors, Math.max(1800, Math.floor(timeoutMs / 2)));
   }
 
+  // OneTrust decides whether to re-prompt from `OptanonAlertBoxClosed` — a timestamp it
+  // writes when a choice is made — NOT from the group states in `OptanonConsent`. The
+  // extension only ever wrote the latter, so on sites where our save path didn't leave
+  // OneTrust to set the former itself (API-driven saves, or a surface we hid before its
+  // own handler finished), consent WAS correctly recorded and the banner still came back
+  // on every single page view. Reported live on cnbc.com: "every page view it consumes
+  // again". Dismissing a banner repeatedly is not the job; saving the choice so the site
+  // stops asking is.
+  //
+  // Strictly gated on `OptanonConsent` already existing, i.e. on consent having actually
+  // been written. Writing this marker without that would suppress the banner while
+  // recording nothing — silencing the prompt instead of answering it, which is worse than
+  // the bug it fixes.
+  function ensureOneTrustChoiceRecorded() {
+    try {
+      const cookies = document.cookie || '';
+      if (!cookies.includes('OptanonConsent=')) return false;
+      if (/(?:^|;\s*)OptanonAlertBoxClosed=/.test(cookies)) return true;
+
+      const stamp = new Date().toISOString();
+      const base = `OptanonAlertBoxClosed=${stamp}; path=/; max-age=31536000; SameSite=Lax`;
+      document.cookie = base;
+      // Also try the registrable-domain scope OneTrust itself uses, so the choice still
+      // counts when the user moves between www and apex hosts. An invalid domain (e.g. a
+      // public suffix) is rejected by the browser as a silent no-op, and the host-only
+      // cookie above still applies.
+      const labels = location.hostname.split('.');
+      if (labels.length >= 2) {
+        const parent = labels.slice(-2).join('.');
+        try { document.cookie = `${base}; domain=.${parent}`; } catch (_) {}
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function finalizeOneTrustHandled(method, timeoutMs = 5000, host = window.location.hostname) {
     if (!(await waitForDismissal(ONETRUST_VISIBLE_SELECTORS, timeoutMs))) {
       await settleOneTrustAfterAction(host);
       if (!(await waitForDismissal(ONETRUST_VISIBLE_SELECTORS, 1500))) return false;
     }
+    ensureOneTrustChoiceRecorded();
     _handled = true;
     document.dispatchEvent(new CustomEvent('__emc_handled__', {
       detail: { method },

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OneTrust consent persistence fixture</title>
+</head>
+<body>
+<h1>Fixture: does the choice actually stick across page navigations?</h1>
+<p>
+  Models OneTrust's real re-prompt rule: the banner is shown unless
+  <code>OptanonAlertBoxClosed</code> is present. That cookie — not the group states in
+  <code>OptanonConsent</code> — is what OneTrust checks to decide whether to ask again.
+</p>
+<p>
+  This exists because of a live report on cnbc.com: "every page view it consumes again".
+  Consent WAS being recorded correctly in OptanonConsent, but nothing ever recorded that a
+  choice had been made, so the banner returned on every navigation and the extension acted
+  (and counted a cookie) every single time. The extension's job is to save the choice with
+  the CMP so the site stops asking — not to dismiss the same modal forever.
+</p>
+<p id="page-marker"></p>
+
+<div id="onetrust-consent-sdk" style="width:0;height:0;overflow:visible;">
+  <div class="onetrust-pc-dark-filter" style="display:none;"></div>
+
+  <div id="onetrust-banner-sdk" style="display:none;position:fixed;bottom:0;left:0;width:400px;">
+    <div class="ot-sdk-container">
+      <p>We and our partners use cookies. <a href="#" class="ot-sdk-show-settings">Your Privacy Choices</a></p>
+      <button id="onetrust-accept-btn-handler">Continue</button>
+    </div>
+  </div>
+
+  <div id="onetrust-pc-sdk" class="otPcTab" style="display:none;position:fixed;top:0;left:0;width:400px;">
+    <div role="dialog" aria-modal="true" aria-label="Privacy Preference Center">
+      <div id="ot-pc-content">
+        <ul>
+          <li data-optanongroupid="C0001">Strictly Necessary<input type="checkbox" id="ot-group-id-C0001" checked disabled></li>
+          <li data-optanongroupid="C0004">Targeting Cookies<input type="checkbox" id="ot-group-id-C0004" checked></li>
+          <li data-optanongroupid="OSSTA_BG">
+            Do Not Sell or Share My Personal Information
+            <input type="checkbox" id="ot-group-id-OSSTA_BG" checked>
+          </li>
+        </ul>
+      </div>
+      <!--
+        Deliberately NO .save-preference-btn-handler / .ot-pc-refuse-all-handler here.
+        On a deployment where the extension can't find a save control it applies consent
+        through OneTrust's API instead and then hides the surface — and the API writes
+        group state ONLY, never OptanonAlertBoxClosed. That is the shape that makes a
+        site re-prompt on every page view despite consent being correctly recorded, and
+        it's what this fixture has to reproduce. With the native buttons present the site
+        stamps the marker itself and the bug cannot appear.
+      -->
+      <div class="ot-pc-footer"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  function readCookie(name) {
+    return document.cookie.split('; ').find((p) => p.startsWith(name + '='))?.slice(name.length + 1) ?? null;
+  }
+  function bump(key) {
+    const next = Number(sessionStorage.getItem(key) || '0') + 1;
+    sessionStorage.setItem(key, String(next));
+    return next;
+  }
+
+  function hideSurfaces() {
+    document.getElementById('onetrust-banner-sdk').style.display = 'none';
+    document.getElementById('onetrust-pc-sdk').style.display = 'none';
+  }
+
+  // Mirrors what a real OneTrust save does: records the group states AND stamps
+  // OptanonAlertBoxClosed, which is what suppresses the banner on later page views.
+  // Deliberately NOT written by UpdateConsent() below — that API writes group state
+  // only, exactly like the real SDK, which is how the "asks again every page" bug
+  // arises when the extension saves via the API and nothing stamps the marker.
+  function writeGroups() {
+    const groups = [
+      'C0001:1',
+      'C0004:' + (document.getElementById('ot-group-id-C0004').checked ? '1' : '0'),
+    ].join(',');
+    document.cookie = 'OptanonConsent=isGpcEnabled=0&version=202606.2.0&groups=' + encodeURIComponent(groups) + '; path=/';
+  }
+  // Intentionally never called here: this fixture models the deployment where nothing
+  // on the page stamps the marker, so the only way it can end up set is if the extension
+  // records the choice itself after saving.
+  function stampAlertBoxClosed() {
+    document.cookie = 'OptanonAlertBoxClosed=' + new Date().toISOString() + '; path=/; max-age=31536000';
+  }
+  void stampAlertBoxClosed;
+
+  document.getElementById('onetrust-accept-btn-handler').addEventListener('click', hideSurfaces);
+  document.querySelector('.ot-sdk-show-settings').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('onetrust-pc-sdk').style.display = 'flex';
+  });
+
+  window.OneTrust = {
+    // Group state only — no OptanonAlertBoxClosed. Same as the real SDK.
+    UpdateConsent(type, value) {
+      if (type === 'Category') {
+        const [id, val] = String(value).split(':');
+        const el = document.getElementById('ot-group-id-' + id);
+        if (el) el.checked = val === '1';
+      }
+      writeGroups();
+    },
+    RejectAll() {
+      document.getElementById('ot-group-id-C0004').checked = false;
+      document.getElementById('ot-group-id-OSSTA_BG').checked = false;
+      writeGroups();
+      hideSurfaces();
+    },
+    Accept() { writeGroups(); },
+    ToggleInfoDisplay() { document.getElementById('onetrust-pc-sdk').style.display = 'flex'; },
+    Close: hideSurfaces,
+  };
+
+  Object.defineProperty(window, '__fixtureState', {
+    get() {
+      return {
+        pageViews: Number(sessionStorage.getItem('__fixturePageViews') || '0'),
+        bannerShownCount: Number(sessionStorage.getItem('__fixtureBannerShown') || '0'),
+        saveClickCount: Number(sessionStorage.getItem('__fixtureSaveClicks') || '0'),
+        alertBoxClosed: readCookie('OptanonAlertBoxClosed'),
+        cookie: readCookie('OptanonConsent'),
+        bannerVisible: getComputedStyle(document.getElementById('onetrust-banner-sdk')).display !== 'none',
+      };
+    },
+  });
+
+  const views = bump('__fixturePageViews');
+  document.getElementById('page-marker').textContent = 'page view #' + views + ' — path ' + location.pathname;
+
+  // THE RULE UNDER TEST: re-prompt only if no choice has been recorded.
+  if (!readCookie('OptanonAlertBoxClosed')) {
+    bump('__fixtureBannerShown');
+    document.getElementById('onetrust-banner-sdk').style.display = 'block';
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CNBC OneTrust reload-on-reject fixture</title>
+</head>
+<body>
+<h1>Fixture: cnbc.com-style OneTrust CCPA (reject-all reloads the page)</h1>
+<p>
+  Mirrors the documented cnbc.com OneTrust deployment (docs/cmp-impact-map.md): a top-level
+  shell whose "Continue" button only dismisses the shell (not an opt-out), a "Your Privacy
+  Choices" opener into the real preference center, and a single CCPA "_BG"-suffixed opt-out
+  group (OSSTA_BG) rather than full GDPR categories. cnbc.com is a known reload-on-save host
+  (ONETRUST_RELOAD_ON_SAVE_HOSTS / REJECT_RELOAD_GUARD_HOSTS) — this fixture reproduces that
+  reload so the reload-survival path can be exercised deterministically, without depending on
+  the real (Akamai-protected) cnbc.com.
+</p>
+
+<!--
+  See the matching comment in kpmg-onetrust-reload.html: #onetrust-consent-sdk must
+  have zero natural width/height (real site: a bare positioning wrapper whose
+  fixed/absolute children don't contribute to its box), otherwise
+  isVisible(#onetrust-consent-sdk) wrongly reads true from page load and fools
+  openOneTrustPreferenceCenter's settingsVisible check into skipping the real open
+  click.
+-->
+<div id="onetrust-consent-sdk" style="width:0;height:0;overflow:visible;">
+  <div class="onetrust-pc-dark-filter" style="display:none;"></div>
+
+  <div id="onetrust-banner-sdk" style="display:none;position:fixed;bottom:0;left:0;width:400px;">
+    <div class="ot-sdk-container">
+      <p>We and our partners use cookies. <a href="#" class="ot-sdk-show-settings">Your Privacy Choices</a></p>
+      <button id="onetrust-accept-btn-handler">Continue</button>
+    </div>
+  </div>
+
+  <div id="onetrust-pc-sdk" class="otPcTab" style="display:none;position:fixed;top:0;left:0;width:400px;">
+    <div role="dialog" aria-modal="true" aria-label="Privacy Preference Center">
+      <div id="ot-pc-content">
+        <ul>
+          <li data-optanongroupid="OSSTA_BG">
+            Do Not Sell or Share My Personal Information
+            <input type="checkbox" id="ot-group-id-OSSTA_BG" checked>
+          </li>
+        </ul>
+      </div>
+      <div class="ot-pc-footer">
+        <button class="save-preference-btn-handler onetrust-close-btn-handler">Confirm My Choices</button>
+        <button class="ot-pc-refuse-all-handler">Reject All</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const TOGGLE_IDS = ['ot-group-id-OSSTA_BG'];
+
+  function readClickCount() {
+    return Number(sessionStorage.getItem('__fixtureRejectClicks') || '0');
+  }
+  function bumpClickCount() {
+    const next = readClickCount() + 1;
+    sessionStorage.setItem('__fixtureRejectClicks', String(next));
+    return next;
+  }
+
+  function readCookie(name) {
+    return document.cookie.split('; ').find((p) => p.startsWith(name + '='))?.slice(name.length + 1) ?? null;
+  }
+
+  function writeConsentCookie(groups) {
+    const groupStr = Object.entries(groups).map(([k, v]) => `${k}:${v ? 1 : 0}`).join(',');
+    document.cookie = `OptanonConsent=isGpcEnabled=0&datestamp=${new Date().toISOString()}&version=202606.2.0&groups=${groupStr}; path=/`;
+  }
+
+  function hideBanner() {
+    document.getElementById('onetrust-banner-sdk').style.display = 'none';
+  }
+  function showBanner() {
+    document.getElementById('onetrust-banner-sdk').style.display = 'block';
+  }
+  function hidePc() {
+    document.getElementById('onetrust-pc-sdk').style.display = 'none';
+  }
+  function showPc() {
+    document.getElementById('onetrust-pc-sdk').style.display = 'flex';
+  }
+
+  function currentGroupsFromToggles(overrides = {}) {
+    const groups = {};
+    for (const id of TOGGLE_IDS) {
+      const key = id.replace('ot-group-id-', '');
+      groups[key] = key in overrides ? overrides[key] : document.getElementById(id).checked;
+    }
+    return groups;
+  }
+
+  // Real-site-confirmed-pattern: cnbc.com is an existing, documented reload-on-save host.
+  // Reject-all here correctly writes the rejected cookie state and then reloads the page.
+  function doRejectAllAndReload() {
+    console.log('[fixture] doRejectAllAndReload click fired');
+    bumpClickCount();
+    for (const id of TOGGLE_IDS) document.getElementById(id).checked = false;
+    writeConsentCookie(currentGroupsFromToggles());
+    hideBanner();
+    hidePc();
+    setTimeout(() => location.reload(), 150);
+  }
+
+  function doConfirmChoices() {
+    console.log('[fixture] doConfirmChoices click fired');
+    writeConsentCookie(currentGroupsFromToggles());
+    hideBanner();
+    hidePc();
+  }
+
+  // "Continue" only dismisses the top-level shell — it is NOT an opt-out and must not be
+  // treated as one (docs/cmp-impact-map.md's CNBC note). It does not touch the cookie.
+  function doContinue() {
+    hideBanner();
+  }
+
+  document.querySelector('.ot-pc-refuse-all-handler').addEventListener('click', doRejectAllAndReload);
+  document.querySelector('.save-preference-btn-handler').addEventListener('click', doConfirmChoices);
+  document.getElementById('onetrust-accept-btn-handler').addEventListener('click', doContinue);
+  document.querySelector('.ot-sdk-show-settings').addEventListener('click', (e) => { e.preventDefault(); showPc(); });
+
+  // IMPORTANT: the real OneTrust SDK's RejectAll()/UpdateConsent() API methods do NOT
+  // reload the page when called directly (e.g. from syncOneTrustConsent()'s silent
+  // resync path) — only the button element's own onclick handler (authored by the
+  // site itself) reloads. See the matching comment in kpmg-onetrust-reload.html for
+  // why conflating the two produced a runaway false-positive loop in an earlier
+  // version of this fixture.
+  window.OneTrust = {
+    UpdateConsent(type, value) {
+      console.log('[fixture] OneTrust.UpdateConsent called with', type, value);
+      if (type !== 'Category') return;
+      const [id, val] = String(value).split(':');
+      const el = document.getElementById(`ot-group-id-${id}`);
+      if (el) el.checked = val === '1';
+      writeConsentCookie(currentGroupsFromToggles());
+    },
+    RejectAll() {
+      console.log('[fixture] OneTrust.RejectAll() API called directly');
+      for (const id of TOGGLE_IDS) document.getElementById(id).checked = false;
+      writeConsentCookie(currentGroupsFromToggles());
+      hideBanner();
+      hidePc();
+    },
+    Accept: () => {
+      for (const id of TOGGLE_IDS) document.getElementById(id).checked = true;
+      writeConsentCookie(currentGroupsFromToggles());
+    },
+    ToggleInfoDisplay: showPc,
+    Close: () => { hideBanner(); hidePc(); },
+  };
+
+  Object.defineProperty(window, '__fixtureState', {
+    get() {
+      return {
+        rejectClickCount: readClickCount(),
+        cookie: readCookie('OptanonConsent'),
+        bannerVisible: getComputedStyle(document.getElementById('onetrust-banner-sdk')).display !== 'none',
+        pcVisible: getComputedStyle(document.getElementById('onetrust-pc-sdk')).display !== 'none',
+      };
+    },
+  });
+
+  if (!readCookie('OptanonConsent')) {
+    showBanner();
+  }
+})();
+</script>
+</body>
+</html>

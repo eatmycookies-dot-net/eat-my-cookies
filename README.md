@@ -22,6 +22,7 @@ It runs locally in the browser, applies the preference you choose, keeps a runni
 - Falls back to site-specific warning flows when a publisher only exposes accept-or-pay style choices.
 - Tracks recent activity, total handled prompts, and collectible cookie badges.
 - Keeps OneTrust settings links usable after handling: when you open a publisher's footer privacy center to review choices, the extension preserves the saved group-id state but does not dismiss or re-apply the modal.
+- Saves your choice with the site rather than just dismissing its banner: on OneTrust sites the extension records that a decision was made and, on later pages, checks what the site has already stored before doing anything — so a site you have answered once is left alone as you keep browsing instead of being re-answered (and re-counted) on every page.
 - Site exceptions let you disable the extension on individual domains or always accept on specific sites.
 - Popup and context-menu UI now support autodetected language with an optional manual override.
 - Offers an optional, honest Chrome Web Store review prompt only after the extension has been useful over time, with permanent review links in the popup and settings.

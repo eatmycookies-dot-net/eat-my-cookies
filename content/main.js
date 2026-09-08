@@ -27,8 +27,21 @@ const REJECT_RELOAD_GUARD_HOSTS = new Set([
   'www.nbcnews.com',
   'www.thomsonreuters.com',
   'thomsonreuters.com',
+  // kpmg.com: confirmed live 2026-09-06 that BOTH the top-level banner's
+  // #onetrust-reject-all-handler and the preference center's own
+  // .ot-pc-refuse-all-handler correctly write the rejected OptanonConsent cookie and
+  // then reload the page as a site-authored side effect of the button's own click
+  // handler (not the OneTrust SDK itself). Without this guard, the reload destroys
+  // the page before the success report can be sent, and — worse — a fresh reload with
+  // no memory of the prior attempt re-opens real, on-page UI and can repeat, hitting
+  // the loop-breaker in utils/loop-detection.js and auto-disabling the extension here.
+  'kpmg.com',
 ]);
 const PRE_HANDLE_PENDING_TTL_MS = 20000;
+// How long a reloaded page waits for OneTrust to finish persisting consent before
+// judging a pending action unverifiable. On reload-on-save hosts the reload can beat
+// the cookie write, so a single immediate read can see stale values.
+const PENDING_ACTION_VERIFY_POLL_MS = 1500;
 const DO_NOT_HANDLE_URLS = new Set([
   'https://www.theguardian.com/help/accessibility-help',
 ]);
@@ -906,6 +919,11 @@ document.addEventListener('__emc_pre_handle__', (event) => {
     method: detail.method ?? '',
     timestamp: Date.now(),
   };
+  // Every tier dispatches this immediately before clicking a save/reject control that
+  // may reload the page, which makes it the one choke point that sees an attempt even
+  // when the ensuing reload destroys the page before anything can be reported. See
+  // MAX_CONSENT_ACTIONS_PER_URL.
+  recordConsentActionAttempt(signature);
   persistPendingPreHandleAction(signature, detail.method, preference, detail.expectedGroups ?? null);
   startFlowCooldown(runCooldownScope(signature));
 });
@@ -933,9 +951,20 @@ async function bootstrap(force = false) {
     installManualUsercentricsOutcomeWatch();
     return;
   }
-  scheduleShopifyWatch(prefs);
-  scheduleOsanoWatch(prefs);
-  scheduleLateDomWatch(prefs);
+  // See MAX_CONSENT_ACTIONS_PER_URL: once this URL has already been acted on twice
+  // within the window, stop entirely — don't click anything, don't report anything.
+  // A site that reloads itself on every save would otherwise re-run this flow on each
+  // fresh load indefinitely, which is exactly the loop that was auto-disabling
+  // www.cnbc.com and kpmg.com. Leaving the banner up is the honest outcome here.
+  if (!force && hasExhaustedConsentActions(currentRunSignature)) {
+    clearPendingPreHandleAction(currentRunSignature);
+    return;
+  }
+  // Resolve the previous load's pending action BEFORE installing any watchers. These
+  // watchers act independently of everything below them, so scheduling them first meant
+  // a decision to stand down came too late to matter — the watcher was already armed and
+  // would click anyway. Deciding first, then arming, is what makes the early returns
+  // below actually stop work rather than merely stop this function.
   const flushedPendingPreHandleAction = await flushPendingPreHandleAction(currentRunSignature);
   if (!force && flushedPendingPreHandleAction) {
     if (site === 'www.lemonde.fr') {
@@ -945,6 +974,9 @@ async function bootstrap(force = false) {
     }
     return;
   }
+  scheduleShopifyWatch(prefs);
+  scheduleOsanoWatch(prefs);
+  scheduleLateDomWatch(prefs);
   const cooldownScope = runCooldownScope(currentRunSignature);
   if (!force &&
       isFlowCoolingDown(cooldownScope) &&
@@ -1454,6 +1486,18 @@ function scheduleShopifyWatch(prefs) {
       stop();
       return;
     }
+    // These watchers outlive bootstrap() and act on their own — which is what actually
+    // sustained the cnbc.com/kpmg.com reload loop. bootstrap() would correctly decide to
+    // stand down (pending action recovered, or ceiling reached) and return without ever
+    // setting dataset.emcPref, but a watcher scheduled earlier in that same call kept
+    // firing on every DOM mutation: runDOMHandler → click save → site reloads → repeat,
+    // bypassing every early return above it. Confirmed from stack traces captured against
+    // tests/fixtures/onetrust-reload/runaway-onetrust-reload.html. Any path that can act
+    // has to honour the same per-URL ceiling.
+    if (hasExhaustedConsentActions(currentRunSignature ?? prefs?.globalPreference ?? '')) {
+      stop();
+      return;
+    }
     running = true;
     try {
       const handled = await handleShopifyBanner(prefs);
@@ -1502,6 +1546,18 @@ function scheduleOsanoWatch(prefs) {
       return;
     }
     if (currentRunSignature && wasHandledForCurrentPage(currentRunSignature)) {
+      stop();
+      return;
+    }
+    // These watchers outlive bootstrap() and act on their own — which is what actually
+    // sustained the cnbc.com/kpmg.com reload loop. bootstrap() would correctly decide to
+    // stand down (pending action recovered, or ceiling reached) and return without ever
+    // setting dataset.emcPref, but a watcher scheduled earlier in that same call kept
+    // firing on every DOM mutation: runDOMHandler → click save → site reloads → repeat,
+    // bypassing every early return above it. Confirmed from stack traces captured against
+    // tests/fixtures/onetrust-reload/runaway-onetrust-reload.html. Any path that can act
+    // has to honour the same per-URL ceiling.
+    if (hasExhaustedConsentActions(currentRunSignature ?? prefs?.globalPreference ?? '')) {
       stop();
       return;
     }
@@ -1562,6 +1618,18 @@ function scheduleLateDomWatch(prefs) {
       return;
     }
     if (currentRunSignature && wasHandledForCurrentPage(currentRunSignature)) {
+      stop();
+      return;
+    }
+    // These watchers outlive bootstrap() and act on their own — which is what actually
+    // sustained the cnbc.com/kpmg.com reload loop. bootstrap() would correctly decide to
+    // stand down (pending action recovered, or ceiling reached) and return without ever
+    // setting dataset.emcPref, but a watcher scheduled earlier in that same call kept
+    // firing on every DOM mutation: runDOMHandler → click save → site reloads → repeat,
+    // bypassing every early return above it. Confirmed from stack traces captured against
+    // tests/fixtures/onetrust-reload/runaway-onetrust-reload.html. Any path that can act
+    // has to honour the same per-URL ceiling.
+    if (hasExhaustedConsentActions(currentRunSignature ?? prefs?.globalPreference ?? '')) {
       stop();
       return;
     }
@@ -4988,7 +5056,18 @@ async function reportAction(method, preference, { noRejectAvailable } = {}) {
   if (!isUsercentricsActionMethod(method) && await isManualConsentOpenSuppressed()) {
     return { ok: true, manualOpenSuppressed: true };
   }
-  markHandledForCurrentPage(currentRunSignature ?? preference);
+  // See MAX_CONSENT_ACTIONS_PER_URL: hard ceiling on actions per URL, so a site that
+  // reloads on save can never drive this into the background's loop-breaker. A page
+  // load that already holds an attempt slot (it dispatched a pre-handle before
+  // clicking) must always be allowed to report the action it actually completed —
+  // only a load that hasn't taken a slot gets turned away once the ceiling is full.
+  const actionSignature = currentRunSignature ?? preference;
+  if (hasExhaustedConsentReports(actionSignature)) {
+    return { ok: true, repeatCeilingReached: true };
+  }
+  recordConsentActionAttempt(actionSignature);
+  recordConsentReportEmitted(actionSignature);
+  markHandledForCurrentPage(actionSignature);
   const response = await chrome.runtime.sendMessage({
     type: 'ACTION_FIRED',
     site,
@@ -5111,6 +5190,127 @@ function pendingPreHandleActionKey(signature) {
 
 function reloadRetryKey(signature) {
   return `${RUN_GUARD_PREFIX}:reload-retry:${site}:${location.pathname}:${signature}`;
+}
+
+// ── Repeat-action ceiling ─────────────────────────────────────────────────────
+// Added 2026-09-06 after a real production loop on www.cnbc.com and kpmg.com that
+// three separate CMP-handler fixes failed to stop, because none of them addressed
+// the actual structural gap: *nothing anywhere capped how many times the extension
+// would re-run its whole flow on the same URL.*
+//
+// The shape of the loop, which is tier-independent (it reproduces via dom-handler.js
+// and cmp-api-handler.js alike, since both drive the same OneTrust save):
+//   1. Flow runs, clicks the site's save/reject control.
+//   2. The site writes consent AND reloads the page (a documented behavior of
+//      cnbc.com and, confirmed live 2026-09-06, kpmg.com).
+//   3. On the fresh load, flushPendingPreHandleAction() is supposed to recognize the
+//      already-completed action and return early — but it only does so if
+//      oneTrustConsentGroupsMatch(expectedGroups) passes. When that check fails it
+//      *clears* the pending marker and returns false, so bootstrap() proceeds to run
+//      the entire flow again → another click → another reload → step 2, forever.
+//
+// That verification can fail for at least two independent reasons, neither of which
+// this guard needs to distinguish between:
+//   - Group-id mismatch: CCPA "_BG" opt-out groups (e.g. cnbc.com's OSSTA_BG) are not
+//     necessarily present in the OptanonConsent cookie's `groups=` list at all, so the
+//     expected key reads back `undefined` and can never equal the expected boolean —
+//     a *deterministic* never-matching state, i.e. an unbounded loop.
+//   - Write/reload race: the save click triggers the reload before OneTrust finishes
+//     persisting the cookie, so the next load sees stale values — an *intermittent*
+//     mismatch, which fits the varying loop lengths observed live (3, 4, then 9
+//     repeats across different runs).
+//
+// Rather than keep trying to make that verification perfectly reliable against real
+// sites this environment cannot even load (both hosts are Akamai-protected against
+// automation), this bounds the blast radius directly: at most
+// MAX_CONSENT_ACTIONS_PER_URL reported actions for a given URL + preference
+// signature within CONSENT_ACTION_WINDOW_MS. sessionStorage is deliberate — it
+// survives reloads within the tab (exactly the loop's scope) without leaking across
+// tabs or browser sessions.
+//
+// Two is chosen so a single legitimate reload-and-retry still works, while staying
+// strictly below background/service-worker.js's FAST loop-breaker threshold of 3
+// identical reports in 12s — so this can no longer auto-disable a site. When the
+// ceiling is hit the extension simply stops touching the page and reports nothing:
+// the banner is left for the user rather than being pretended away.
+// Two separate bounds, because the loop and the circuit breaker measure different things.
+//
+// ATTEMPTS bound the actual work: every click of a save/reject control that may reload
+// the page. This is what makes a runaway loop terminate. It is set high enough that a
+// site which legitimately needs a couple of save→reload cycles to converge still gets
+// there — cnbc.com genuinely needs a third pass to flip its OSSTA_BG opt-out, and an
+// attempt bound of 2 cut that off, leaving the user opted IN (caught by the
+// `CNBC` / `CNBC (Accept + CCPA Opt-Out)` fixtures).
+//
+// REPORTS bound how many ACTION_FIRED messages a single URL can produce, and are kept
+// strictly below background/service-worker.js's FAST loop-breaker threshold (3 identical
+// reports in 12s). The breaker is a genuine safety feature and stays exactly as it is;
+// this simply stops the extension from being the thing that trips it while doing
+// otherwise-correct work.
+const MAX_CONSENT_ATTEMPTS_PER_URL = 4;
+const MAX_CONSENT_REPORTS_PER_URL = 2;
+const CONSENT_ACTION_WINDOW_MS = 60000;
+
+function consentActionCountKey(signature) {
+  return `${RUN_GUARD_PREFIX}:action-count:${site}:${location.pathname}:${signature}`;
+}
+
+function readConsentActionState(signature) {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(consentActionCountKey(signature)) || 'null');
+    if (!parsed?.firstAt) return null;
+    if ((Date.now() - parsed.firstAt) > CONSENT_ACTION_WINDOW_MS) return null;
+    return parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+function hasExhaustedConsentActions(signature) {
+  const state = readConsentActionState(signature);
+  return (Number(state?.attempts) || 0) >= MAX_CONSENT_ATTEMPTS_PER_URL;
+}
+
+function hasExhaustedConsentReports(signature) {
+  const state = readConsentActionState(signature);
+  return (Number(state?.reports) || 0) >= MAX_CONSENT_REPORTS_PER_URL;
+}
+
+function recordConsentReportEmitted(signature) {
+  try {
+    const state = readConsentActionState(signature);
+    sessionStorage.setItem(consentActionCountKey(signature), JSON.stringify({
+      attempts: Number(state?.attempts) || 0,
+      reports: (Number(state?.reports) || 0) + 1,
+      firstAt: state?.firstAt ?? Date.now(),
+      lastPageLoadId: state?.lastPageLoadId ?? null,
+    }));
+  } catch (_) {}
+}
+
+
+// Counts *attempts*, not successful reports — and deliberately so. The runaway loop
+// this guards against never reports at all: the site's reload tears the page down
+// before ACTION_FIRED can be delivered, so a report-based counter stays at zero while
+// the loop spins forever (measured: 42 navigations / 45 save clicks / 0 reported
+// actions against tests/fixtures/onetrust-reload/runaway-onetrust-reload.html).
+//
+// Counted once per page load rather than once per call, via CURRENT_PAGE_LOAD_ID: a
+// single successful action typically both dispatches a pre-handle and then reports,
+// and those must not burn two of the two allowed attempts. Each reload is a new page
+// load id, so a loop increments exactly once per cycle — which is the thing being
+// bounded.
+function recordConsentActionAttempt(signature) {
+  try {
+    const state = readConsentActionState(signature);
+    if (state?.lastPageLoadId === CURRENT_PAGE_LOAD_ID) return;
+    sessionStorage.setItem(consentActionCountKey(signature), JSON.stringify({
+      attempts: (Number(state?.attempts) || 0) + 1,
+      reports: Number(state?.reports) || 0,
+      firstAt: state?.firstAt ?? Date.now(),
+      lastPageLoadId: CURRENT_PAGE_LOAD_ID,
+    }));
+  } catch (_) {}
 }
 
 // Keyed by site + pathname + preference signature only — with no notion of which
@@ -5245,10 +5445,50 @@ async function flushPendingPreHandleAction(signature) {
     clearPendingPreHandleAction(signature);
     return false;
   }
-  if (payload.expectedGroups && !oneTrustConsentGroupsMatch(payload.expectedGroups)) {
+  // This marker means: on the previous page load we clicked this site's save control,
+  // and the site then reloaded out from under us. Deciding what that means now is the
+  // step that used to fail open and re-run the entire flow, reload after reload.
+  //
+  // Poll briefly first: on a reload-on-save host the reload can beat OneTrust's own
+  // cookie write, so an immediate single read can see stale values that resolve a
+  // moment later. Giving it a short window removes that race as a source of false
+  // failure without meaningfully delaying anything.
+  let verdict = evaluateOneTrustConsentGroups(payload.expectedGroups);
+  if (payload.expectedGroups && verdict !== 'match') {
+    const deadline = Date.now() + PENDING_ACTION_VERIFY_POLL_MS;
+    while (Date.now() < deadline && verdict === 'unverifiable') {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      verdict = evaluateOneTrustConsentGroups(payload.expectedGroups);
+    }
+  }
+
+  if (verdict === 'mismatch') {
+    // Real evidence the save didn't take: a group we asked for is present in the
+    // cookie holding the wrong value. Clear the marker and let the flow try again —
+    // this is the one case where retrying is the right call. MAX_CONSENT_ACTIONS_PER_URL
+    // bounds how many times that can happen.
     clearPendingPreHandleAction(signature);
     return false;
   }
+
+  if (verdict === 'unverifiable') {
+    // No evidence either way — typically because the groups we asked for simply aren't
+    // recorded in this cookie's groups= field (CCPA "_BG" opt-outs live elsewhere).
+    // Consume the marker and stop: re-running would click the same control and trigger
+    // the same reload again, which is precisely the loop. Deliberately reports nothing,
+    // since claiming a success we cannot evidence would be worse than staying quiet.
+    clearPendingPreHandleAction(signature);
+    return true;
+  }
+
+  // Recovering a pending action still emits a real ACTION_FIRED, so it counts against
+  // the same per-URL ceiling as a fresh report — otherwise a recovery could itself be
+  // the third report that trips the loop-breaker.
+  if (hasExhaustedConsentReports(signature)) {
+    clearPendingPreHandleAction(signature);
+    return false;
+  }
+  recordConsentReportEmitted(signature);
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'ACTION_FIRED',
@@ -5314,10 +5554,39 @@ function readOneTrustConsentGroups() {
 }
 
 function oneTrustConsentGroupsMatch(expectedGroups) {
-  if (!expectedGroups || Object.keys(expectedGroups).length === 0) return true;
+  return evaluateOneTrustConsentGroups(expectedGroups) === 'match';
+}
+
+// Three-state, because "this group is not recorded in the cookie's groups= list" is
+// NOT the same thing as "this group is set to the wrong value" — and conflating the
+// two is what caused the reload loop that auto-disabled www.cnbc.com and kpmg.com.
+//
+// The old check was `groups[group] === expected` for every expected key. When a key is
+// absent, `groups[group]` is `undefined`, and `undefined === false` is false — so any
+// expected group that OneTrust simply doesn't track in that cookie field produced a
+// permanent, unfixable "mismatch". CCPA "_BG" opt-out groups (e.g. cnbc.com's
+// OSSTA_BG) are exactly that case: the opt-out is real and applied, it just isn't
+// recorded in `groups=`. Demanding proof from a field that provably doesn't carry the
+// key can never succeed, so the caller retried forever.
+//
+//   'match'        — at least one expected group is present, and every expected group
+//                    that IS present holds the expected value. Positive evidence.
+//   'mismatch'     — some expected group is present and holds the WRONG value. This is
+//                    the only genuine failure: real evidence that the save didn't take.
+//   'unverifiable' — no consent cookie at all, or none of the expected groups appear in
+//                    it. No evidence either way; callers must not treat this as failure.
+function evaluateOneTrustConsentGroups(expectedGroups) {
+  if (!expectedGroups || Object.keys(expectedGroups).length === 0) return 'match';
   const groups = readOneTrustConsentGroups();
-  return Boolean(groups &&
-    Object.entries(expectedGroups).every(([group, expected]) => groups[group] === Boolean(expected)));
+  if (!groups) return 'unverifiable';
+
+  let sawPresentGroup = false;
+  for (const [group, expected] of Object.entries(expectedGroups)) {
+    if (!(group in groups)) continue;
+    sawPresentGroup = true;
+    if (groups[group] !== Boolean(expected)) return 'mismatch';
+  }
+  return sawPresentGroup ? 'match' : 'unverifiable';
 }
 
 function dispatchSyntheticClick(el) {

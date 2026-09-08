@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OneTrust runaway reload-loop fixture</title>
+</head>
+<body>
+<h1>Fixture: OneTrust save that reloads and never satisfies the extension's verification</h1>
+<p>
+  Reproduces the unbounded reload loop that auto-disabled www.cnbc.com and kpmg.com in real use
+  (2026-09-06), which the earlier single-reload fixtures in this directory did NOT catch — they
+  reloaded once and then settled, so they passed while production kept looping.
+</p>
+<p>
+  The pathological shape modelled here: the site's save control (a) writes a consent cookie,
+  (b) reloads the page, and (c) leaves the extension's own post-reload verification unsatisfiable,
+  so every fresh load looks like "not handled yet" and the whole flow runs again. Here that's done
+  by omitting the CCPA "_BG" opt-out group from the cookie's <code>groups=</code> list entirely
+  while still showing the banner — mirroring the real possibility that a _BG group the extension
+  puts in expectedGroups simply never appears in OptanonConsent's groups field, making
+  oneTrustConsentGroupsMatch() a permanent false. The write/reload race produces the same
+  observable loop intermittently; this fixture makes it deterministic.
+</p>
+
+<div id="onetrust-consent-sdk" style="width:0;height:0;overflow:visible;">
+  <div class="onetrust-pc-dark-filter" style="display:none;"></div>
+
+  <div id="onetrust-banner-sdk" style="display:none;position:fixed;bottom:0;left:0;width:400px;">
+    <div class="ot-sdk-container">
+      <p>We and our partners use cookies. <a href="#" class="ot-sdk-show-settings">Your Privacy Choices</a></p>
+      <button id="onetrust-accept-btn-handler">Continue</button>
+    </div>
+  </div>
+
+  <div id="onetrust-pc-sdk" class="otPcTab" style="display:none;position:fixed;top:0;left:0;width:400px;">
+    <div role="dialog" aria-modal="true" aria-label="Privacy Preference Center">
+      <div id="ot-pc-content">
+        <ul>
+          <li data-optanongroupid="OSSTA_BG">
+            Do Not Sell or Share My Personal Information
+            <input type="checkbox" id="ot-group-id-OSSTA_BG" checked>
+          </li>
+        </ul>
+      </div>
+      <div class="ot-pc-footer">
+        <button class="save-preference-btn-handler onetrust-close-btn-handler">Confirm My Choices</button>
+        <button class="ot-pc-refuse-all-handler">Reject All</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  function bumpCount(key) {
+    const next = Number(sessionStorage.getItem(key) || '0') + 1;
+    sessionStorage.setItem(key, String(next));
+    return next;
+  }
+  function readCookie(name) {
+    return document.cookie.split('; ').find((p) => p.startsWith(name + '='))?.slice(name.length + 1) ?? null;
+  }
+
+  // Deliberately writes a groups= list that does NOT contain OSSTA_BG — the very group
+  // the extension will have put in expectedGroups — so its post-reload verification can
+  // never pass, no matter how long it waits.
+  function writeUnsatisfyingConsentCookie() {
+    document.cookie = 'OptanonConsent=isGpcEnabled=0&version=202606.2.0&groups=C0001%3A1; path=/';
+  }
+
+  function hideSurfaces() {
+    document.getElementById('onetrust-banner-sdk').style.display = 'none';
+    document.getElementById('onetrust-pc-sdk').style.display = 'none';
+  }
+
+  function saveAndReload() {
+    // Logs which extension code path clicked, plus the guard state at that moment.
+    // Run with EMC_DEBUG_CONSOLE=1 to see it — these stack traces are what identified
+    // scheduleLateDomWatch's MutationObserver as the thing actually sustaining the loop,
+    // after three wrong guesses made by reading code alone. Keep them.
+    try {
+      console.log('[fixture] saveAndReload by:', (new Error().stack || '').split('\n').slice(1, 6).join(' | '));
+      console.log('[fixture] emcPref dataset =', document.documentElement.dataset.emcPref,
+                  '| guard state =', sessionStorage.getItem(Object.keys(sessionStorage).find(k => k.includes('action-count')) || '') || 'none');
+    } catch (e) {}
+    bumpCount('__fixtureSaveClicks');
+    document.getElementById('ot-group-id-OSSTA_BG').checked = false;
+    writeUnsatisfyingConsentCookie();
+    hideSurfaces();
+    setTimeout(() => location.reload(), 150);
+  }
+
+  document.querySelector('.ot-pc-refuse-all-handler').addEventListener('click', saveAndReload);
+  document.querySelector('.save-preference-btn-handler').addEventListener('click', saveAndReload);
+  document.getElementById('onetrust-accept-btn-handler').addEventListener('click', hideSurfaces);
+  document.querySelector('.ot-sdk-show-settings').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('onetrust-pc-sdk').style.display = 'flex';
+  });
+
+  window.OneTrust = {
+    UpdateConsent() { writeUnsatisfyingConsentCookie(); },
+    RejectAll() {
+      document.getElementById('ot-group-id-OSSTA_BG').checked = false;
+      writeUnsatisfyingConsentCookie();
+      hideSurfaces();
+    },
+    Accept() { writeUnsatisfyingConsentCookie(); },
+    ToggleInfoDisplay() { document.getElementById('onetrust-pc-sdk').style.display = 'flex'; },
+    Close: hideSurfaces,
+  };
+
+  Object.defineProperty(window, '__fixtureState', {
+    get() {
+      return {
+        saveClickCount: Number(sessionStorage.getItem('__fixtureSaveClicks') || '0'),
+        loadCount: Number(sessionStorage.getItem('__fixtureLoads') || '0'),
+        cookie: readCookie('OptanonConsent'),
+        bannerVisible: getComputedStyle(document.getElementById('onetrust-banner-sdk')).display !== 'none',
+        pcVisible: getComputedStyle(document.getElementById('onetrust-pc-sdk')).display !== 'none',
+      };
+    },
+  });
+
+  bumpCount('__fixtureLoads');
+  // The banner comes back on EVERY load — the site never considers itself opted out,
+  // which is what makes this a runaway loop rather than a one-shot reload.
+  document.getElementById('onetrust-banner-sdk').style.display = 'block';
+})();
+</script>
+</body>
+</html>

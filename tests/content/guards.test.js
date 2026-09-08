@@ -294,6 +294,153 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(guardPos).toBeLessThan(domPos);
   });
 
+  it('bounds repeated consent work per URL without weakening the background loop-breaker', () => {
+    // 2026-09-06: www.cnbc.com and kpmg.com looped indefinitely — click save, site
+    // reloads, post-reload verification fails, whole flow re-runs — until the background
+    // loop-breaker auto-disabled the site. Three CMP-handler fixes missed it because the
+    // loop was sustained by scheduleLateDomWatch's MutationObserver, which acts entirely
+    // independently of bootstrap()'s early returns. Two separate bounds, because the loop
+    // and the breaker measure different things: attempts bound the actual clicking (and
+    // must leave room for a site like cnbc.com that legitimately needs a third pass to
+    // flip its opt-out), while reports stay strictly under the breaker's 3-in-12s.
+    expect(source).toContain('const MAX_CONSENT_ATTEMPTS_PER_URL = 4;');
+    expect(source).toContain('const MAX_CONSENT_REPORTS_PER_URL = 2;');
+    expect(source).toContain('function hasExhaustedConsentActions(signature) {');
+    expect(source).toContain('function hasExhaustedConsentReports(signature) {');
+
+    // Attempts are counted once per page load, at the pre-handle dispatch — the only
+    // choke point that sees an attempt even when the ensuing reload destroys the page
+    // before anything can be reported (measured: 42 navigations, 0 reported actions).
+    expect(source).toContain('if (state?.lastPageLoadId === CURRENT_PAGE_LOAD_ID) return;');
+    const preHandleListenerIdx = source.indexOf("document.addEventListener('__emc_pre_handle__'");
+    const attemptInListenerIdx = source.indexOf('recordConsentActionAttempt(signature);', preHandleListenerIdx);
+    const persistIdx = source.indexOf('persistPendingPreHandleAction(signature, detail.method', preHandleListenerIdx);
+    expect(attemptInListenerIdx).toBeGreaterThan(preHandleListenerIdx);
+    expect(attemptInListenerIdx).toBeLessThan(persistIdx);
+
+    // The long-lived watchers must honour the ceiling too — they outlive bootstrap()
+    // and were the actual engine of the loop.
+    expect(source).toContain("if (hasExhaustedConsentActions(currentRunSignature ?? prefs?.globalPreference ?? '')) {");
+
+    // ...and the pending action must be resolved BEFORE any watcher is armed, or the
+    // decision to stand down comes too late to stop one that is already firing.
+    const flushIdx = source.indexOf('const flushedPendingPreHandleAction = await flushPendingPreHandleAction(currentRunSignature);');
+    const lateWatchIdx = source.indexOf('scheduleLateDomWatch(prefs);');
+    expect(flushIdx).toBeGreaterThan(-1);
+    expect(lateWatchIdx).toBeGreaterThan(flushIdx);
+  });
+
+  it('records that a OneTrust choice was made, so the site stops asking on later page views', () => {
+    // Live report on cnbc.com: "every page view it consumes again". Consent WAS being
+    // written correctly to OptanonConsent, but OneTrust decides whether to re-prompt from
+    // OptanonAlertBoxClosed — which the extension never wrote. On deployments where our
+    // save goes through OneTrust's API rather than the site's own save button, nothing
+    // stamped that marker, so the banner returned on every navigation and was re-dismissed
+    // (and re-counted) forever. Saving the choice so the site stops asking is the product's
+    // actual job; dismissing the same modal repeatedly is not.
+    for (const file of ['content/dom-handler.js', 'content/cmp-api-handler.js']) {
+      const src = readSource(file);
+      expect(src, file).toContain('function ensureOneTrustChoiceRecorded()');
+      // Strictly gated: never claim a choice was made unless consent was actually written.
+      // Otherwise this would silence the prompt instead of answering it.
+      expect(src, file).toContain("if (!cookies.includes('OptanonConsent=')) return false;");
+      expect(src, file).toContain('OptanonAlertBoxClosed=');
+    }
+  });
+
+  it('leaves an already-recorded OneTrust choice alone instead of re-applying it every page view', () => {
+    // Measured live on www.cnbc.com (2026-09-06, real extension, reject_all): 3 page views
+    // produced 3 separate actions even though OptanonConsent already carried OSSTA_BG:0 at
+    // t=0 of every load and no banner existed in the DOM at all. The extension was opening
+    // the hidden preference center itself and re-saving a choice that was already saved, so
+    // a modal flashed on every page and the cookie counter kept climbing for one decision.
+    // Reported as: "cnbc is still showing the modal and getting dismissed on every page".
+    for (const file of ['content/dom-handler.js', 'content/cmp-api-handler.js']) {
+      const src = readSource(file);
+      expect(src, file).toContain('function oneTrustConsentAlreadySatisfied(prefs)');
+      // A visible surface is the site actively asking; it gets answered whatever the
+      // cookie says. Only a hidden surface can ever be skipped.
+      expect(src, file).toContain('if (hasVisibleSelector(ONETRUST_ACTIONABLE_SURFACE_SELECTORS)) return false;');
+      // bootstrapPrefsFromDataset() yields a globalPreference-only shape whose absent
+      // category flags would read as `false` and invent an expectation the user never set.
+      expect(src, file).toContain("if (typeof prefs?.ccpaDoNotSell !== 'boolean') return false;");
+      // Cookie evidence alone is never enough — the live controls must agree too.
+      expect(src, file).toContain('oneTrustConsentGroupsStrictMatch(expectedGroups)');
+      expect(src, file).toContain('oneTrustExpectationIsDecisive(expectedGroups, prefs)');
+    }
+  });
+
+  it('never concludes "already handled" from a partially hydrated OneTrust preference center', () => {
+    // The first version of the skip above regressed `CNBC (Accept + CCPA Opt-Out)` in 1 run
+    // of 3: categories are discovered from the DOM, so before ot-group-id-OSSTA_BG existed
+    // the incidental numeric groups (1, 4, 6, 7) matched the cookie on their own and the
+    // flow was skipped with the sale opt-out still ON. Timing fixes only move that race —
+    // the rule has to be about evidence: a recognised category must be among what we
+    // verified, and when the user wants the sale opt-out either a "_BG" group is part of it
+    // or the cookie proves this site has no "_BG" group to get wrong.
+    for (const file of ['content/dom-handler.js', 'content/cmp-api-handler.js']) {
+      const src = readSource(file);
+      expect(src, file).toContain('function oneTrustExpectationIsDecisive(expectedGroups, prefs)');
+      expect(src, file).toContain('if (!ids.some((id) => /^C\\d{4}$/.test(id) || ONETRUST_CCPA_GROUP_ID_RE.test(id))) return false;');
+      expect(src, file).toContain('if (ids.some((id) => ONETRUST_CCPA_GROUP_ID_RE.test(id))) return true;');
+      expect(src, file).toContain('!Object.keys(recorded).some((id) => ONETRUST_CCPA_GROUP_ID_RE.test(id))');
+    }
+  });
+
+  it('does not silently resync OneTrust consent that already matches (kpmg.com reload-forever)', () => {
+    // Live report: "on kpmg, when I switch from custom to accept all, the website keeps
+    // reloading forever". syncOneTrustConsent() fired on EVERY page view of every OneTrust
+    // site whenever an OptanonConsent cookie existed; on a host that reloads as a side
+    // effect of any consent write, that silent write IS a reload. It never tripped the
+    // loop-breaker because this path reports nothing by design, which is why the user saw
+    // an endlessly reloading page rather than an auto-disabled extension. Reproduced
+    // deterministically in tests/onetrust-reload-loop.js: 164 navigations without this
+    // guard, 2 with it.
+    const src = readSource('content/cmp-api-handler.js');
+    const syncIdx = src.indexOf('function syncOneTrustConsent()');
+    expect(syncIdx).toBeGreaterThan(-1);
+    const body = src.slice(syncIdx, syncIdx + 1600);
+    expect(body).toContain('if (oneTrustConsentAlreadySatisfied(_prefs)) return;');
+    // The guard must run BEFORE the once-per-page latch, or a skipped page would still
+    // burn the latch and the real preference change would never be applied.
+    expect(body.indexOf('if (oneTrustConsentAlreadySatisfied(_prefs)) return;'))
+      .toBeLessThan(body.indexOf('_proactiveSynced = true;'));
+  });
+
+  it('only forgives an unverifiable OneTrust group when the control itself corroborates it', () => {
+    // The cookie's groups= field does not carry CCPA "_BG" opt-outs, so those can never be
+    // confirmed there. Forgiving them unconditionally, though, accepted a save that hadn't
+    // finished and left `CNBC (Accept + CCPA Opt-Out)` opted IN (reproduced live, 1 run in
+    // 4). An unflipped toggle is positive evidence the work isn't done, so the toggle must
+    // agree before absence is forgiven — and ordinary C000x categories stay strict, since a
+    // missing one usually just means "not written yet".
+    for (const file of ['content/dom-handler.js', 'content/cmp-api-handler.js']) {
+      const src = readSource(file);
+      expect(src, file).toContain('function oneTrustConsentGroupsAcceptableAtDeadline(expectedGroups)');
+      expect(src, file).toContain('if (!ONETRUST_CCPA_GROUP_ID_RE.test(group)) return false;');
+      expect(src, file).toContain('if (toggle && Boolean(toggle.checked) !== Boolean(expected)) return false;');
+      // The polling loop itself stays strict; tolerance lives only in the final decision.
+      expect(src, file).toContain('async function confirmOneTrustConsentSaved(expectedGroups)');
+      expect(src, file).toContain('if (await waitForOneTrustConsentGroups(expectedGroups, 6000)) return true;');
+    }
+  });
+
+  it('treats an absent OneTrust group as unverifiable rather than as a mismatch', () => {
+    // The root cause of the loop: `groups[group] === expected` made an absent key
+    // (`undefined === false`) a permanent "mismatch", so the post-reload recovery
+    // discarded its marker and re-ran the whole flow forever. CCPA "_BG" opt-out groups
+    // are exactly that case — real, applied, just not recorded in the cookie's groups=
+    // field. Absence is no evidence; only a group that IS present holding the WRONG
+    // value is a genuine failure.
+    expect(source).toContain("function evaluateOneTrustConsentGroups(expectedGroups) {");
+    expect(source).toContain("if (!(group in groups)) continue;");
+    expect(source).toContain("return sawPresentGroup ? 'match' : 'unverifiable';");
+    // 'unverifiable' must stop, not retry — retrying is what looped.
+    expect(source).toContain("if (verdict === 'unverifiable') {");
+    // 'mismatch' is the one case where retrying is right.
+    expect(source).toContain("if (verdict === 'mismatch') {");
+  });
+
   it('DO_NOT_HANDLE_URLS includes the accessibility-help page', () => {
     expect(source).toContain('/help/accessibility-help');
   });
@@ -692,7 +839,11 @@ describe('main.js — guardian main-world-only guards', () => {
     expect(source).toContain('if (!force && flushedPendingPreHandleAction) {');
     expect(source).toContain('persistLeMondeConsentCookie(prefs);');
     expect(source).toContain('scheduleDynamicSiteSpecificWatch();');
-    expect(source).toContain('if (payload.expectedGroups && !oneTrustConsentGroupsMatch(payload.expectedGroups)) {');
+    // Was `if (payload.expectedGroups && !oneTrustConsentGroupsMatch(...))` — a boolean
+    // check that failed open, discarding the marker and re-running the whole flow. It is
+    // now a three-way verdict so that "can't verify" and "verified wrong" lead to
+    // different outcomes; see the dedicated evaluateOneTrustConsentGroups test above.
+    expect(source).toContain('let verdict = evaluateOneTrustConsentGroups(payload.expectedGroups);');
     expect(source).toContain('const cooldownScope = runCooldownScope(currentRunSignature);');
     expect(source).toContain('!shouldRetryOneTrustAfterReload(currentRunSignature)) return;');
     expect(source).toContain('function shouldRetryOneTrustAfterReload(signature) {');
@@ -1093,7 +1244,7 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
   it('tries the real OneTrust reject UI before falling back to raw RejectAll() state sync', () => {
     expect(source).toContain("const rejectSelectors = [");
     expect(source).toContain("'#onetrust-reject-all-handler'");
-    expect(source).toContain('!preferPreferenceCenterPersistence &&');
+    expect(source).toContain('(canUseDirectRejectAll || !preferPreferenceCenterPersistence) &&');
     expect(source).toContain("const rejectResult = await handleOneTrustPrivacyCenterReject('cmp_api:OneTrust', prefs);");
     expect(source).toContain('if (rejectResult) return rejectResult;');
     expect(source).toContain("if (prefs.globalPreference === 'reject_all' &&");
@@ -1101,6 +1252,56 @@ describe('cmp-api-handler.js — guardian sourcepoint api path', () => {
     const rejectResultIdx = source.indexOf("const rejectResult = await handleOneTrustPrivacyCenterReject('cmp_api:OneTrust', prefs);");
     const rejectAllIdx = source.indexOf('w.OneTrust.RejectAll()', rejectResultIdx);
     expect(rejectAllIdx).toBeGreaterThan(rejectResultIdx);
+  });
+
+  it('keeps the direct-Reject-All bypass permanently disabled after it caused real production regressions', () => {
+    // A 2026-09 attempt made plain reject_all prefer a site's native Reject All button
+    // over the granular per-category commit flow (motivated by a marriott.com bug).
+    // That single change caused two separate real, live regressions the same day on
+    // cnbc.com and kpmg.com: both sites' native Reject All button reloads the page as a
+    // site-authored side effect, and even after wiring up the existing reload-survival
+    // mechanism (dispatchPreHandleIfOneTrustFlowStarts/persistPendingPreHandleAction) and
+    // validating it against a passing synthetic local-fixture regression test, it still
+    // failed to reliably recover in real usage — cnbc.com hit the loop-breaker's
+    // auto-disable after 9 repeated reports, and kpmg.com looped indefinitely. Rather
+    // than keep iterating on a mechanism that a synthetic test could not be trusted to
+    // validate, the bypass was reverted to a hardcoded `false` — see
+    // docs/cmp-impact-map.md's "Fifth iteration" for the full writeup. This test guards
+    // against silently re-enabling it (e.g. `=== 'reject_all'` creeping back in) without
+    // a deliberate, reviewed decision and a live (not just synthetic) validation pass.
+    expect(source).toContain('const canUseDirectRejectAll = false;');
+    expect(source).not.toContain("const canUseDirectRejectAll = prefs?.globalPreference === 'reject_all';");
+    const gateIndices = [];
+    let searchFrom = 0;
+    while (true) {
+      const idx = source.indexOf('(canUseDirectRejectAll || !preferPreferenceCenterPersistence) &&', searchFrom);
+      if (idx === -1) break;
+      gateIndices.push(idx);
+      searchFrom = idx + 1;
+    }
+    expect(gateIndices.length).toBe(2);
+  });
+
+  it('caches a hidden OneTrust surface\'s real category structure and retries silently via the API on later attempts', () => {
+    // marriott.com fix: no-banner CCPA sites (only a persistent footer opener like
+    // "Your Privacy Choices"/"Tracking Preferences") must never show the popup more
+    // than once per page load. After the first successful discovery of the real
+    // category rows, every later scheduled retry goes through the API only — no DOM
+    // click, nothing shown to the user — until the cookie actually reflects the
+    // requested state.
+    expect(source).toContain('let _oneTrustHiddenSurfaceCategoryEntries = null;');
+    expect(source).toContain('async function retryOneTrustHiddenSurfaceSilently(method, prefs) {');
+    expect(source).toContain('const entries = _oneTrustHiddenSurfaceCategoryEntries;');
+    expect(source).toContain('const updateConsent = window.OneTrust?.UpdateConsent;');
+    expect(source).toContain("updateConsent('Category', `${entry.id}:${nextState ? '1' : '0'}`);");
+    expect(source).toContain('if (!(await waitForOneTrustConsentGroups(expectedGroups, 1500))) return false;');
+    expect(source).toContain('const openingHiddenSurface = !settingsVisible && !actionableSurfaceVisible;');
+    expect(source).toContain('if (openingHiddenSurface && _oneTrustHiddenSurfaceCategoryEntries) {');
+    expect(source).toContain('return retryOneTrustHiddenSurfaceSilently(method, prefs);');
+    // Discovery (caching) must happen for both the reject and accept privacy-center
+    // flows, each right after the preference center is confirmed visible.
+    const discoveryOccurrences = source.split('if (entries.length) _oneTrustHiddenSurfaceCategoryEntries = entries;').length - 1;
+    expect(discoveryOccurrences).toBe(2);
   });
 
   it('uses OneTrust APIs first inside privacy-center accept/reject flows and only then falls back to toggle helpers', () => {
@@ -1705,7 +1906,11 @@ describe('dom-handler.js — BBC onetrust save guard', () => {
     expect(source).toContain('restoreScrollPosition(scrollPosition);');
     expect(source).toContain('async function waitForOneTrustDismissalAfterSettle(cmp, actions, host, timeoutMs = 4000) {');
     expect(source).toContain('await settleOneTrustAfterAction(host);');
-    expect(source).toContain('return waitForDismissal(cmp, actions, 1500);');
+    // Same retry-after-settle behaviour, just no longer an early `return` — success now
+    // falls through so the choice can be recorded before reporting it (see
+    // ensureOneTrustChoiceRecorded).
+    expect(source).toContain('if (!(await waitForDismissal(cmp, actions, 1500))) return false;');
+    expect(source).toContain('ensureOneTrustChoiceRecorded();');
     expect(source).toContain('function captureScrollPosition() {');
     expect(source).toContain('function restoreScrollPosition(position) {');
     expect(source).toContain('schedulePreservedOneTrustStateSync(host, expectedGroups);');

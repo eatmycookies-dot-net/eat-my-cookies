@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OneTrust already-consented fixture</title>
+</head>
+<body>
+<h1>Fixture: don't re-open a hidden OneTrust surface that already holds the user's choice</h1>
+<p>
+  Modelled on measurements taken from the real www.cnbc.com on 2026-09-06 (Playwright,
+  real unpacked extension, reject_all): after the first page answered the CCPA opt-out,
+  every subsequent page load still produced a fresh <code>cmp_api:OneTrust:ccpa</code>
+  action — 3 recorded actions across 3 page views — even though
+  <code>OptanonConsent</code> already carried <code>OSSTA_BG:0</code> at t=0 of each load
+  and <code>OptanonAlertBoxClosed</code> was present the whole time.
+</p>
+<p>
+  The measured page shape is reproduced exactly, because it is what makes the bug possible:
+</p>
+<ul>
+  <li>NO <code>#onetrust-banner-sdk</code> in the DOM at all — the site is not asking.</li>
+  <li><code>#onetrust-pc-sdk</code> present but <code>display:none</code> (0x0) — a hidden
+      surface the extension opens <em>itself</em>, rather than one the site put up.</li>
+  <li>A persistent footer "Your Privacy Choices" opener, always in the DOM.</li>
+  <li><code>ot-group-id-OSSTA_BG</code> already reflecting the saved opt-out.</li>
+</ul>
+<p>
+  So the first page view must act (nothing is recorded yet), and every page view after it
+  must do nothing at all: no opened preference center, no save, no reported action, no
+  additional "cookie eaten". Opening a modal on every page to re-apply a choice that is
+  already saved is the exact behaviour reported live: "cnbc is still showing the modal and
+  getting dismissed on every page they have".
+</p>
+<p id="page-marker"></p>
+
+<div id="onetrust-consent-sdk" style="width:0;height:0;overflow:visible;">
+  <div class="onetrust-pc-dark-filter" style="display:none;"></div>
+
+  <div id="onetrust-pc-sdk" class="otPcTab" style="display:none;position:fixed;top:0;left:0;width:400px;">
+    <div role="dialog" aria-modal="true" aria-label="Privacy Preference Center">
+      <div id="ot-pc-content">
+        <ul>
+          <li data-optanongroupid="OSSTA_BG">
+            Do Not Sell or Share My Personal Information
+            <input type="checkbox" id="ot-group-id-OSSTA_BG" checked>
+          </li>
+        </ul>
+      </div>
+      <div class="ot-pc-footer">
+        <button class="save-preference-btn-handler onetrust-close-btn-handler">Confirm My Choices</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <a href="#" class="ot-sdk-show-settings">Your Privacy Choices</a>
+</footer>
+
+<script>
+(function () {
+  function readCookie(name) {
+    return document.cookie.split('; ').find((p) => p.startsWith(name + '='))?.slice(name.length + 1) ?? null;
+  }
+  function bump(key) {
+    const next = Number(sessionStorage.getItem(key) || '0') + 1;
+    sessionStorage.setItem(key, String(next));
+    return next;
+  }
+
+  const toggle = () => document.getElementById('ot-group-id-OSSTA_BG');
+  const pc = () => document.getElementById('onetrust-pc-sdk');
+
+  // Record WHICH page view each open happened on, not just how many there were. The
+  // requirement is not "open at most once ever" — page one legitimately opens the hidden
+  // center to apply the choice, and may touch it more than once while settling. It is
+  // "never open it again once the choice is recorded", and only a per-page-view tally can
+  // tell those two apart.
+  function showPc() {
+    bump('__fixturePcOpens');
+    const views = Number(sessionStorage.getItem('__fixturePageViews') || '0');
+    const seen = JSON.parse(sessionStorage.getItem('__fixtureOpenViews') || '[]');
+    if (!seen.includes(views)) {
+      seen.push(views);
+      sessionStorage.setItem('__fixtureOpenViews', JSON.stringify(seen));
+    }
+    pc().style.display = 'flex';
+  }
+  function hidePc() {
+    pc().style.display = 'none';
+  }
+
+  // Matches the measured real-site cookie: the CCPA "_BG" opt-out group IS recorded in
+  // groups=, alongside unrelated numeric groups the extension never asks about.
+  function writeConsentCookie() {
+    const optedOut = toggle().checked ? '1' : '0';
+    document.cookie = 'OptanonConsent=isGpcEnabled=0&version=202606.2.0&groups='
+      + encodeURIComponent('USP:0,OSSTA_BG:' + optedOut + ',1:1,4:1,6:1,7:1,OOF:1') + '; path=/';
+    document.cookie = 'OptanonAlertBoxClosed=' + new Date().toISOString() + '; path=/; max-age=31536000';
+  }
+
+  function doSave() {
+    bump('__fixtureSaves');
+    writeConsentCookie();
+    hidePc();
+  }
+
+  document.querySelector('.save-preference-btn-handler').addEventListener('click', doSave);
+  document.querySelector('.ot-sdk-show-settings').addEventListener('click', (e) => { e.preventDefault(); showPc(); });
+
+  window.OneTrust = {
+    UpdateConsent(type, value) {
+      if (type !== 'Category') return;
+      const [id, val] = String(value).split(':');
+      const el = document.getElementById('ot-group-id-' + id);
+      if (el) el.checked = val === '1';
+      writeConsentCookie();
+    },
+    RejectAll() {
+      toggle().checked = false;
+      writeConsentCookie();
+      hidePc();
+    },
+    Accept() {
+      toggle().checked = true;
+      writeConsentCookie();
+    },
+    ToggleInfoDisplay: showPc,
+    Close: hidePc,
+  };
+
+  Object.defineProperty(window, '__fixtureState', {
+    get() {
+      return {
+        pageViews: Number(sessionStorage.getItem('__fixturePageViews') || '0'),
+        pcOpenCount: Number(sessionStorage.getItem('__fixturePcOpens') || '0'),
+        openViews: JSON.parse(sessionStorage.getItem('__fixtureOpenViews') || '[]'),
+        saveCount: Number(sessionStorage.getItem('__fixtureSaves') || '0'),
+        alertBoxClosed: readCookie('OptanonAlertBoxClosed'),
+        cookie: readCookie('OptanonConsent'),
+        bannerVisible: false,
+        pcVisible: getComputedStyle(pc()).display !== 'none',
+      };
+    },
+  });
+
+  // Reflect any previously saved choice into the toggle, exactly like the real SDK does
+  // when it hydrates the hidden preference center from OptanonConsent on page load.
+  const savedGroups = decodeURIComponent(readCookie('OptanonConsent') || '').match(/groups=([^&]*)/)?.[1] ?? '';
+  const savedOptOut = savedGroups.split(',').find((g) => g.startsWith('OSSTA_BG:'));
+  if (savedOptOut) toggle().checked = savedOptOut.endsWith(':1');
+
+  const views = bump('__fixturePageViews');
+  document.getElementById('page-marker').textContent = 'page view #' + views + ' — path ' + location.pathname;
+})();
+</script>
+</body>
+</html>

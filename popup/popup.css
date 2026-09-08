@@ -38,6 +38,24 @@ body {
   line-height: 1.5;
 }
 
+/* Chrome sizes an extension action popup's window from <body>'s normal-flow content
+   height (position:fixed elements like .settings-view, sized via inset:0, don't
+   factor into that measurement at all). Without a cap here, a long recent-activity
+   list can push that measured height past Chrome's own popup maximum, which then
+   shows its own native scrollbar for #main-view — *in addition to* .settings-view's
+   own overflow-y:auto for its own long content (e.g. many site exceptions), since
+   .settings-view is sized to whatever capped popup height Chrome lands on either
+   way. Capping #main-view's own height and giving it its own scrollbar keeps the
+   popup's rendered size stable and bounded regardless of content length, so only
+   one view's scrollbar is ever showing at a time — whichever view is actually
+   active. Do not remove without confirming in a real loaded extension's action
+   popup (not a plain tab) with enough recent activity AND enough site exceptions
+   to force both to overflow at once — that combination is what reproduces this. */
+#main-view {
+  max-height: 560px;
+  overflow-y: auto;
+}
+
 /* ── Header ── */
 .popup-header, .settings-header {
   display: flex;

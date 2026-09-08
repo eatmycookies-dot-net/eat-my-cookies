@@ -83,6 +83,7 @@ Use this to understand which sites share the same code path and will behave simi
 | `ft.com` | EU/UK | GDPR | Blocked in `HOST_RESTRICTIONS` for reject — iframe handler takes over |
 | `lemonde.fr` | EU | GDPR | Blocked in `HOST_RESTRICTIONS` for reject — site-specific handler takes over |
 | `bbc.com` | Global | GDPR + USNat | In `EXPLICIT_ONETRUST_CONTROL_HOSTS`; document-start cookie path preferred |
+| `marriott.com` | US | CCPA footer-only, no on-screen banner | Next.js SPA (`window.__NEXT_DATA__`). No banner ever renders for a normal US visit — OneTrust silently defaults consent to all-on, and the only surface is the persistent `#ot-sdk-btn` ("Tracking Preferences"/"Your Privacy Choices") footer link. Investigated 2026-09-05 after a user report of the modal repeatedly opening and auto-closing 4-5 times per page load on `reservation/rateListMenu.mi`. See the dedicated write-up below. |
 
 **Trigger for USNat direct path (new `executeOneTrustUSNatDirect`):**
 OneTrust is detected + no privacy-center opener button exists + visible toggles are present directly on the modal.
@@ -1078,3 +1079,698 @@ Core String's own vendor-consent range — the appended segment is an honestly-e
 disclosed" declaration, not fabricated vendor-level data. This keeps the emitted TC string
 spec-valid post-enforcement without overclaiming vendor disclosure tracking this extension
 doesn't do.
+
+## marriott.com — CCPA modal repeatedly opening and auto-closing (2026-09-05)
+
+**User report:** on `https://www.marriott.com/reservation/rateListMenu.mi` (hotel search
+results), the OneTrust popup keeps appearing and automatically closing 4-5 times per page load,
+from a US session with no VPN.
+
+**Live investigation findings (via the in-app browser, no VPN, US session):**
+
+- `marriott.com` is a Next.js SPA (`window.__NEXT_DATA__` is present), so `cmp-api-handler.js`'s
+  `isSPA()` check routes it through the scheduled-poll retry path — `tryHandlers()` fires
+  unconditionally at bootstrap plus fixed checkpoints at 120/400/1200/2500ms (prefs re-check) and
+  300/800/1800/3500/6000/10000ms (SPA schedule), roughly 10 separate invocations across one page's
+  lifetime, each of which re-attempts the OneTrust flow if `_handled` is still `false`.
+- A fresh (cookie-cleared) visit shows **no on-screen OneTrust banner at all** for a normal US
+  visitor: `interactionCount=0` and the `OptanonConsent` cookie already carries an all-on default
+  (`groups=1:1,3:1,4:1,6:1`) that OneTrust set silently, without ever rendering UI. The only
+  consent-related control anywhere on the page is a persistent footer link with
+  `id="ot-sdk-btn"` / class `ot-sdk-show-settings`, labeled "Tracking Preferences" (Marriott's
+  copy for OneTrust's standard "Your Privacy Choices" opener), which is present on every page load
+  regardless of consent state — it is not conditional on a banner being shown.
+- `hasAnyOneTrustPrivacyChoicesEntry()` (used by `shouldUseOneTrustPrivacyCenterOptOut()` to decide
+  whether to run the CCPA opt-out flow at all) checks only for the *DOM presence* of this opener,
+  not whether anything is actually visible on screen. Since the opener is always present, the
+  reject/opt-out flow (`handleOneTrustPrivacyCenterReject`) is attempted on every scheduled
+  `tryHandlers()` retry, and — because nothing was on screen to begin with —
+  `openOneTrustPreferenceCenter()` clicks the real, visible footer link to open real, user-visible
+  UI that would not otherwise have appeared.
+- Manually opening the preference center and calling the real
+  `window.OneTrust.UpdateConsent('Category', '3:0')` / `'4:0'` / `'6:0'` API confirmed the
+  underlying consent write completes and is reflected in the `OptanonConsent` cookie within about
+  1 second on this site — the OneTrust API path itself is reliable here. Marriott's category rows
+  use bare numeric `data-optanongroupid` values (`1`, `3`, `4`, `6`) rather than the more common
+  `C000x` convention, which happens to line up correctly with the same bare-numeric keys OneTrust
+  writes into the `OptanonConsent` cookie's `groups=` field, so the extension's group-ID matching
+  (`expectedOneTrustConsentGroupsForPrefs` / `waitForOneTrustConsentGroups` in `main.js` and
+  `cmp-api-handler.js`) is not a mismatch here.
+- What was missing: nothing in `handleOneTrustPrivacyCenterReject` / `handleOneTrustPrivacyCenterAccept`
+  prevented re-clicking that footer opener on a *later* scheduled retry if the first attempt's
+  completion signal (`waitForOneTrustConsentGroups` / `finalizeOneTrustHandled`'s
+  `waitForDismissal`) missed its timeout window — plausible on `rateListMenu.mi` specifically,
+  a heavy, continuously-mutating live-pricing/personalization page, even though the underlying
+  `UpdateConsent`/`RejectAll` call had almost certainly already committed. Each later retry then
+  re-opened the same real, on-page UI, producing the reported repeated open/close flicker. This is
+  the same class of problem already solved once for `privacy.thewaltdisneycompany.com` in
+  `handleDisneyPrivacyChoices()` (a persistent-UI page with no natural dismissal signal, fixed by
+  marking `_handled = true` directly after a successful click rather than waiting on
+  `waitForDismissal`), but that fix was host-specific and never generalized to the shared
+  `handleOneTrustPrivacyCenterReject`/`Accept` path that footer-only CCPA sites like Marriott hit.
+
+**Fix applied (`content/cmp-api-handler.js`):** a first attempt used a hard one-shot
+`_oneTrustHiddenSurfaceOptOutAttempted` flag (mirroring `syncOneTrustConsent()`'s
+`_proactiveSynced` pattern) that permanently blocked a second proactive open of a fully-hidden
+surface after the first. **That version was caught and reverted during this pass's own regression
+sweep**: `node tests/validate.js --site=CNBC` failed with the toggle stuck opted-in
+(`ot-group-id-OSSTA_BG expected=false actual=true`) — cnbc.com turns out to hit the exact same
+"nothing visible, only the footer opener exists" branch (confirmed by the harness's own
+`bannerFound` check never seeing a banner there either, same as Marriott), but genuinely needs
+more than one attempt: its first proactive open can lose a race with the page's own hydration, and
+a later scheduled retry is what actually lands the API call. The one-shot flag silently ate that
+necessary retry.
+
+The shipped fix instead **rate-limits** rather than one-shots: a module-level
+`_oneTrustHiddenSurfaceLastOpenedAt` timestamp plus a 4-second
+`ONETRUST_HIDDEN_SURFACE_REOPEN_COOLDOWN_MS` cooldown. When `handleOneTrustPrivacyCenterReject` or
+`handleOneTrustPrivacyCenterAccept` is about to open a surface that has **nothing currently
+visible** (no banner, no preference-center, no visible actionable control — i.e. the only reason
+to act is the always-present footer opener), it's only allowed to do so again once 4 seconds have
+passed since the last such open — still allows cnbc.com-style multi-attempt recovery, just spaces
+the attempts out instead of letting every one of the SPA schedule's ~6 checkpoints (300ms through
+10s) reopen real, on-page UI back-to-back. A **currently visible** banner or preference-center
+surface is completely unaffected by this cooldown and is retried on every scheduled check exactly
+as before. This is a generic, non-host-gated fix (not a Marriott-specific branch): it applies to
+any OneTrust CCPA deployment that relies solely on a persistent footer opener with no banner (the
+same shape now confirmed live for `cnbc.com` and `nbcnews.com` too, alongside `schwab.com`).
+
+**Full regression sweep after switching to the cooldown design** (`node tests/validate.js
+--site="<name>"`, non-VPN/US, each rerun individually): `CNBC`, `CNBC (Accept + CCPA Opt-Out)`,
+`NBC News`, `NBC News (Accept + CCPA Opt-Out)`, `FIFA`, `FIFA (Reject All)`, `Thomson Reuters
+Homepage`, `Thomson Reuters Privacy Statement`, and `KPMG OneTrust Article` all pass with correct
+toggle states and recorded activity — covering `handleOneTrustPrivacyCenterReject`,
+`handleOneTrustPrivacyCenterAccept`, and `handleOneTrustCustom`, the three entry points that touch
+the new cooldown. (`Reuters` and `Forbes` skipped with "no banner detected" in this run, consistent
+with this doc's existing "session-sensitive" notes for those two rather than anything new.)
+
+**Validation status — not yet fully live-confirmed end-to-end on the real reported page.** Live
+testing in this pass was limited to `marriott.com`'s homepage and the OneTrust API in isolation
+(confirmed: SPA detection, no-banner default state, persistent footer opener, and a real
+`UpdateConsent` call landing in ~1s) via the in-app browser, which is not the same engine/profile
+as the automated `tests/validate.js` Playwright harness. Direct navigation to
+`reservation/rateListMenu.mi` without an active search session returns an "Expired Session" page
+(likely session/referrer-gated), and driving Marriott's full destination/date search flow in the
+automation environment used for this investigation did not succeed, so the exact repeated
+open/close symptom was not reproduced live with the real extension loaded, and the fix has not
+been re-verified against a live repro on the actual search-results page.
+
+Two `tests/sites.json` fixtures were added (`Marriott`, `Marriott (Accept + CCPA Opt-Out)`,
+homepage-scoped) to give this code path standing regression coverage, but both currently **SKIP**
+under `node tests/validate.js --site=Marriott`: with `EMC_DEBUG_CONSOLE=1`, the page logs a 403 on
+a resource load before OneTrust's footer opener ever appears, so the harness never gets a banner
+or footer control to interact with at all. This is consistent with edge/bot-mitigation (Marriott
+is a large hospitality site, plausibly Akamai Bot Manager or similar) treating the Playwright
+automation fingerprint differently than the in-app browser session used for the manual
+investigation above — the same class of gap already documented for `cookiecontrol.com` elsewhere
+in this file ("hit an anti-bot challenge... keep in inventory as a regression target but not as a
+clean automation pass"). Not evidence against the fix; just means this fixture can't yet serve as
+automated proof of it.
+
+**Flagged in `private/human-validation-backlog.md` for a manual headed re-test**: run a real hotel
+search through to `reservation/rateListMenu.mi` with the rebuilt extension loaded in a real Chrome
+profile (reject_all, and accept_all+ccpaDoNotSell=true) and confirm (a) the popup no longer
+repeatedly opens/closes, (b) the OneTrust cookie still ends up reflecting the correct category
+state, and (c) reopening "Tracking Preferences" from the footer afterward shows the saved state
+rather than a stale one.
+
+### Follow-up (2026-09-06): the cooldown fix above was not enough — deeper root cause found
+
+**User report on the rebuilt extension** (`v1.4.0-dev.20260906T034234Z`, confirmed to actually
+contain the cooldown fix by grepping `dist/content/cmp-api-handler.js`, ruling out a stale-build
+false alarm): the popup still opened and closed 5 times on `reservation/rateListMenu.mi`, and —
+the important new detail — **the choice didn't stick**: the same 5x cycle repeated again on the
+next page load, meaning consent was never actually being recorded, not just that the UI was
+flickering.
+
+That "doesn't persist" detail pointed at a different, deeper bug than pure open-frequency. Re-read
+of `commitOneTrustPreferenceProfile` (the function `handleOneTrustPrivacyCenterReject`/`Accept`
+call after opening the preference center) found it: after clicking the real "Confirm My
+Choices"/save button, `settleOneTrustAfterAction()` waits up to ~1.5s for OneTrust's own dismissal,
+and if the surface is *still* visible after that, force-hides it via inline `display:none` — gated
+only on `document.cookie.includes('OptanonConsent=')`, i.e. *some* OptanonConsent cookie existing
+at all (true from the very first page load, before any of our own category changes), **not** on
+the cookie's `groups=` actually matching what we just asked for. Only *after* this force-hide does
+`commitOneTrustPreferenceProfile` check `waitForOneTrustConsentGroups(expectedGroups, 2000)` and
+return `false` if it still doesn't match.
+
+Net effect on a slow/busy page like Marriott's live search results: the popup visibly closes
+(because we force-hid it) — looking, to the user, exactly like a successful save — while the
+function is internally still returning `false` because the real group-match check failed. The
+previous cooldown fix only changed *how often* the next attempt could re-open the (now-hidden)
+surface; it did nothing about the surface needing to be *visibly reopened at all* for every one of
+those retries, since each retry has no way to resume a surface it already hid — it has to click the
+footer opener again, showing real, on-page UI each time. That's the actual mechanism behind "closes
+each time, but never actually saves, and starts over on the next page load."
+
+**Fix applied (`content/cmp-api-handler.js`), replacing the cooldown approach entirely:** once
+`handleOneTrustPrivacyCenterReject`/`Accept` has opened a hidden surface and successfully read its
+real category structure via `oneTrustCategoryEntries()` (cached in
+`_oneTrustHiddenSurfaceCategoryEntries`), every later attempt within the same page load retries
+purely through `window.OneTrust.UpdateConsent()` — no DOM click, nothing shown to the user at all
+— via the new `retryOneTrustHiddenSurfaceSilently()`, which mirrors the existing silent
+`syncOneTrustConsent()` pattern already in this file. This caps the number of times a user can ever
+*see* the popup at one per page load (the first discovery attempt), while every subsequent retry
+keeps trying to actually land the correct consent state in the background until it succeeds or the
+page's retry budget (~10s) runs out — directly answering both parts of the user's report: far
+fewer visible opens, and continued attempts to make the choice actually stick rather than giving up
+after one force-hidden "looks closed" attempt.
+
+**Full regression sweep re-run against this deeper fix** (same 9 fixtures as before, `node
+tests/validate.js --site="<name>"`, non-VPN/US): `CNBC`, `CNBC (Accept + CCPA Opt-Out)`, `NBC
+News`, `NBC News (Accept + CCPA Opt-Out)`, `FIFA`, `FIFA (Reject All)`, `Thomson Reuters Homepage`,
+`Thomson Reuters Privacy Statement`, and `KPMG OneTrust Article` all still pass with correct toggle
+states and recorded activity. Also re-ran the full unit suite (`npm run test:unit`, 339/339) and
+`npm run test:static` — both clean.
+
+**Still not live-confirmed on the actual reported page**, for the same reasons as before (session-
+gated direct URL, and the automated harness gets bot-blocked with a 403 on `marriott.com` before
+OneTrust's opener ever renders — confirmed unchanged with `EMC_DEBUG_CONSOLE=1`). This fix is
+based on: (1) a concretely-identified code defect (force-hide before group-verification) that
+directly explains both symptoms in the user's report, (2) a design that mirrors an existing,
+already-proven pattern in this same file rather than a novel mechanism, and (3) a full regression
+sweep confirming no other OneTrust site regressed — but it has not been watched end-to-end on
+Marriott's real search-results page with a real, headed Chrome profile. That remains the
+outstanding ask in `private/human-validation-backlog.md`.
+
+### Third iteration (2026-09-06, same day): actual live repro finally landed on `default.mi`
+
+**User report on the rebuilt extension** (with the silent-retry fix above): reproduced on
+`marriott.com/default.mi` itself (not just the search-results page) — the popup opened twice and
+resolved on first load, but **every reload after that got stuck**: the panel opened and required a
+manual close, and closing it made it reopen again immediately, indefinitely. The user also
+attached a DevTools screenshot of the open Preference Center and its element tree.
+
+That screenshot was the breakthrough: it showed Marriott's real, native
+`<button class="ot-pc-refuse-all-handler">Reject All</button>` sitting right there in the DOM,
+alongside "Confirm My Choices" and "Accept All". Live-testing that exact button directly (open the
+PC via `#ot-sdk-btn`, click `.ot-pc-refuse-all-handler`) showed it correctly writes the cookie
+**and** updates every visible toggle's `checked` state, all within about a second — a single,
+guaranteed-correct native action.
+
+`handleOneTrustPrivacyCenterReject` was deliberately *avoiding* this button whenever real category
+rows exist (`preferPreferenceCenterPersistence`, present since the original July 19, 2026 OneTrust
+refactor — not something introduced by this investigation), in favor of setting each category via
+`UpdateConsent`/DOM toggles individually and then clicking "Confirm My Choices" separately. That
+choice makes sense for `custom` mode and for the `accept_all` + `ccpaDoNotSell` hybrid (neither of
+which a blanket Reject All could satisfy), but for a **plain `reject_all` preference** it has no
+purpose — a native Reject All produces the identical end state — and it has far more places to lose
+a race on a slow page: set toggle → dispatch change/input events → locate the save button → click
+→ wait → verify group match → force-hide if still visible. On `marriott.com`, that dance was
+finishing with the panel force-hidden (from `settleOneTrustAfterAction`'s "some cookie exists"
+fallback) before the group-match check ever passed, so the function kept returning `false` — and
+because the module-level state that would let the *silent* retry (from the previous fix) take over
+is reset on every real page load, a *fresh* reload had no cached category structure yet, forcing a
+brand-new *visible* open every single time, with nothing ever completing it — matching "opens,
+never auto-closes, reopens immediately after I close it, forever."
+
+**Fix applied:** added `canUseDirectRejectAll = prefs?.globalPreference === 'reject_all'` and used
+it to bypass `preferPreferenceCenterPersistence` in both of `handleOneTrustPrivacyCenterReject`'s
+direct-click gates — a plain reject_all now always prefers a site's native Reject All/Refuse All
+button when one is visible, before ever falling through to the granular per-category flow. Custom
+mode is unaffected (never reaches this function) and the accept_all + ccpaDoNotSell hybrid is
+unaffected (`canUseDirectRejectAll` is `false` there, so it still goes through the granular path
+exactly as before).
+
+**Full regression sweep re-run a third time**: all 9 fixtures (`CNBC`, `CNBC (Accept + CCPA
+Opt-Out)`, `NBC News`, `NBC News (Accept + CCPA Opt-Out)`, `FIFA`, `FIFA (Reject All)`, `Thomson
+Reuters Homepage`, `Thomson Reuters Privacy Statement`, `KPMG OneTrust Article`) still pass — none
+of them lost their native-button-driven reject_all behavior or regressed. `npm run test:unit`
+(341/341, two new tests added covering `canUseDirectRejectAll`'s scoping and the silent-retry
+caching from the previous iteration) and `npm run test:static` both clean. Rebuilt `dist/`
+(`v1.4.0-dev.20260906T041330Z`).
+
+**What this does *not* fully solve, on purpose, deferred rather than risked:** with this fix, a
+reload will still very briefly show the popup and auto-close it (fast and reliable now, not stuck)
+rather than never showing anything at all — because nothing in `handleOneTrustPrivacyCenterReject`
+or the proactive `syncOneTrustConsent()` currently checks "is the cookie already correct?" before
+deciding to act. `syncOneTrustConsent()` already exists specifically for the fully-silent, no-UI
+resync case, but it never sets `_handled = true` after succeeding, so it doesn't stop the visible
+open path from *also* running — and `syncOneTrustConsent()` itself has a separate, pre-existing
+nuance (it calls a bulk `RejectAll()` for *any* `ccpaDoNotSell !== false` case, including the
+accept_all hybrid, which isn't quite right either). Fixing that would eliminate the reload flash
+entirely, but it means touching a function shared by every OneTrust site in this codebase, and this
+investigation has already caused two real regressions (`cnbc.com` twice) from under-tested changes
+to shared OneTrust code this same day. Deliberately left alone this pass — flagged in
+`private/human-validation-backlog.md` as a real, understood, but not-yet-safe-to-ship follow-up.
+
+### Fourth iteration (2026-09-06): the direct-Reject-All fix broke kpmg.com and cnbc.com
+
+**User report:** on the rebuilt extension, `kpmg.com` got auto-disabled ("Auto-disabled for
+kpmg.com... turned itself off here after 4 repeated 'success' reports on the same page") and the
+user reported `cnbc.com` hitting the same class of issue. The user's own diagnosis was sharp and
+correct: "it seems your test harness is not properly validating the impacted websites" — neither
+`cnbc.com` nor `kpmg.com` had a `tests/sites.json` fixture exercising `reject_all` through the
+code path this investigation's third iteration had just changed (KPMG's only fixture tests
+`custom`, which never reaches `handleOneTrustPrivacyCenterReject`; CNBC's `reject_all` fixture
+happened to resolve via `dom-handler.js`'s parallel declarative path in the `tests/validate.js`
+Playwright environment, not `cmp-api-handler.js`, so the harness's own race conditions were
+silently masking the very code path this session kept editing). The user's explicit instruction:
+build a test that reliably detects the issue *before* changing code again, confirm it fails, then
+fix, then confirm it passes — for `cnbc.com` and `kpmg.com` specifically, deferring `marriott.com`
+since Akamai already blocks this session's automated tooling there.
+
+**Root cause, confirmed live by driving the real DOM directly on `kpmg.com`** (`home.kpmg`/
+`kpmg.com` is not Akamai-blocked in this session's browser, unlike `marriott.com` and `cnbc.com`):
+clicking `kpmg.com`'s native "Reject All Optional Cookies" button — **both** the top-level banner's
+own `#onetrust-reject-all-handler` and the preference center's own `.ot-pc-refuse-all-handler` —
+correctly writes the rejected `OptanonConsent` cookie, but then **reloads the page** as a
+site-authored side effect of the button's own click handler (confirmed by the JS execution context
+being destroyed mid-script immediately after the click). This is the exact same class of behavior
+already known and handled for `cnbc.com` (`ONETRUST_RELOAD_ON_SAVE_HOSTS` /
+`REJECT_RELOAD_GUARD_HOSTS`, with a dedicated `dispatchPreHandleIfOneTrustFlowStarts()` →
+`persistPendingPreHandleAction()` (localStorage, survives the reload) → `flushPendingPreHandleAction()`
+(recognizes the pending action on the next page load and reports it exactly once, using the
+original `actionToken` so the background's duplicate-check dedupes it) recovery mechanism —
+**but that mechanism only runs inside `commitOneTrustPreferenceProfile`, which the third
+iteration's `canUseDirectRejectAll` shortcut bypasses entirely.** So for `cnbc.com` (already
+guard-listed) the pre-handle signal was simply never dispatched from the new code path, and the
+activity report was lost on every real-world run that happened to hit
+`cmp-api-handler.js`'s native-button click instead of `dom-handler.js`'s path. For `kpmg.com`
+(not guard-listed at all, since this reload behavior had never been observed there before), there
+was no persistence mechanism to lose in the first place — every fresh page load re-attempted the
+whole flow from scratch with no memory of the previous attempt, which is exactly the shape
+`utils/loop-detection.js`'s loop-breaker exists to catch (3 identical site+preference+method+URL
+reports within 12s → auto-disable).
+
+**New deterministic test infrastructure, built and run *before* any fix** (per the user's explicit
+instruction), because the existing options couldn't reliably catch this:
+- `tests/validate.js`'s live-site fixtures can't: `cnbc.com` returns "Access Denied" from
+  `errors.edgesuite.net` (Akamai) against this session's automation, and even when reachable, its
+  own dom-handler.js-vs-cmp-api-handler.js race is non-deterministic run to run.
+- A `page.addScriptTag`-only harness like `tests/e2e-platform-fixtures.js` can't either: it never
+  loads the real extension, so it can't exercise `main.js`'s coordinator, the real
+  `chrome.runtime`/`chrome.storage` messaging, or `background/service-worker.js`'s actual
+  loop-breaker — exactly the parts of the system this bug lives in.
+
+Built `tests/onetrust-reload-loop.js` instead: it loads the **real unpacked extension** (real
+`--load-extension`, real service worker, real loop-detection) via Playwright, but serves **local
+HTML fixtures** (`tests/fixtures/onetrust-reload/{kpmg,cnbc}-onetrust-reload.html`) **under the
+real hostnames** (`https://kpmg.com/us/en.html`, `https://www.cnbc.com/`) via `page.route()`
+interception — so `window.location.hostname` genuinely matches every host-keyed check in
+`cmp-api-handler.js`/`main.js`, while the page content, timing, and the reject-button's
+reload-triggering behavior are fully controlled, live-site-independent, and immune to Akamai.
+Each fixture replicates the real DOM shape confirmed live (banner + preference center, real
+selector classes/ids, real category structure) and reloads on reject-all click exactly like the
+real site. The test then polls `chrome.storage.local` for `unsupportedSites[<site>].autoDisabled`
+(the loop-breaker firing = bug reproduced) and `stats.recentActivity` (a matching entry required =
+proof the reload didn't just look survived, it was actually reported).
+
+**Two real bugs were found and fixed while building this**, not just the target one:
+1. The fixture's own first draft made `window.OneTrust.RejectAll()` (the raw API, used by the
+   silent `syncOneTrustConsent()` resync) trigger the *same* reload as the button click — producing
+   a runaway false-positive loop (182 reloads in one run) that had nothing to do with the real bug.
+   The real OneTrust SDK's API methods don't reload pages when called directly; only the specific
+   button elements have that site-authored onclick side effect. Fixed in the fixture, not the
+   extension — this was purely a test-double mistake, caught by the test's own absurd 182-navigation
+   result rather than silently passing.
+2. The fixture's `#onetrust-consent-sdk` wrapper was a plain static `<div>`, which — with no
+   fixed/absolute-positioned children yet — collapsed to a nonzero block-level box even while both
+   the banner and preference center were `display:none`. `isVisible()` requires both
+   `display !== 'none'` **and** a nonzero bounding rect, and the real site's actual wrapper has
+   zero natural size (confirmed live: `{w: 0, h: 0}` on `marriott.com`'s equivalent wrapper) because
+   its children are taken out of flow. The fixture's nonzero wrapper made
+   `openOneTrustPreferenceCenter`'s `settingsVisible` check wrongly true from page load, which
+   skipped the real "open the preference center" click entirely — so the granular
+   `commitOneTrustPreferenceProfile` path ran instead of the direct-click shortcut this test exists
+   to exercise, silently *not testing the thing it was built to test*. Fixed with explicit
+   `width:0;height:0` on the wrapper and `position:fixed` on its banner/PC children, matching the
+   real site's layout.
+
+Both are good reminders that a fixture is code with its own bugs, and a passing (or wrongly-passing)
+result from one needs the same "does this actually exercise what I think it does" scrutiny as the
+thing under test — confirmed here by explicitly checking browser console output
+(`EMC_DEBUG_CONSOLE=1`) to see *which* code path actually fired, not just trusting the final
+PASS/FAIL.
+
+**Fix applied**, in two parts:
+1. `content/cmp-api-handler.js`: both of `handleOneTrustPrivacyCenterReject`'s direct-Reject-All
+   gates now call `dispatchPreHandleIfOneTrustFlowStarts(expectedOneTrustConsentGroupsForPrefs(prefs), method, prefs?.globalPreference)`
+   *before* clicking (not after — a reload can destroy the page's JS context before any
+   post-click reporting would otherwise run), exactly mirroring what
+   `commitOneTrustPreferenceProfile` already does for its own save click.
+2. `content/main.js`: added `kpmg.com` to `REJECT_RELOAD_GUARD_HOSTS`, the existing, precedented,
+   per-host allowlist that gates whether `persistPendingPreHandleAction()` actually writes anything
+   — mirroring exactly how `cnbc.com`/`www.nbcnews.com`/`thomsonreuters.com` are already handled.
+
+**Validated in this order, exactly as the user asked:**
+1. `node tests/onetrust-reload-loop.js` **before** the fix: both `kpmg.com` and `cnbc.com` FAIL
+   with "the action was never recorded (0 matching entries in stats.recentActivity) — the reload
+   lost the success report" — the harness correctly detects the real bug.
+2. Applied the two-part fix above.
+3. `node tests/onetrust-reload-loop.js` **after** the fix: both PASS — 2 navigations (1 real
+   reload), exactly 1 reject click, exactly 1 recorded activity entry, correct final cookie
+   groups, not auto-disabled.
+4. Full regression sweep re-run a fourth time: all 9 `tests/sites.json` fixtures from the third
+   iteration (`CNBC`, `CNBC (Accept + CCPA Opt-Out)`, `NBC News`, `NBC News (Accept + CCPA
+   Opt-Out)`, `FIFA`, `FIFA (Reject All)`, `Thomson Reuters Homepage`, `Thomson Reuters Privacy
+   Statement`, `KPMG OneTrust Article`) still pass. `npm run test:unit` (341/341) and `npm run
+   test:static` both clean.
+
+Added `npm run test:e2e:onetrust-reload` (`node tests/onetrust-reload-loop.js`) as a standing,
+deterministic regression test for this exact bug class — reload-on-reject-triggering OneTrust
+hosts — independent of live-site availability or bot-mitigation. **Deliberately not chained into
+`test:e2e:platforms`**: that script's own `e2e-platform-fixtures.js` currently has six pre-existing,
+unrelated failures (Globo LGPD, SBT LGPD ×2, Netshoes ×2, SP gov LGPD ×2, Correios ×2,
+Radio-Canada ×2 — all "notice-only" banners in `dom-handler.js`/`rules/cmps.json` reporting
+`accepted_notice` instead of their fixture's expected method) that would `&&`-short-circuit before
+ever reaching this new test. Not investigated or touched this pass — out of scope for this
+session's focus, and flagged in `private/human-validation-backlog.md` instead.
+
+**`marriott.com` still not validated end-to-end**, per the user's own instruction to defer it
+(Akamai blocks this session's automated tooling there, on both `tests/validate.js` and manual
+browser probing — confirmed again this session, "Access Denied" from `errors.edgesuite.net`).
+Marriott's fixes from the first three iterations (cooldown → replaced by silent-retry caching →
+direct-Reject-All for plain `reject_all`) remain live-unconfirmed on the actual reported page,
+though the direct-Reject-All fix itself is the same mechanism now proven correct on `kpmg.com`
+and `cnbc.com`. If Marriott is picked up again, build it a local fixture the same way this
+iteration did for KPMG/CNBC — do not rely on live-site access to `marriott.com` from this
+environment.
+
+### Fifth iteration (2026-09-06, same day): the fourth iteration's fix ALSO failed in production — reverted
+
+**User report, same day, after the fourth iteration was shipped and confirmed passing the new
+`tests/onetrust-reload-loop.js` suite:** a screenshot showing `www.cnbc.com` auto-disabled after
+**9** repeated "success" reports (not the 4 from the third iteration's bug — worse), and
+`kpmg.com` "in an infinite reload loop" that the user called "Unacceptable." The user asked two
+pointed, correct questions: *"Why are we not saving OneTrust results properly anymore?"* and
+*"Is the test harness ensuring we are not in 'auto-disable' mode and thinking it's working?"*
+
+The second question was exactly right. The fourth iteration's `tests/onetrust-reload-loop.js`
+suite passed — both fixtures showed 1 reload, 1 recorded activity entry, no auto-disable — but a
+synthetic fixture with a 150ms reload delay and a single-toggle category structure evidently did
+not faithfully reproduce whatever causes the real post-reload
+`oneTrustConsentGroupsMatch(payload.expectedGroups)` check (in `flushPendingPreHandleAction()`,
+`content/main.js`) to fail on the real sites. The real sites almost certainly have more complex
+category structures, different timing, or both, than the fixture modeled — and unlike the fourth
+iteration's own investigation (which caught and fixed two real bugs *in the fixture itself* before
+declaring victory), this time the fixture's remaining gap from reality wasn't caught before
+shipping. The practical result: on the real sites, `flushPendingPreHandleAction()` was very likely
+failing its `expectedGroups` match and clearing the pending action instead of recovering it, so
+`bootstrap()` fell through to a fresh attempt on every single reload — which still correctly
+applied and re-reported "success" each time (explaining "it did get rid of banners" and the
+correctly-incrementing repeated reports), but never stopped, for `kpmg.com` seemingly without end
+and for `cnbc.com` long enough to reach 9 reports before the loop-breaker's window thresholds
+finally caught up.
+
+**Decision: stop iterating on this mechanism and revert it entirely**, rather than attempt a
+sixth fix. Reasoning:
+- This is the **third real production regression** this investigation has caused on previously
+  stable sites (`cnbc.com` twice, `kpmg.com` once) from the same underlying change
+  (`canUseDirectRejectAll`), each "fix" validated only in an environment that turned out not to
+  match reality (first no test at all, then a synthetic fixture that itself needed two rounds of
+  its own bug-fixing and still wasn't faithful enough).
+- The change was originally made to fix `marriott.com` — which, due to Akamai blocking this
+  session's tooling, was **never actually confirmed to work** even once. The known, demonstrated
+  cost (repeated real breakage on two working sites) has been consistently higher than the
+  unconfirmed benefit.
+- A revert removes the risky *action* (clicking a button proven to reload the page on multiple
+  real sites) rather than adding another layer of compensating machinery on top of a mechanism
+  that has now failed twice to survive contact with real sites. Removing a risky action is a
+  fundamentally more trustworthy class of fix than adding a new recovery path for it, especially
+  under the time pressure of "just caused a live incident, fix it now."
+
+**Fix:** `content/cmp-api-handler.js`'s `canUseDirectRejectAll` is now hardcoded to `false` (both
+call sites and the explanatory comment updated in place, source history preserved via git rather
+than deleting the analysis). Plain `reject_all` now behaves exactly as it did before any of this
+day's changes: it routes through the granular `commitOneTrustPreferenceProfile` flow
+(set-each-category-via-API/DOM → click "Confirm My Choices" → verify), which does not click the
+reload-triggering "Reject All" control at all on either site. The pre-handle dispatch calls added
+to the direct-click gates in the fourth iteration were removed along with it (they only mattered
+for the now-dead code path, and calling `dispatchPreHandleIfOneTrustFlowStarts` unconditionally
+would have introduced a new, previously-absent 15s flow-cooldown side effect for the original,
+long-stable direct-click shortcut used by other hosts — not worth the risk to add back).
+`content/main.js`'s addition of `kpmg.com` to `REJECT_RELOAD_GUARD_HOSTS` was left in place: it's
+accurate (the site does reload on its native Reject All click) and harmless regardless of which
+code path is active.
+
+**Re-validated after the revert:**
+- `node tests/onetrust-reload-loop.js`: both fixtures now show **1 navigation (no reload at all)**
+  and **0 reject clicks** — the granular flow never touches the reload-triggering button in the
+  first place, so there is nothing to survive. 1 recorded activity entry each, correct final
+  cookie groups, not auto-disabled.
+- Full 9-fixture regression sweep (`CNBC`, `CNBC (Accept + CCPA Opt-Out)`, `NBC News`, `NBC News
+  (Accept + CCPA Opt-Out)`, `FIFA`, `FIFA (Reject All)`, `Thomson Reuters Homepage`, `Thomson
+  Reuters Privacy Statement`, `KPMG OneTrust Article`) still passes.
+- `npm run test:unit` (341/341 — two tests updated to assert the bypass is disabled and guard
+  against silently re-enabling it) and `npm run test:static` both clean.
+- Rebuilt `dist/` (`v1.4.0-dev.20260906T133018Z`).
+
+**What this means for `marriott.com`:** its original symptom (the popup opening/closing multiple
+times before eventually succeeding) is expected to return, since the fix that addressed it is
+gone. That is a known, accepted regression back to the pre-2026-09-05 state — a real annoyance,
+but not an infinite loop or a repeated auto-disable of a previously-working site. If someone
+revisits Marriott, the honest options are: (a) find a fix that doesn't route through a reload-
+triggering native button at all, or (b) if a native-button approach is attempted again, it must be
+proven with a *live* test against the real site (or, for Akamai-blocked sites, the most faithful
+possible local fixture, explicitly including realistic category-structure complexity and reload
+timing) before being called validated — a synthetic-fixture PASS is not sufficient evidence on its
+own anymore, having now been wrong twice.
+
+### Sixth iteration (2026-09-06): root cause found — a watcher that outlives every guard
+
+**The circuit breaker was never touched and must not be.** `utils/loop-detection.js` and
+`background/service-worker.js` are unmodified: FAST 3-in-12s, SLOW 5-in-45s, auto-disable intact.
+It is doing its job correctly — it was reporting a real fault. The work below is about stopping the
+extension from *committing* that fault.
+
+**Why iterations 3-5 all missed:** they edited `content/cmp-api-handler.js`. On `www.cnbc.com` the
+tier that acts is `content/dom-handler.js`. Stack traces captured from inside the loop (see below)
+settled it in one run, after three rounds of guessing from code reading alone.
+
+**The loop had two independent causes, both required to stop it.**
+
+*Cause 1 — the post-reload check failed open.* `flushPendingPreHandleAction()` gated recovery on:
+
+```js
+Object.entries(expectedGroups).every(([group, expected]) => groups[group] === Boolean(expected))
+```
+
+An absent group reads back `undefined`, and `undefined === false` is `false` — so a group that
+OneTrust simply doesn't record in the cookie's `groups=` field became a permanent, unfixable
+"mismatch". CCPA `_BG` opt-outs (cnbc.com's `OSSTA_BG`) are exactly that: real, applied, recorded
+elsewhere. On mismatch the code discarded the pending marker and let `bootstrap()` re-run the whole
+flow — click save, site reloads, check fails again, forever. Replaced with a three-way verdict:
+`match` (a group is present and correct → report), `mismatch` (present and *wrong* → genuine
+failure, retry is right), `unverifiable` (absent, or no cookie → no evidence either way → consume
+the marker and stop, reporting nothing rather than claiming a success that can't be evidenced).
+A short poll was added before judging, since on reload-on-save hosts the reload can beat OneTrust's
+own cookie write.
+
+*Cause 2 — and the one that actually sustained it: `scheduleLateDomWatch`'s MutationObserver.* It
+was armed at the top of `bootstrap()`, **before** the pending-action check, and then acted on its
+own on every DOM mutation: `runDOMHandler` → click save → reload → repeat. Every early return added
+in iterations 3-6 was downstream of it and therefore irrelevant — `bootstrap()` correctly stood
+down (confirmed: `dataset.emcPref` was `undefined` on those loads) while the watcher kept clicking.
+Its only guards were manual-suppression and `wasHandledForCurrentPage`, neither of which covers
+"we already tried this and it isn't converging". Fixed by (a) resolving the pending action *before*
+arming any watcher, and (b) giving all three long-lived watchers (`scheduleLateDomWatch`,
+`scheduleShopifyWatch`, `scheduleOsanoWatch`) the same per-URL ceiling as every other path that can
+act.
+
+**Two bounds, not one**, because the loop and the breaker measure different things:
+- `MAX_CONSENT_ATTEMPTS_PER_URL = 4` bounds actual clicking, so any residual loop terminates.
+  It must leave headroom for legitimate convergence: a bound of 2 was tried first and **regressed
+  `CNBC (Accept + CCPA Opt-Out)` and `CNBC`**, cutting off the third pass cnbc.com genuinely needs
+  to flip `OSSTA_BG` — leaving the user opted *in*. Caught by the live fixtures before shipping.
+- `MAX_CONSENT_REPORTS_PER_URL = 2` bounds `ACTION_FIRED` messages, staying strictly under the
+  breaker's 3-in-12s so correct work can't trip it. The breaker keeps protecting against everything
+  else.
+
+Attempts are counted once per page load (`CURRENT_PAGE_LOAD_ID`) at the pre-handle dispatch — the
+only choke point that observes an attempt even when the reload destroys the page before anything
+can be reported. This matters: during the loop **no report ever lands** (measured: 42 navigations,
+45 save clicks, **0 reported actions**), so a report-based counter would have sat at zero.
+
+**One change was tried and reverted:** relaxing the *in-page* `waitForOneTrustConsentGroups` in
+both handlers to the same "absent is not wrong" rule. It regressed `CNBC (Accept + CCPA Opt-Out)` —
+the flow declared success before the opt-out toggle had actually been written. During the flow,
+waiting is free and confirmation is the whole point; only *across a reload* is absence permanent
+and unknowable. Both in-page waiters stay strict, with a comment saying why.
+
+**Validation, in both directions.** New fixture
+`tests/fixtures/onetrust-reload/runaway-onetrust-reload.html` reloads on every save and makes the
+post-reload check permanently unsatisfiable. The two earlier fixtures could not catch this — they
+reload once and settle, which is why they were green while production looped.
+
+| build | navigations | save clicks | result |
+|---|---|---|---|
+| before any fix | 42 | 45 | FAIL — unbounded |
+| root-cause fixes, ceiling raised to 9999 | 2 | 2 | **PASS** — loop stops on its own |
+| shipped (ceiling 4/2) | 2 | 2 | PASS |
+
+The middle row is the important one: with the safety ceiling effectively removed, the loop still
+terminates. The ceiling is defense-in-depth, not the fix.
+
+Full 9-fixture live sweep passes (CNBC variants re-run twice more for stability), `npm run
+test:unit` 343/343, `npm run test:static` clean. Rebuilt `dist/` (`v1.4.0-dev.20260906T150012Z`).
+Also removed the `DOM_HANDLER_ONLY_SITES` containment hack added earlier the same day — with the
+real cause fixed it only cost CNBC a working fallback tier.
+
+**Still unconfirmed on the real hosts:** both are Akamai-protected against this environment's
+automation. The debug instrumentation left in the runaway fixture (stack traces + guard state under
+`EMC_DEBUG_CONSOLE=1`) is what cracked this after three wrong guesses — reach for it before
+theorising if this recurs.
+
+### Seventh iteration (2026-09-06): consent was saved but the choice was never *recorded*
+
+**User report after the loop fix landed:** kpmg.com working; cnbc.com "works fairly well but every
+page view it consumes again", with one subscribe page needing 3-4 rounds. Correctly framed as the
+real issue: *"The extension purpose is to configure it once and save the settings with the
+appropriate CMP, not just dismiss modals."*
+
+**Root cause.** OneTrust decides whether to re-prompt from **`OptanonAlertBoxClosed`** — a
+timestamp it writes when a choice is made. The extension only ever wrote `OptanonConsent` (the
+group states) and never referenced `OptanonAlertBoxClosed` anywhere in the codebase. When our save
+runs through the site's own save button, OneTrust stamps the marker itself and everything is fine —
+which is why most fixtures looked healthy. But where the flow applies consent through OneTrust's
+**API** and then hides the surface (the path taken when no save control matches our selectors),
+group state is written and nothing ever records that a choice happened. Consent is correct; the
+site asks again on every single page view, and the extension re-answers and re-counts each time.
+
+**Fix.** `ensureOneTrustChoiceRecorded()` in both handlers, called only once a save is confirmed:
+stamps `OptanonAlertBoxClosed` (host-scoped plus the registrable-domain scope OneTrust itself uses,
+so it still counts across www/apex). Strictly gated on `OptanonConsent` already existing — writing
+the marker without recorded consent would silence the prompt instead of answering it, which is
+worse than the bug.
+
+**A second bug surfaced while fixing the first: the verification rule.** Getting this right took
+three corrections, each driven by a real failure:
+
+| rule | result |
+|---|---|
+| tolerant from the start | declared success before the opt-out was written — `CNBC (Accept + CCPA Opt-Out)` left the user opted **in** |
+| strict forever | a group OneTrust never records in `groups=` (CCPA `_BG`) read as permanent failure → flow never concluded → never recorded the choice → re-prompt every page |
+| tolerant at the normal 2s deadline | still too eager; cnbc.com needs longer to settle (1 failure in 4) |
+| **strict polling, patient 6s window, then forgive only a `_BG` group whose toggle corroborates it** | 4/4 and 9/9 green |
+
+The final rule: `confirmOneTrustConsentSaved()` polls strictly for 6s, and only then accepts weaker
+evidence — and only for a CCPA `_BG` group, and only if the control itself agrees. An unflipped
+toggle is positive evidence the save has not finished, so it is never forgiven. Ordinary `C000x`
+categories stay strict, since a missing one usually just means "not written yet".
+
+**New fixture `tests/fixtures/onetrust-reload/persistence-onetrust.html`** models OneTrust's real
+re-prompt rule (banner unless `OptanonAlertBoxClosed`) and walks four *different* URLs on one host,
+like real browsing. It deliberately exposes **no** save control, forcing the API path — the shape
+where the bug appears. With the native buttons present the site stamps the marker itself and the bug
+is invisible, which is exactly why every earlier fixture missed it. Proven in both directions:
+
+| build | page views | banner shown | actions recorded |
+|---|---|---|---|
+| without the fix | 4 | **4** | **4** |
+| with the fix | 4 | 1 | 1 |
+
+The "without" row is precisely the reported symptom: re-asked and re-counted on every page view.
+
+**Validation:** 4/4 reload-loop and persistence cases, full 9-fixture live sweep, `CNBC (Accept +
+CCPA Opt-Out)` re-run 4× consecutively (4/4 after the corroboration rule; it was 1-failure-in-4
+before), `npm run test:unit` 345/345, `npm run test:static` clean. Rebuilt `dist/`
+(`v1.4.0-dev.20260906T161648Z`). The circuit breaker remains untouched.
+
+### Eighth iteration (2026-09-06): the extension kept re-applying a choice the site had already saved
+
+**Two user reports, one root cause.**
+
+1. cnbc.com: *"still showing the modal and getting dismissed on every page they have… which means
+   it seems like the choice is not kept across pages."*
+2. kpmg.com: *"although it worked fine at first, when I switch from custom to accept all in the
+   extension, the website keeps reloading forever."*
+
+**This iteration started with measurement instead of code reading**, which is what finally moved it.
+`www.cnbc.com` turned out to be reachable from Playwright after all (Akamai blocks the in-app
+browser, not this harness), so the real site could be driven directly with the real unpacked
+extension. Three page views, reject_all, cookie jar dumped at t=0/4s/12s of each load:
+
+| observation | value |
+|---|---|
+| actions recorded across 3 page views | **3** (`dom:onetrust:ccpa`, then `cmp_api:OneTrust:ccpa` ×2) |
+| `OptanonConsent` at t=0 of every load | `USP:0,OSSTA_BG:0,1:1,4:1,6:1,7:1,OOF:1` — already opted out |
+| `OptanonAlertBoxClosed` at t=0 of every load | present, `.cnbc.com`, expiring in a year |
+| `#onetrust-banner-sdk` | **absent from the DOM entirely** |
+| `#onetrust-pc-sdk` | present, `display:none`, 0×0 |
+
+So the seventh iteration's diagnosis was wrong in an instructive way: the marker *was* being
+recorded and *was* persisting. The site was not asking at all. The extension was **opening the
+hidden preference center itself, on every page load, to re-apply a choice that was already saved** —
+which is what the user saw as a modal flashing open and closed on every page, and what kept
+incrementing the cookie counter for a single decision.
+
+**Root cause.** Nothing in the OneTrust paths asked *"is this already done?"* before acting. Entry
+was gated on the presence of controls (`hasAnyOneTrustPrivacyChoicesEntry()` matches a permanent
+footer "Your Privacy Choices" link) rather than on whether the recorded consent already matched.
+The same gap explains kpmg.com: with a choice already recorded, no surface is ever visible, so the
+only thing that runs is `syncOneTrustConsent()`'s silent API resync — which fired on **every page
+view of every OneTrust site** whenever an `OptanonConsent` cookie existed. On a host that reloads as
+a side effect of any consent write (kpmg.com does, from its own handler), that silent write *is* a
+page reload, and the fresh page resyncs again. It never tripped the loop-breaker because this path
+deliberately reports nothing — which is exactly why the user saw an endlessly reloading page rather
+than an auto-disabled extension.
+
+**Fix.** `oneTrustConsentAlreadySatisfied(prefs)` in both handlers, checked before the OneTrust
+handler runs (`cmp-api-handler.js`), before the DOM CMP loop acts on OneTrust (`dom-handler.js`),
+and before `syncOneTrustConsent()` burns its once-per-page latch. Deliberately narrow, because a
+false positive here means silently ignoring a real consent prompt:
+
+- any **visible** OneTrust surface disqualifies the skip — a visible banner is the site actively
+  asking, and it gets answered whatever the cookie says;
+- requires a complete prefs object (`bootstrapPrefsFromDataset()`'s `globalPreference`-only shape
+  would read absent category flags as `false` and invent an expectation the user never set);
+- every toggle that is present must already hold its desired state — an unflipped control is
+  positive evidence the choice has not been applied;
+- and the expectation itself must be **decisive** (see below).
+
+**The first version of this fix regressed `CNBC (Accept + CCPA Opt-Out)` — caught only by running it
+four times.** Categories are discovered from the DOM, so a preference center that has not hydrated
+yet yields a *partial* expectation. On some loads the incidental numeric groups (`1`, `4`, `6`, `7`)
+matched the cookie on their own, before `ot-group-id-OSSTA_BG` existed, and the flow was skipped
+with the sale opt-out still ON. 1 failure in 3 runs; the baseline was 3/3 green, so a single clean
+run would have shipped it.
+
+`oneTrustExpectationIsDecisive()` fixes that as a question of evidence rather than timing (a timing
+fix would only move the race): at least one *recognised* category (`C000x` or a `_BG` opt-out) must
+be among what was verified — incidental numeric groups never count on their own — and when the user
+wants the sale opt-out, either a `_BG` group is part of the verified set or the recorded cookie
+proves this site has no `_BG` group to get wrong.
+
+**Two new fixtures**, both failing before the fix and passing after:
+
+| fixture | without the fix | with the fix |
+|---|---|---|
+| `already-consented-onetrust.html` (4 page views, hidden surface, consent pre-recorded) | 8 PC opens / 4 saves / **4** reported actions | opens confined to page view 1, 1 save, **1** action |
+| `accept-all-resync-reload.html` (accept_all after a custom run, reload-on-save host) | **164 navigations**, 164 `Accept()` calls | **2 navigations**, 1 `Accept()` call, preference applied |
+
+`already-consented-onetrust.html` tallies opens *per page view* rather than in total: page one
+legitimately opens the hidden center to apply the choice, so "at most one open ever" would be the
+wrong requirement — "never open it again once the choice is recorded" is the real one.
+
+**Validation.** Real `www.cnbc.com` re-measured after the fix: **3 recorded actions → 1**, and
+`OptanonAlertBoxClosed` stops being rewritten on later pages. 6/6 reload-loop suite,
+`CNBC (Accept + CCPA Opt-Out)` 4× consecutively (3 PASS + 1 SKIP "no banner detected", 0 FAIL),
+`npm run test:unit` and `npm run test:static` clean. The circuit breaker remains untouched.
+
+**Known gap, not fixed here:** on live kpmg.com, switching custom → accept_all leaves the recorded
+groups at their custom values (`C0002:0,C0004:0`) — the new preference is silently not applied when
+no surface is visible. Confirmed identical on the pre-fix baseline, so it is pre-existing and not a
+regression from this work. Logged in `private/human-validation-backlog.md`.
+
+### Popup Settings panel double scrollbar (2026-09-06)
+
+Reported with a screenshot showing two scrollbars in the Settings panel once enough site exceptions
+accumulated. Chrome sizes an extension action popup's window from `<body>`'s **normal-flow** content
+height; `.settings-view` is `position:fixed; inset:0`, so it contributes nothing to that
+measurement but *is* sized to whatever height Chrome lands on. A long recent-activity list in
+`#main-view` could push that measured height past Chrome's own popup maximum (native outer
+scrollbar) while `.settings-view`'s own long content needed its own inner scrollbar within the same
+capped height — two real scrollbars at once.
+
+A first attempt (hiding `#main-view` with `display:none` while settings is open) made it **worse**:
+that removed the only normal-flow content establishing the popup's size, collapsing the whole popup
+to a sliver. Reverted immediately. Correct fix in `popup/popup.css`: cap `#main-view` itself
+(`max-height: 560px; overflow-y: auto`) so it owns its overflow instead of leaning on the popup's
+native scrollbar, keeping the popup's rendered size stable regardless of content length.
+
+Verification note for anyone touching this again: a real action popup's auto-sizing cannot be
+reproduced in a plain tab or a flat HTML file, and Playwright has no API to open one. The closest
+faithful stand-in is an **iframe sized to the popup's exact dimensions** (340×600), since
+`position:fixed` sizes against an iframe's own top-level viewport the same way. Reproduced with the
+same site list from the user's screenshot: two scrollbars before, one after.

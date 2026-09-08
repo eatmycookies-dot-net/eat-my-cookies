@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OneTrust accept_all silent-resync reload fixture</title>
+</head>
+<body>
+<h1>Fixture: switching to "accept all" must not reload a reload-on-save host forever</h1>
+<p>
+  Live report (kpmg.com, 2026-09-06): "although it worked fine at first, when I switch from
+  custom to accept all in the extension, the website keeps reloading forever."
+</p>
+<p>
+  The shape that produces it, reproduced here:
+</p>
+<ul>
+  <li>A choice has already been recorded (a previous run in <em>custom</em> mode), so the
+      site shows no banner at all — there is no <code>#onetrust-banner-sdk</code> in the
+      DOM and the preference center stays <code>display:none</code>.</li>
+  <li>Because nothing is visible, none of the extension's normal banner-driven paths run.
+      The only thing that does is <code>syncOneTrustConsent()</code>'s silent API resync,
+      which exists precisely so a preference change still applies on a return visit.</li>
+  <li>The site reloads as a side effect of <em>any</em> consent write — kpmg.com does this
+      from its own consent-change handler, not from the OneTrust SDK.</li>
+</ul>
+<p>
+  So the resync writes, the site reloads, the fresh page resyncs again, and it never stops.
+  It never trips the loop-breaker in <code>utils/loop-detection.js</code> either, because
+  the silent resync deliberately reports nothing — which is exactly why the user saw an
+  endlessly reloading page rather than an auto-disabled extension.
+</p>
+<p>
+  Correct behaviour: apply the new preference once, then recognise on the next load that
+  the recorded consent already matches and do nothing.
+</p>
+<p id="page-marker"></p>
+
+<div id="onetrust-consent-sdk" style="width:0;height:0;overflow:visible;">
+  <div class="onetrust-pc-dark-filter" style="display:none;"></div>
+
+  <div id="onetrust-pc-sdk" class="otPcTab" style="display:none;position:fixed;top:0;left:0;width:400px;">
+    <div role="dialog" aria-modal="true" aria-label="Privacy Preference Center">
+      <div id="ot-pc-content">
+        <ul>
+          <li data-optanongroupid="C0001">Strictly Necessary Cookies<input type="checkbox" id="ot-group-id-C0001" checked disabled></li>
+          <li data-optanongroupid="C0002">Performance Cookies<input type="checkbox" id="ot-group-id-C0002"></li>
+          <li data-optanongroupid="C0003">Functional Cookies<input type="checkbox" id="ot-group-id-C0003"></li>
+          <li data-optanongroupid="C0004">Targeting Cookies<input type="checkbox" id="ot-group-id-C0004"></li>
+        </ul>
+      </div>
+      <div class="ot-pc-footer">
+        <button class="save-preference-btn-handler onetrust-close-btn-handler">Confirm My Choices</button>
+        <button class="ot-pc-refuse-all-handler">Reject All Optional Cookies</button>
+        <button id="accept-recommended-btn-handler">Allow All</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const OPTIONAL = ['C0002', 'C0003', 'C0004'];
+
+  function readCookie(name) {
+    return document.cookie.split('; ').find((p) => p.startsWith(name + '='))?.slice(name.length + 1) ?? null;
+  }
+  function bump(key) {
+    const next = Number(sessionStorage.getItem(key) || '0') + 1;
+    sessionStorage.setItem(key, String(next));
+    return next;
+  }
+  const toggle = (id) => document.getElementById('ot-group-id-' + id);
+  const pc = () => document.getElementById('onetrust-pc-sdk');
+
+  function writeConsentCookie() {
+    const groups = ['C0001:1', ...OPTIONAL.map((id) => id + ':' + (toggle(id).checked ? '1' : '0'))].join(',');
+    document.cookie = 'OptanonConsent=isGpcEnabled=0&version=202606.2.0&groups=' + encodeURIComponent(groups) + '; path=/';
+    document.cookie = 'OptanonAlertBoxClosed=' + new Date().toISOString() + '; path=/; max-age=31536000';
+  }
+
+  // The site's own consent-change handler. Fires on every consent write, not only on a
+  // state change — which is what turns a repeated silent resync into an endless reload.
+  function siteReloadsOnConsentWrite() {
+    bump('__fixtureConsentWrites');
+    setTimeout(() => location.reload(), 150);
+  }
+
+  function setAll(checked) {
+    for (const id of OPTIONAL) toggle(id).checked = checked;
+  }
+
+  window.OneTrust = {
+    UpdateConsent(type, value) {
+      if (type !== 'Category') return;
+      const [id, val] = String(value).split(':');
+      const el = toggle(id);
+      if (el) el.checked = val === '1';
+      writeConsentCookie();
+      siteReloadsOnConsentWrite();
+    },
+    Accept() {
+      bump('__fixtureAcceptCalls');
+      setAll(true);
+      writeConsentCookie();
+      siteReloadsOnConsentWrite();
+    },
+    RejectAll() {
+      bump('__fixtureRejectCalls');
+      setAll(false);
+      writeConsentCookie();
+      siteReloadsOnConsentWrite();
+    },
+    ToggleInfoDisplay() { bump('__fixturePcOpens'); pc().style.display = 'flex'; },
+    Close() { pc().style.display = 'none'; },
+  };
+
+  document.getElementById('accept-recommended-btn-handler').addEventListener('click', () => window.OneTrust.Accept());
+  document.querySelector('.ot-pc-refuse-all-handler').addEventListener('click', () => window.OneTrust.RejectAll());
+  document.querySelector('.save-preference-btn-handler').addEventListener('click', () => { writeConsentCookie(); siteReloadsOnConsentWrite(); });
+
+  Object.defineProperty(window, '__fixtureState', {
+    get() {
+      return {
+        loadCount: Number(sessionStorage.getItem('__fixtureLoads') || '0'),
+        acceptCalls: Number(sessionStorage.getItem('__fixtureAcceptCalls') || '0'),
+        rejectCalls: Number(sessionStorage.getItem('__fixtureRejectCalls') || '0'),
+        consentWrites: Number(sessionStorage.getItem('__fixtureConsentWrites') || '0'),
+        pcOpenCount: Number(sessionStorage.getItem('__fixturePcOpens') || '0'),
+        cookie: readCookie('OptanonConsent'),
+        bannerVisible: false,
+        pcVisible: getComputedStyle(pc()).display !== 'none',
+      };
+    },
+  });
+
+  // First load only: seed the state left behind by an earlier run in custom mode —
+  // a recorded choice (so the site never asks) with the optional categories OFF.
+  if (!readCookie('OptanonConsent')) {
+    setAll(false);
+    document.cookie = 'OptanonConsent=isGpcEnabled=0&version=202606.2.0&groups='
+      + encodeURIComponent('C0001:1,C0002:0,C0003:0,C0004:0') + '; path=/';
+    document.cookie = 'OptanonAlertBoxClosed=' + new Date().toISOString() + '; path=/; max-age=31536000';
+  } else {
+    const saved = decodeURIComponent(readCookie('OptanonConsent')).match(/groups=([^&]*)/)?.[1] ?? '';
+    for (const pair of saved.split(',')) {
+      const [id, val] = pair.split(':');
+      if (toggle(id)) toggle(id).checked = val === '1';
+    }
+  }
+
+  const loads = bump('__fixtureLoads');
+  document.getElementById('page-marker').textContent = 'load #' + loads;
+})();
+</script>
+</body>
+</html>

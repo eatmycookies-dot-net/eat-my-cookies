@@ -1,5 +1,5 @@
 {
-  "version": "1.3.4",
+  "version": "1.4.0",
   "sites": [
     {
       "name": "The Guardian (EU/GDPR)",
@@ -265,7 +265,10 @@
         }
       },
       "expectActivityRecorded": true,
-      "expectedActivityMethodPrefixes": ["site_override:accept_all", "site_specific:accept_all"],
+      "expectedActivityMethodPrefixes": [
+        "site_override:accept_all",
+        "site_specific:accept_all"
+      ],
       "forbiddenTextAfterHandle": [
         "souhaitez-vous retirer votre consentement",
         "retirer mon consentement"
@@ -962,6 +965,60 @@
       ],
       "consentSelectors": [
         "#onetrust-pc-btn-handler",
+        ".ot-sdk-show-settings",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ]
+    },
+    {
+      "name": "Marriott",
+      "url": "https://www.marriott.com/default.mi",
+      "region": "US",
+      "cmp": "OneTrust (CCPA footer-only, no on-screen banner)",
+      "tier": "cmp-api",
+      "preference": "reject_all",
+      "ccpaDoNotSell": true,
+      "expectActivityRecorded": true,
+      "note": "No banner ever renders for a normal US visit; the only surface is the persistent #ot-sdk-btn (\"Tracking Preferences\") footer opener, present regardless of consent state. Category group IDs are bare numbers (1/3/4/6), not the more common C000x convention. See docs/cmp-impact-map.md's marriott.com write-up (2026-09-05) for the repeated open/close bug this covers. Currently SKIPs in the automated non-VPN harness: the site returns a 403 on a page resource under Playwright, consistent with edge/bot-mitigation treating the automation fingerprint differently than a normal browser (this repo's live manual-browser investigation was not blocked). Keep as a regression target rather than a clean automation pass until that's resolved or worked around.",
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-3": false,
+        "ot-group-id-4": false,
+        "ot-group-id-6": false
+      },
+      "handleWaitMs": 12000,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk"
+      ],
+      "consentSelectors": [
+        "#ot-sdk-btn",
+        ".ot-sdk-show-settings",
+        ".save-preference-btn-handler",
+        ".category-switch-handler"
+      ]
+    },
+    {
+      "name": "Marriott (Accept + CCPA Opt-Out)",
+      "url": "https://www.marriott.com/default.mi",
+      "region": "US",
+      "cmp": "OneTrust (CCPA footer-only, no on-screen banner)",
+      "tier": "cmp-api",
+      "preference": "accept_all",
+      "ccpaDoNotSell": true,
+      "expectActivityRecorded": true,
+      "note": "Hybrid accept_all + ccpaDoNotSell case: the Advertising/Sale/Share group (ot-group-id-4) must stay off even though the visit is otherwise accept_all. Same automated-harness bot-mitigation caveat as the reject_all Marriott fixture above.",
+      "expectedOneTrustToggleStates": {
+        "ot-group-id-4": false
+      },
+      "handleWaitMs": 12000,
+      "bannerSelectors": [
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        "#onetrust-pc-sdk"
+      ],
+      "consentSelectors": [
+        "#ot-sdk-btn",
         ".ot-sdk-show-settings",
         ".save-preference-btn-handler",
         ".category-switch-handler"
